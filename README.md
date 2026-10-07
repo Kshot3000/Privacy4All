@@ -82,6 +82,15 @@ renewable resource that pays for shielded transactions.
   Honestly labelled a teaching model of amounts and order only — it
   states no generation rate or time, because the real rate depends on
   Midnight network parameters.
+- **Commit now, reveal later — hash commitments** — type a secret and
+  get a real SHA-256 commitment computed locally in your browser with
+  the Web Crypto API: publish the hash now, reveal the secret later,
+  and anyone can recompute and confirm it matches — the pattern behind
+  sealed bids, votes and predictions, and tool 6's commit-to-a-secret
+  snippet. Nothing leaves the page. Honestly labelled with its limits:
+  a short or guessable secret can be brute-forced from its hash (real
+  systems add a long random salt), and the digest format is a teaching
+  format, not Compact's on-chain persistent hash.
 
 ## Guides
 

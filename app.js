@@ -2,7 +2,8 @@
 /* Privacy4All hub logic: project filtering, a local text redactor,
    a selective-disclosure planner, a NIGHT -> DUST capacity estimator,
    a "what does this dApp see?" permission explainer, a ZK claim
-   simulator, a Compact snippet library, and a DUST lifecycle explainer.
+   simulator, a Compact snippet library, a DUST lifecycle explainer,
+   and a SHA-256 hash commitment maker/checker.
    Everything runs locally. Pure functions are exported for tests. */
 
 /* ---------- 1. Redactor ---------- */
@@ -337,12 +338,61 @@ function simulateDustLifecycle(nightStr, spendStr, txCountStr) {
   };
 }
 
+/* ---------- 8. Commit now, reveal later ---------- */
+/* A hash commitment lets you prove later that you knew or chose something
+   earlier, without revealing it in between — the pattern behind the
+   "commit-secret" snippet and sealed bids, votes and predictions. The
+   commitment here is a REAL SHA-256 hash of a versioned message built
+   from your secret, computed locally with the Web Crypto API: the secret
+   itself never leaves this device, and only the 64-character hex digest
+   is meant to be shared. Anyone you later reveal the secret to can
+   recompute the commitment and check it matches — the secret must be
+   typed exactly, character for character, spaces included. Honest
+   limits: a short or guessable secret can be brute-forced from its
+   commitment, so real systems add a long random salt; and this page's
+   digest format is its own teaching format, not Compact's on-chain
+   persistent hash. */
+var COMMIT_PREFIX = "privacy4all-commitment-v1:";
+
+function commitmentMessage(secret) {
+  if (typeof secret !== "string" || secret.trim() === "") return null;
+  return COMMIT_PREFIX + "\n" + secret;
+}
+
+function sha256Hex(text) {
+  if (typeof text !== "string") return Promise.resolve(null);
+  var subtle = (typeof globalThis !== "undefined" && globalThis.crypto && globalThis.crypto.subtle) || null;
+  if (!subtle) return Promise.resolve(null);
+  var data = new TextEncoder().encode(text);
+  return subtle.digest("SHA-256", data).then(function (buf) {
+    return Array.prototype.map.call(new Uint8Array(buf), function (b) {
+      return b.toString(16).padStart(2, "0");
+    }).join("");
+  }, function () { return null; });
+}
+
+function makeCommitment(secret) {
+  var msg = commitmentMessage(secret);
+  if (msg === null) return Promise.resolve(null);
+  return sha256Hex(msg);
+}
+
+function verifyCommitment(commitmentHex, secret) {
+  var given = typeof commitmentHex === "string" ? commitmentHex.trim().toLowerCase() : "";
+  if (!/^[0-9a-f]{64}$/.test(given)) return Promise.resolve(null);
+  return makeCommitment(secret).then(function (actual) {
+    if (actual === null) return null;
+    return actual === given;
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
                      evaluateProof, CLAIM_CATALOG,
                      getSnippet, searchSnippets, SNIPPET_CATALOG,
-                     simulateDustLifecycle };
+                     simulateDustLifecycle,
+                     COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment };
 }
 
 if (typeof document !== "undefined") {
@@ -554,6 +604,39 @@ if (typeof document !== "undefined") {
       var note = document.createElement("p");
       note.textContent = "Teaching model, run locally — no wallet connected, nothing left this page, and no real DUST amounts or times are promised.";
       host.appendChild(note);
+    });
+
+    /* --- commit now, reveal later --- */
+    document.getElementById("commit-make").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var secret = document.getElementById("commit-secret").value;
+      var out = document.getElementById("commit-out");
+      var status = document.getElementById("commit-make-result");
+      out.value = "";
+      status.textContent = "Hashing locally…";
+      makeCommitment(secret).then(function (hex) {
+        if (hex === null) {
+          status.textContent = "Type a secret first — anything you want to be able to prove later: a prediction, a bid, a choice. (If hashing is unavailable in this browser, open the page over HTTPS in a current browser.)";
+          return;
+        }
+        out.value = hex;
+        status.textContent = "Commitment made locally — your secret never left this page; only this hash is meant to be shared. Publish or save the hash now, keep the secret private, and reveal the secret later: anyone can recompute the hash from it and confirm you committed to exactly this, back when you published the hash.";
+      });
+    });
+    document.getElementById("commit-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("commit-check-result");
+      status.textContent = "Checking locally…";
+      verifyCommitment(document.getElementById("check-commitment").value,
+        document.getElementById("check-secret").value).then(function (ok) {
+        if (ok === null) {
+          status.textContent = "Paste a full 64-character hex commitment and the revealed secret, typed exactly as it was committed — character for character, spaces included.";
+          return;
+        }
+        status.textContent = ok
+          ? "Match — the revealed secret produces exactly this commitment. Whoever published that hash earlier was committed to this secret; it was not swapped afterwards."
+          : "No match — this secret does not produce that commitment. Either the secret is typed differently (check capitals and spaces) or it is not the secret that was committed.";
+      });
     });
 
     /* --- copy donation address --- */

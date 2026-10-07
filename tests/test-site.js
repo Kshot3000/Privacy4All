@@ -27,8 +27,8 @@ check("Midnight team X tag in README", readme.includes("@MidnightNtwrk"));
 /* document structure */
 check("exactly one <h1>", (html.match(/<h1[ >]/g) || []).length === 1);
 check("has <main> landmark", /<main[\s>]/.test(html));
-check("all main form controls labelled", ["q", "redact-in", "night", "claim", "secret", "threshold", "snippet-select", "life-night", "life-spend", "life-txs"].every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=3") && html.includes("app.js?v=5"));
+check("all main form controls labelled", ["q", "redact-in", "night", "claim", "secret", "threshold", "snippet-select", "life-night", "life-spend", "life-txs", "commit-secret", "commit-out", "check-commitment", "check-secret"].every(id => html.includes(`for="${id}"`)));
+check("cache keys present", html.includes("styles.css?v=3") && html.includes("app.js?v=6"));
 check("dApp permission tool present", html.includes('id="dapp-see"') && html.includes('id="dapp-result"'));
 check("ZK claim simulator present", html.includes('id="zk-prover"') && html.includes('id="zk-result"'));
 check("ZK simulator honestly labelled a simulation", html.includes("teaching simulation, not a cryptographic proof"));
@@ -36,6 +36,9 @@ check("snippet library present", html.includes('id="snippets"') && html.includes
 check("snippet library honestly labelled not production", html.includes("not production contracts"));
 check("DUST lifecycle tool present", html.includes('id="dust-life"') && html.includes('id="dust-life-result"'));
 check("DUST lifecycle honestly states no generation rate", html.includes("states no generation rate or time"));
+check("commitment tool present", html.includes('id="commit-make"') && html.includes('id="commit-check"') && html.includes('id="commit-out"'));
+check("commitment tool honestly states its limits", html.includes("brute-forced from its hash") && html.includes("not Compact's on-chain persistent hash"));
+check("commitment tool honestly states real local hashing", html.includes("real SHA-256 hash computed locally"));
 
 /* flagship links */
 for (const url of ["https://kshot3000.github.io/Night-Messenger-/", "https://kshot3000.github.io/PlutusShield/",
@@ -135,5 +138,29 @@ check("lifecycle rejects junk amounts", app.simulateDustLifecycle("abc", "1", "1
 check("lifecycle rejects non-whole or zero tx counts", app.simulateDustLifecycle("100", "1", "2.5") === null && app.simulateDustLifecycle("100", "1", "0") === null && app.simulateDustLifecycle("100", "1", "") === null);
 check("lifecycle rejects null input", app.simulateDustLifecycle(null, null, null) === null);
 
-console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
-process.exit(failures === 0 ? 0 : 1);
+/* hash commitments — real SHA-256 via Web Crypto (async) */
+check("commitment message is versioned and exact", app.commitmentMessage("my bid is 250") === app.COMMIT_PREFIX + "\nmy bid is 250");
+check("commitment message keeps the secret exactly (no trim)", app.commitmentMessage(" pad ") === app.COMMIT_PREFIX + "\n pad ");
+check("commitment message rejects empty, blank and non-string", app.commitmentMessage("") === null && app.commitmentMessage("   ") === null && app.commitmentMessage(null) === null && app.commitmentMessage(42) === null);
+
+(async () => {
+  check("sha256 of empty string matches the published vector", await app.sha256Hex("") === "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+  check("sha256 of 'abc' matches the published vector", await app.sha256Hex("abc") === "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+  check("sha256 of the pangram matches the published vector", await app.sha256Hex("The quick brown fox jumps over the lazy dog") === "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592");
+  check("sha256 rejects non-string", await app.sha256Hex(null) === null);
+  const c1 = await app.makeCommitment("the bridge opens on Friday");
+  check("commitment is 64 lowercase hex chars", /^[0-9a-f]{64}$/.test(c1));
+  check("commitment is deterministic", await app.makeCommitment("the bridge opens on Friday") === c1);
+  check("different secrets give different commitments", await app.makeCommitment("the bridge opens on Saturday") !== c1);
+  check("commitment never contains the secret", !c1.includes("bridge"));
+  check("commitment of empty secret is null", await app.makeCommitment("") === null && await app.makeCommitment("  ") === null);
+  check("reveal of the exact secret verifies", await app.verifyCommitment(c1, "the bridge opens on Friday") === true);
+  check("verify tolerates uppercase and padded commitment", await app.verifyCommitment("  " + c1.toUpperCase() + " ", "the bridge opens on Friday") === true);
+  check("wrong secret does not verify", await app.verifyCommitment(c1, "the bridge opens on Saturday") === false);
+  check("near-miss secret (trailing space) does not verify", await app.verifyCommitment(c1, "the bridge opens on Friday ") === false);
+  check("malformed commitment is null, not false", await app.verifyCommitment("xyz", "the bridge opens on Friday") === null && await app.verifyCommitment(c1.slice(0, 63), "the bridge opens on Friday") === null && await app.verifyCommitment(null, "x") === null);
+  check("empty secret against a real commitment is null", await app.verifyCommitment(c1, "") === null);
+
+  console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
+  process.exit(failures === 0 ? 0 : 1);
+})();

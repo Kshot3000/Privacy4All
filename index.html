@@ -252,6 +252,27 @@
         <button type="submit" class="btn primary">Walk the lifecycle</button>
         <div id="dust-life-result" role="status" aria-live="polite"></div>
       </form>
+
+      <div class="tool" id="commit-tool">
+        <h3>8 · Commit now, reveal later — hash commitments</h3>
+        <p>How do you prove you knew something earlier — a prediction, a sealed bid, a vote — without revealing it at the time? Publish a <em>commitment</em>: a hash of the secret now, the secret itself later. This makes a real SHA-256 hash computed locally on this device (the same idea as tool 6's commit-to-a-secret pattern) — your secret never leaves this page; only the hash is meant to be shared. Honest limits: a short or guessable secret can be brute-forced from its hash, so real systems add a long random salt — and this page's digest format is a teaching format, not Compact's on-chain persistent hash.</p>
+        <form id="commit-make">
+          <label for="commit-secret">Your secret (stays on this page)</label>
+          <input id="commit-secret" type="password" autocomplete="off" spellcheck="false" placeholder="e.g. My sealed bid is 250">
+          <button type="submit" class="btn primary">Make my commitment</button>
+          <label for="commit-out">Your commitment — safe to publish now</label>
+          <textarea id="commit-out" rows="2" readonly spellcheck="false"></textarea>
+          <p id="commit-make-result" role="status" aria-live="polite"></p>
+        </form>
+        <form id="commit-check">
+          <label for="check-commitment">Commitment to check (64 hex characters)</label>
+          <input id="check-commitment" autocomplete="off" spellcheck="false" placeholder="Paste the published commitment">
+          <label for="check-secret">The revealed secret</label>
+          <input id="check-secret" type="password" autocomplete="off" spellcheck="false" placeholder="Typed exactly as it was committed">
+          <button type="submit" class="btn primary">Check the reveal</button>
+          <p id="commit-check-result" role="status" aria-live="polite"></p>
+        </form>
+      </div>
     </div>
   </section>
 
@@ -282,6 +303,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=5"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>
