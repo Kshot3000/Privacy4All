@@ -27,8 +27,8 @@ check("Midnight team X tag in README", readme.includes("@MidnightNtwrk"));
 /* document structure */
 check("exactly one <h1>", (html.match(/<h1[ >]/g) || []).length === 1);
 check("has <main> landmark", /<main[\s>]/.test(html));
-check("all main form controls labelled", ["q", "redact-in", "night", "claim", "secret", "threshold", "snippet-select", "life-night", "life-spend", "life-txs", "commit-secret", "commit-out", "check-commitment", "check-secret", "observer-select", "viewing-select", "strength-secret", "salt-out", "merkle-entries", "merkle-entry", "split-secret", "split-count", "split-out", "join-in", "join-out", "note-secret", "note-commit-out", "spend-secret", "spend-nullifier-out", "shamir-secret", "shamir-threshold", "shamir-count", "shamir-out", "shamir-join-in", "shamir-join-out", "seal-message", "seal-password", "seal-out", "open-sealed", "open-password", "open-out", "sign-pub-out", "sign-priv-out", "sign-message", "sign-priv-in", "sign-out", "verify-pub", "verify-message", "verify-sig"].every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=3") && html.includes("app.js?v=15"));
+check("all main form controls labelled", ["q", "redact-in", "night", "claim", "secret", "threshold", "snippet-select", "life-night", "life-spend", "life-txs", "commit-secret", "commit-out", "check-commitment", "check-secret", "observer-select", "viewing-select", "strength-secret", "salt-out", "merkle-entries", "merkle-entry", "split-secret", "split-count", "split-out", "join-in", "join-out", "note-secret", "note-commit-out", "spend-secret", "spend-nullifier-out", "shamir-secret", "shamir-threshold", "shamir-count", "shamir-out", "shamir-join-in", "shamir-join-out", "seal-message", "seal-password", "seal-out", "open-sealed", "open-password", "open-out", "sign-pub-out", "sign-priv-out", "sign-message", "sign-priv-in", "sign-out", "verify-pub", "verify-message", "verify-sig", "agree-pub-out", "agree-priv-out", "agree-peer-pub-out", "agree-peer-priv-out", "agree-priv-in", "agree-peer-pub", "agree-out", "agree-fingerprint-out", "agree-check-priv", "agree-check-pub", "agree-check-out"].every(id => html.includes(`for="${id}"`)));
+check("cache keys present", html.includes("styles.css?v=3") && html.includes("app.js?v=16"));
 check("dApp permission tool present", html.includes('id="dapp-see"') && html.includes('id="dapp-result"'));
 check("ZK claim simulator present", html.includes('id="zk-prover"') && html.includes('id="zk-result"'));
 check("ZK simulator honestly labelled a simulation", html.includes("teaching simulation, not a cryptographic proof"));
@@ -224,6 +224,12 @@ check("signed-message tool honestly states a signature proves the key, not a nam
 check("signed-message tool honestly states signing does not hide the message and the private key is the identity", html.includes("signing does not hide it") && html.includes("anyone holding it can sign as you"));
 check("signed-message tool states the P-256 vs secp256k1 curve distinction plainly", html.includes("Bitcoin and Ethereum use its sibling curve secp256k1, which Web Crypto does not offer"));
 check("signing constants are the labelled values", app.SIGN_FORMAT === "p4a-sig-v1" && app.SIGN_MAX_MESSAGE_CHARS === 2000 && app.SIGN_PUBLIC_KEY_BYTES === 91 && app.SIGN_PRIVATE_KEY_BYTES === 138 && app.SIGN_SIGNATURE_BYTES === 64);
+check("key-agreement tool present", html.includes('id="key-agreement"') && html.includes('id="agree-keys"') && html.includes('id="agree-peer"') && html.includes('id="agree-do"') && html.includes('id="agree-check"') && html.includes('id="agree-out"') && html.includes('id="agree-fingerprint-out"'));
+check("key-agreement tool honestly labelled a teaching implementation, not an audited messaging app", html.includes("teaching implementation, not an audited messaging app") && html.includes("real ECDH on the P-256 curve, computed locally"));
+check("key-agreement tool honestly states the secret is never exchanged and public keys are the only things exchanged", html.includes("that secret is never exchanged") && html.includes("the public keys are the only things exchanged"));
+check("key-agreement tool honestly states the raw secret is never used directly and agreement does not prove who the other key belongs to", html.includes("never use the raw shared secret directly as a key") && html.includes("does not prove who the other public key belongs to") && html.includes("man-in-the-middle"));
+check("key-agreement tool states fingerprints are compared, never the secret itself", html.includes("compare a fingerprint of the secret, never the secret itself"));
+check("agreement constants are the labelled values", app.AGREE_PUBLIC_KEY_BYTES === 91 && app.AGREE_PRIVATE_KEY_BYTES === 138 && app.AGREE_SHARED_SECRET_BYTES === 32 && app.AGREE_FINGERPRINT_PREFIX === "p4a-ecdh-fingerprint-v1");
 
 /* XOR secret sharing — real local sharing, complete sets only */
 const split3 = app.splitSecret("the cake is in the blue locker", 3);
@@ -438,6 +444,31 @@ check("commitment message rejects empty, blank and non-string", app.commitmentMe
   check("parseSignature rejects junk, wrong sizes and missing prefix", app.parseSignature("hello") === null && app.parseSignature(null) === null && app.parseSignature("p4a-sig-v1:abcd") === null && app.parseSignature(sigA.slice(0, sigA.length - 2)) === null && app.parseSignature(sigA.replace("p4a-sig-v1", "p4a-sig-v2")) === null);
   check("verify returns null (not false) for malformed key, signature and message inputs", await app.verifySignature("xyz", sigMsg, sigA) === null && await app.verifySignature(pairA.privateKey, sigMsg, sigA) === null && await app.verifySignature(pairA.publicKey, sigMsg, "p4a-sig-v1:zz") === null && await app.verifySignature(pairA.publicKey, "", sigA) === null && await app.verifySignature(pairA.publicKey, "   ", sigA) === null && await app.verifySignature(null, null, null) === null);
   check("sign rejects a public key, junk keys, and empty, blank, non-string and over-long messages", await app.signMessage(pairA.publicKey, sigMsg) === null && await app.signMessage("xyz", sigMsg) === null && await app.signMessage(pairA.privateKey, "") === null && await app.signMessage(pairA.privateKey, "   ") === null && await app.signMessage(pairA.privateKey, null) === null && await app.signMessage(pairA.privateKey, "x".repeat(app.SIGN_MAX_MESSAGE_CHARS + 1)) === null && await app.signMessage(null, sigMsg) === null);
+
+  /* key agreement — real ECDH P-256 via Web Crypto (async) */
+  const agreeA = await app.generateAgreementKeyPair();
+  const agreeB = await app.generateAgreementKeyPair();
+  const agreeC = await app.generateAgreementKeyPair();
+  check("generated agreement pair carries hex keys of the labelled sizes", agreeA !== null && /^[0-9a-f]{182}$/.test(agreeA.publicKey) && /^[0-9a-f]{276}$/.test(agreeA.privateKey));
+  check("two generated agreement pairs differ", agreeA.publicKey !== agreeB.publicKey && agreeA.privateKey !== agreeB.privateKey);
+  const secretAB = await app.deriveSharedSecret(agreeA.privateKey, agreeB.publicKey);
+  const secretBA = await app.deriveSharedSecret(agreeB.privateKey, agreeA.publicKey);
+  check("shared secret is 32 bytes of lowercase hex", /^[0-9a-f]{64}$/.test(secretAB));
+  check("both sides of an agreement derive exactly the same secret", secretAB === secretBA && secretAB !== null);
+  check("agreement is deterministic for the same key pair", await app.deriveSharedSecret(agreeA.privateKey, agreeB.publicKey) === secretAB);
+  check("derive tolerates uppercase and padded key input", await app.deriveSharedSecret("  " + agreeA.privateKey.toUpperCase() + " ", " " + agreeB.publicKey.toUpperCase() + " ") === secretAB);
+  check("a different pairing derives a different secret", await app.deriveSharedSecret(agreeA.privateKey, agreeC.publicKey) !== secretAB && await app.deriveSharedSecret(agreeC.privateKey, agreeB.publicKey) !== secretAB);
+  check("agreeing with your own public key is a different secret again", await app.deriveSharedSecret(agreeA.privateKey, agreeA.publicKey) !== secretAB);
+  check("the shared secret is neither side's key material", secretAB !== agreeA.publicKey && secretAB !== agreeB.publicKey && !agreeA.privateKey.includes(secretAB) && !agreeB.privateKey.includes(secretAB));
+  check("parseSharedSecret reads a valid secret and normalises case and padding", app.parseSharedSecret("  " + secretAB.toUpperCase() + " ") === secretAB);
+  check("parseSharedSecret rejects junk, wrong sizes and non-strings", app.parseSharedSecret("hello") === null && app.parseSharedSecret(secretAB.slice(0, 62)) === null && app.parseSharedSecret(secretAB + "ab") === null && app.parseSharedSecret("") === null && app.parseSharedSecret(null) === null && app.parseSharedSecret(42) === null);
+  const fpAB = await app.sharedSecretFingerprint(secretAB);
+  check("fingerprint is 64 lowercase hex and is not the secret", /^[0-9a-f]{64}$/.test(fpAB) && fpAB !== secretAB);
+  check("fingerprint is deterministic and tolerates case and padding", await app.sharedSecretFingerprint(" " + secretAB.toUpperCase() + " ") === fpAB);
+  check("a different secret has a different fingerprint", await app.sharedSecretFingerprint(await app.deriveSharedSecret(agreeA.privateKey, agreeC.publicKey)) !== fpAB);
+  check("fingerprint rejects junk, wrong sizes and non-strings as null", await app.sharedSecretFingerprint("xyz") === null && await app.sharedSecretFingerprint(secretAB.slice(0, 32)) === null && await app.sharedSecretFingerprint(null) === null && await app.sharedSecretFingerprint(42) === null);
+  check("derive rejects junk, null and non-string keys as null", await app.deriveSharedSecret("xyz", agreeB.publicKey) === null && await app.deriveSharedSecret(agreeA.privateKey, "xyz") === null && await app.deriveSharedSecret(null, null) === null && await app.deriveSharedSecret(42, agreeB.publicKey) === null);
+  check("derive rejects swapped and wrong-size keys as null, never a plausible secret", await app.deriveSharedSecret(agreeA.publicKey, agreeB.publicKey) === null && await app.deriveSharedSecret(agreeA.privateKey, agreeB.privateKey) === null && await app.deriveSharedSecret(agreeA.privateKey.slice(0, 100), agreeB.publicKey) === null && await app.deriveSharedSecret(agreeA.privateKey, agreeB.publicKey.slice(0, 100)) === null);
 
   console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
   process.exit(failures === 0 ? 0 : 1);

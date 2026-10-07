@@ -212,6 +212,25 @@ renewable resource that pays for shielded transactions.
   holding it can sign as you, with no recovery — and keys exist
   only in the page, so reloading loses them. Never paste a real
   wallet's private key into any web page, including this one.
+- **Agree on a secret nobody saw — key agreement (ECDH)** — how
+  two people who have never met get a secret they both know and
+  nobody else does, over a channel everyone can read: each side
+  generates an ECDH key pair on P-256 locally, only the public
+  keys are exchanged, and each side mixes its own private key
+  with the other's public key — both land on exactly the same
+  32-byte shared secret, a value that is never exchanged and
+  cannot be worked out from the public keys alone. The page
+  practises both sides (your agreement, then the other side's,
+  which must match exactly) and derives a SHA-256 fingerprint of
+  the secret that is safe to compare out loud. Honestly labelled
+  a teaching implementation, not an audited messaging app: real
+  systems never use the raw secret directly (it goes through a
+  key-derivation function first), agreement alone does not prove
+  who the other public key belongs to (a man-in-the-middle who
+  swaps both public keys reads everything — hence fingerprint
+  comparison), and the secret is displayed here for practice
+  only — a real app never shows it. Never paste a real wallet's
+  private key into any web page, including this one.
 
 ## Guides
 

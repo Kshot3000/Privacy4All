@@ -457,6 +457,49 @@
           <p id="verify-result" role="status" aria-live="polite"></p>
         </form>
       </div>
+
+      <div class="tool" id="key-agreement">
+        <h3>18 · Agree on a secret nobody saw — key agreement</h3>
+        <p>Sealing (tool 16) needs a password you already share, and signing (tool 17) proves who holds a key — but how do two people who have never met end up with a secret they both know and nobody else does, over a channel everyone can read? With key agreement — real ECDH on the P-256 curve, computed locally here: each side makes a key pair, the public keys are the only things exchanged, and each side mixes its own private key with the other's public key. Both sides land on exactly the same 32-byte shared secret, even though that secret is never exchanged and cannot be worked out from the two public keys alone. That handshake is what sits underneath private messaging. Honestly labelled limits: this is a teaching implementation, not an audited messaging app. Real systems never use the raw shared secret directly as a key — they run it through a key-derivation function first — and agreement alone does not prove who the other public key belongs to: a man-in-the-middle who swaps both public keys completes two separate agreements and can read everything, which is why real messengers let you compare a fingerprint of the secret, never the secret itself, over a channel you already trust. The secret is displayed on this page only so you can practise both sides in one place; a real app never shows it. Never paste a real wallet's private key into any web page, including this one — practise with throwaway keys.</p>
+        <form id="agree-keys">
+          <button type="submit" class="btn primary">Make my agreement keys locally</button>
+          <label for="agree-pub-out">Your public key — publish this; it is the only thing you exchange</label>
+          <textarea id="agree-pub-out" rows="3" readonly spellcheck="false"></textarea>
+          <label for="agree-priv-out">Your private key — keep this secret; it never leaves your device</label>
+          <textarea id="agree-priv-out" rows="3" readonly spellcheck="false"></textarea>
+          <p id="agree-keys-result" role="status" aria-live="polite"></p>
+        </form>
+        <form id="agree-peer">
+          <button type="submit" class="btn primary">Simulate the other person's keys</button>
+          <label for="agree-peer-pub-out">Their public key — in real life, the only thing that travels to you</label>
+          <textarea id="agree-peer-pub-out" rows="3" readonly spellcheck="false"></textarea>
+          <label for="agree-peer-priv-out">Their private key — shown only because this page plays both sides; on their device it never leaves</label>
+          <textarea id="agree-peer-priv-out" rows="3" readonly spellcheck="false"></textarea>
+          <p id="agree-peer-result" role="status" aria-live="polite"></p>
+        </form>
+        <form id="agree-do">
+          <label for="agree-priv-in">Your private key (from your key box above — never a real wallet key)</label>
+          <textarea id="agree-priv-in" rows="3" spellcheck="false" placeholder="Paste your private key hex here"></textarea>
+          <label for="agree-peer-pub">Their public key</label>
+          <textarea id="agree-peer-pub" rows="3" spellcheck="false" placeholder="Paste their public key hex here"></textarea>
+          <button type="submit" class="btn primary">Agree on the secret locally</button>
+          <label for="agree-out">Your shared secret — computed, never exchanged (shown for practice only)</label>
+          <textarea id="agree-out" rows="2" readonly spellcheck="false"></textarea>
+          <label for="agree-fingerprint-out">Its fingerprint — safe to compare out loud, it cannot be reversed into the secret</label>
+          <textarea id="agree-fingerprint-out" rows="2" readonly spellcheck="false"></textarea>
+          <p id="agree-result" role="status" aria-live="polite"></p>
+        </form>
+        <form id="agree-check">
+          <label for="agree-check-priv">Their private key (from the simulation box above)</label>
+          <textarea id="agree-check-priv" rows="3" spellcheck="false" placeholder="Paste their private key hex here"></textarea>
+          <label for="agree-check-pub">Your public key</label>
+          <textarea id="agree-check-pub" rows="3" spellcheck="false" placeholder="Paste your public key hex here"></textarea>
+          <button type="submit" class="btn primary">Agree from the other side</button>
+          <label for="agree-check-out">The other side's shared secret — it must match yours exactly</label>
+          <textarea id="agree-check-out" rows="2" readonly spellcheck="false"></textarea>
+          <p id="agree-check-result" role="status" aria-live="polite"></p>
+        </form>
+      </div>
     </div>
   </section>
 
@@ -487,6 +530,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=15"></script>
+<script src="app.js?v=16"></script>
 </body>
 </html>

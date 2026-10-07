@@ -1291,6 +1291,108 @@ function verifySignature(publicKeyHex, message, signatureText) {
     });
 }
 
+/* ---------- 18. Agree on a secret nobody saw — key agreement ---------- */
+/* Tool 16 needs a shared password and tool 17 proves who holds a
+   key — but how do two people who have never met get a secret
+   they BOTH know and nobody else does, over a channel everyone
+   can read? Key agreement: each side generates an ECDH key pair
+   on the P-256 curve, they exchange ONLY the public keys, and
+   each side combines its own private key with the other's public
+   key. The maths lands both sides on the same 32-byte shared
+   secret — a value that is never exchanged, never sent, and
+   cannot be worked out from the two public keys alone. That is
+   the handshake underneath private messaging (my Night Messenger
+   included, in spirit). Honest limits: the raw shared secret is
+   an input to a key-derivation function, never a key to use
+   directly — real systems hash it with context into session keys.
+   Agreement alone does NOT prove who the other public key belongs
+   to: an attacker in the middle who swaps both public keys gets
+   two agreements, one with each side, and can relay and read —
+   which is why real messengers let you compare a fingerprint of
+   the secret (or of the keys) over a channel you trust. Displayed
+   here only so both sides can be practised on one page: in a real
+   app the secret is never shown. Teaching implementation, not an
+   audited messaging app. Keys exist only in this page; never paste
+   a real wallet's private key into any web page, including this
+   one — practise with throwaway keys. */
+var AGREE_PUBLIC_KEY_BYTES = 91;   /* SPKI encoding of a P-256 public key */
+var AGREE_PRIVATE_KEY_BYTES = 138; /* PKCS#8 encoding of a P-256 private key */
+var AGREE_SHARED_SECRET_BYTES = 32;
+var AGREE_FINGERPRINT_PREFIX = "p4a-ecdh-fingerprint-v1";
+
+function agreeCrypto() {
+  var c = (typeof globalThis !== "undefined" && globalThis.crypto) || null;
+  return (c && c.subtle && typeof c.subtle.generateKey === "function") ? c : null;
+}
+
+function generateAgreementKeyPair() {
+  var cryptoObj = agreeCrypto();
+  if (!cryptoObj) return Promise.resolve(null);
+  return cryptoObj.subtle.generateKey(
+    { name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"])
+    .then(function (pair) {
+      return Promise.all([
+        cryptoObj.subtle.exportKey("spki", pair.publicKey),
+        cryptoObj.subtle.exportKey("pkcs8", pair.privateKey)
+      ]).then(function (keys) {
+        return { publicKey: shareBytesToHex(new Uint8Array(keys[0])),
+                 privateKey: shareBytesToHex(new Uint8Array(keys[1])) };
+      }, function () { return null; });
+    }, function () { return null; });
+}
+
+function importAgreementKey(hex, expectedBytes, format, usages) {
+  var bytes = parseKeyHex(hex, expectedBytes);
+  if (!bytes) return Promise.resolve(null);
+  var cryptoObj = agreeCrypto();
+  if (!cryptoObj) return Promise.resolve(null);
+  return cryptoObj.subtle.importKey(
+    format, bytes, { name: "ECDH", namedCurve: "P-256" }, true, usages)
+    .then(function (key) { return key; }, function () { return null; });
+}
+
+/* Both directions of an agreement land on the same secret:
+   deriveSharedSecret(myPriv, theirPub) ===
+   deriveSharedSecret(theirPriv, myPub). Anything malformed —
+   wrong key size, junk hex, a public key offered as a private
+   key — is null, never a wrong-but-plausible secret. */
+function deriveSharedSecret(privateKeyHex, peerPublicKeyHex) {
+  return importAgreementKey(privateKeyHex, AGREE_PRIVATE_KEY_BYTES, "pkcs8", ["deriveBits"])
+    .then(function (priv) {
+      if (!priv) return null;
+      return importAgreementKey(peerPublicKeyHex, AGREE_PUBLIC_KEY_BYTES, "spki", [])
+        .then(function (pub) {
+          if (!pub) return null;
+          var cryptoObj = agreeCrypto();
+          return cryptoObj.subtle.deriveBits(
+            { name: "ECDH", public: pub }, priv, AGREE_SHARED_SECRET_BYTES * 8)
+            .then(function (bits) {
+              var bytes = new Uint8Array(bits);
+              if (bytes.length !== AGREE_SHARED_SECRET_BYTES) return null;
+              return shareBytesToHex(bytes);
+            }, function () { return null; });
+        });
+    });
+}
+
+function parseSharedSecret(text) {
+  if (typeof text !== "string") return null;
+  var hex = text.trim().toLowerCase();
+  if (!/^[0-9a-f]+$/.test(hex)) return null;
+  var bytes = hexToBytes(hex);
+  if (!bytes || bytes.length !== AGREE_SHARED_SECRET_BYTES) return null;
+  return hex;
+}
+
+/* A short public check value for a shared secret: safe to compare
+   out loud or over another channel, because the fingerprint
+   cannot be reversed into the secret. */
+function sharedSecretFingerprint(secretHex) {
+  var hex = parseSharedSecret(secretHex);
+  if (hex === null) return Promise.resolve(null);
+  return sha256Hex(AGREE_FINGERPRINT_PREFIX + "\n" + hex);
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -1315,7 +1417,10 @@ if (typeof module !== "undefined" && module.exports) {
                      parseSealed, sealMessage, unsealMessage,
                      SIGN_FORMAT, SIGN_MAX_MESSAGE_CHARS,
                      SIGN_PUBLIC_KEY_BYTES, SIGN_PRIVATE_KEY_BYTES, SIGN_SIGNATURE_BYTES,
-                     parseSignature, generateSigningKeyPair, signMessage, verifySignature };
+                     parseSignature, generateSigningKeyPair, signMessage, verifySignature,
+                     AGREE_PUBLIC_KEY_BYTES, AGREE_PRIVATE_KEY_BYTES, AGREE_SHARED_SECRET_BYTES,
+                     AGREE_FINGERPRINT_PREFIX, generateAgreementKeyPair,
+                     deriveSharedSecret, parseSharedSecret, sharedSecretFingerprint };
 }
 
 if (typeof document !== "undefined") {
@@ -2012,6 +2117,104 @@ if (typeof document !== "undefined") {
             "legal name: trust the key because you got it from the person directly, not from this page."
           : "✗ Signature does NOT check out — the message was changed after signing, or this signature " +
             "belongs to a different message or a different key. Do not trust it as this signer's words.";
+      });
+    });
+
+    /* --- agree on a secret nobody saw (ECDH P-256) --- */
+    document.getElementById("agree-keys").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var pubOut = document.getElementById("agree-pub-out");
+      var privOut = document.getElementById("agree-priv-out");
+      var status = document.getElementById("agree-keys-result");
+      status.textContent = "Making your agreement keys locally…";
+      generateAgreementKeyPair().then(function (pair) {
+        if (!pair) {
+          pubOut.value = "";
+          privOut.value = "";
+          status.textContent = "This browser could not make keys locally. Nothing was sent anywhere — try a current browser.";
+          return;
+        }
+        pubOut.value = pair.publicKey;
+        privOut.value = pair.privateKey;
+        document.getElementById("agree-priv-in").value = pair.privateKey;
+        document.getElementById("agree-check-pub").value = pair.publicKey;
+        status.textContent = "Your keys are made locally — nothing was stored or sent. Publish the public " +
+          "key: it is the only thing you exchange. Guard the private key like a seed phrase: whoever " +
+          "holds it can complete agreements as you. Your private key was copied into the agreement box " +
+          "below, and your public key into the other-side check box at the bottom.";
+      });
+    });
+    document.getElementById("agree-peer").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var pubOut = document.getElementById("agree-peer-pub-out");
+      var privOut = document.getElementById("agree-peer-priv-out");
+      var status = document.getElementById("agree-peer-result");
+      status.textContent = "Making the other person's keys locally…";
+      generateAgreementKeyPair().then(function (pair) {
+        if (!pair) {
+          pubOut.value = "";
+          privOut.value = "";
+          status.textContent = "This browser could not make keys locally. Nothing was sent anywhere — try a current browser.";
+          return;
+        }
+        pubOut.value = pair.publicKey;
+        privOut.value = pair.privateKey;
+        document.getElementById("agree-peer-pub").value = pair.publicKey;
+        document.getElementById("agree-check-priv").value = pair.privateKey;
+        status.textContent = "In real life the other person makes these on their own device and only " +
+          "the public key ever travels — this box exists so you can practise both sides on one page. " +
+          "Their public key was copied into your agreement box, and their private key into the " +
+          "other-side check box (on their device, that is where it would stay).";
+      });
+    });
+    document.getElementById("agree-do").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("agree-out");
+      var fpOut = document.getElementById("agree-fingerprint-out");
+      var status = document.getElementById("agree-result");
+      status.textContent = "Agreeing locally…";
+      deriveSharedSecret(document.getElementById("agree-priv-in").value,
+        document.getElementById("agree-peer-pub").value).then(function (secret) {
+        if (!secret) {
+          out.value = "";
+          fpOut.value = "";
+          status.textContent = "That cannot agree: paste your whole private key and the other person's " +
+            "whole public key, both made by the key boxes above. A public key cannot stand in for a " +
+            "private key — that is the point.";
+          return;
+        }
+        out.value = secret;
+        return sharedSecretFingerprint(secret).then(function (fp) {
+          fpOut.value = fp || "";
+          status.textContent = "Agreed locally — and the secret itself was never exchanged: it was " +
+            "computed on this device from your private key and their public key alone. It is shown here " +
+            "only for practice, so you can compare it with the other side below; a real app never " +
+            "displays it and never uses it raw — it runs the secret through a key-derivation function " +
+            "first. The fingerprint is the part that is safe to compare out loud.";
+        });
+      });
+    });
+    document.getElementById("agree-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("agree-check-out");
+      var status = document.getElementById("agree-check-result");
+      status.textContent = "Agreeing from the other side locally…";
+      deriveSharedSecret(document.getElementById("agree-check-priv").value,
+        document.getElementById("agree-check-pub").value).then(function (secret) {
+        if (!secret) {
+          out.value = "";
+          status.textContent = "That cannot agree: paste the other person's whole private key and " +
+            "your whole public key, both made by the key boxes above.";
+          return;
+        }
+        out.value = secret;
+        var mine = document.getElementById("agree-out").value.trim().toLowerCase();
+        status.textContent = (mine && mine === secret)
+          ? "✓ Same secret, computed independently from the other side — and it was never sent anywhere. " +
+            "Two devices that have only exchanged public keys now share a secret nobody else can work " +
+            "out from those public keys. That is the handshake under private messaging."
+          : "The other side's secret is in the box — run your agreement above and compare: the two " +
+            "boxes must match exactly. If they do not, one of the four keys is from a different pair.";
       });
     });
 
