@@ -710,6 +710,140 @@ function verifyMerkleProof(entry, proof, rootHex) {
   });
 }
 
+/* ---------- 13. Split a secret (XOR secret sharing) ---------- */
+/* Real secret sharing, computed locally — the simplest true scheme.
+   The secret's UTF-8 bytes are XORed with (count - 1) freshly random
+   byte strings of the same length; the last share is whatever makes
+   the XOR of ALL shares come back to the secret. Because every random
+   share is uniform, any proper subset of the shares is itself just
+   uniform random bytes: it carries no information about the secret's
+   content at all (the one-time-pad argument) — that is a property of
+   the maths, not a promise about this page.
+   Honest limits: this is ALL-of-n sharing, deliberately. Every share
+   is required, so losing one share loses the secret forever — real
+   systems that need recovery use threshold (k-of-n) sharing such as
+   Shamir's, where any k of n shares suffice; that scheme is named
+   here, NOT implemented or claimed by this tool. A share is exactly
+   as long as the secret, so a share's length leaks the secret's
+   length. And a tool is not a vault: never paste a real seed phrase
+   or a production secret into any web page, including this one —
+   practise with throwaway secrets. */
+var SHARE_FORMAT = "p4a-share-v1";
+var SHARE_MIN_COUNT = 2;
+var SHARE_MAX_COUNT = 8;
+var SHARE_MAX_SECRET_CHARS = 512;
+
+function secretToBytes(text) {
+  if (typeof TextEncoder !== "undefined") {
+    return new TextEncoder().encode(text);
+  }
+  var utf8 = unescape(encodeURIComponent(text));
+  var bytes = new Uint8Array(utf8.length);
+  for (var i = 0; i < utf8.length; i++) bytes[i] = utf8.charCodeAt(i) & 0xff;
+  return bytes;
+}
+
+function bytesToSecret(bytes) {
+  try {
+    if (typeof TextDecoder !== "undefined") {
+      return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    }
+    var bin = "";
+    for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return decodeURIComponent(escape(bin));
+  } catch (e) {
+    return null; /* not valid UTF-8 — the shares were tampered or mixed */
+  }
+}
+
+function shareBytesToHex(bytes) {
+  return Array.prototype.map.call(bytes, function (b) {
+    return b.toString(16).padStart(2, "0");
+  }).join("");
+}
+
+function splitSecret(secret, count) {
+  if (typeof secret !== "string" || secret.trim() === "") return null;
+  if (secret.length > SHARE_MAX_SECRET_CHARS) return null;
+  if (typeof count !== "number" || !Number.isInteger(count) ||
+      count < SHARE_MIN_COUNT || count > SHARE_MAX_COUNT) return null;
+  var cryptoObj = (typeof globalThis !== "undefined" && globalThis.crypto) || null;
+  if (!cryptoObj || typeof cryptoObj.getRandomValues !== "function") return null;
+  var data = secretToBytes(secret);
+  var randomShares = [];
+  var i, j;
+  for (i = 0; i < count - 1; i++) {
+    var r = new Uint8Array(data.length);
+    cryptoObj.getRandomValues(r);
+    randomShares.push(r);
+  }
+  var last = new Uint8Array(data);
+  randomShares.forEach(function (r) {
+    for (j = 0; j < data.length; j++) last[j] ^= r[j];
+  });
+  var all = randomShares.concat([last]);
+  return {
+    count: count,
+    shares: all.map(function (bytes, idx) {
+      return SHARE_FORMAT + ":" + count + ":" + (idx + 1) + ":" + shareBytesToHex(bytes);
+    })
+  };
+}
+
+function parseShare(line) {
+  if (typeof line !== "string") return null;
+  var m = line.trim().toLowerCase().match(/^p4a-share-v1:(\d+):(\d+):([0-9a-f]+)$/);
+  if (!m) return null;
+  var total = parseInt(m[1], 10);
+  var index = parseInt(m[2], 10);
+  if (total < SHARE_MIN_COUNT || total > SHARE_MAX_COUNT) return null;
+  if (index < 1 || index > total) return null;
+  if (m[3].length === 0 || m[3].length % 2 !== 0) return null;
+  var bytes = new Uint8Array(m[3].length / 2);
+  for (var i = 0; i < bytes.length; i++) {
+    bytes[i] = parseInt(m[3].slice(i * 2, i * 2 + 2), 16);
+  }
+  return { total: total, index: index, bytes: bytes };
+}
+
+/* Accepts the shares as one pasted block of text (one per line) or an
+   array of lines. Returns the secret only for the COMPLETE set —
+   exactly one of each index, all from one split, all the same
+   length. Anything less, duplicated or mixed is null, never a
+   best-effort guess: there is no partial recovery in all-of-n. */
+function combineShares(input) {
+  var lines;
+  if (typeof input === "string") lines = input.split(/\r?\n/);
+  else if (Array.isArray(input)) lines = input;
+  else return null;
+  var parsed = [];
+  for (var i = 0; i < lines.length; i++) {
+    if (typeof lines[i] === "string" && lines[i].trim() === "") continue;
+    var p = parseShare(lines[i]);
+    if (!p) return null;
+    parsed.push(p);
+  }
+  if (parsed.length === 0) return null;
+  var total = parsed[0].total;
+  if (parsed.length !== total) return null;
+  var seen = {};
+  var len = parsed[0].bytes.length;
+  if (len === 0) return null;
+  for (i = 0; i < parsed.length; i++) {
+    if (parsed[i].total !== total) return null; /* shares from two splits */
+    if (parsed[i].bytes.length !== len) return null;
+    if (seen[parsed[i].index]) return null; /* a duplicate is not a set */
+    seen[parsed[i].index] = true;
+  }
+  var out = new Uint8Array(len);
+  parsed.forEach(function (p) {
+    for (var j = 0; j < len; j++) out[j] ^= p.bytes[j];
+  });
+  var secret = bytesToSecret(out);
+  if (secret === null || secret.trim() === "") return null;
+  return secret;
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -723,7 +857,9 @@ if (typeof module !== "undefined" && module.exports) {
                      generateSaltHex, saltedSecret, GUESSES_PER_SECOND,
                      MERKLE_LEAF_PREFIX, MERKLE_NODE_PREFIX, MERKLE_MAX_ENTRIES,
                      parseMerkleEntries, normalizeMerkleEntries, merkleLeafHash,
-                     buildMerkleTree, getMerkleProof, verifyMerkleProof };
+                     buildMerkleTree, getMerkleProof, verifyMerkleProof,
+                     SHARE_FORMAT, SHARE_MIN_COUNT, SHARE_MAX_COUNT, SHARE_MAX_SECRET_CHARS,
+                     splitSecret, parseShare, combineShares };
 }
 
 if (typeof document !== "undefined") {
@@ -1167,6 +1303,49 @@ if (typeof document !== "undefined") {
           host.appendChild(foot);
         });
       });
+    });
+
+    /* --- split a secret — XOR secret sharing --- */
+    document.getElementById("split-make").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("split-out");
+      var status = document.getElementById("split-result");
+      var count = Number(document.getElementById("split-count").value);
+      var res = splitSecret(document.getElementById("split-secret").value, count);
+      if (!res) {
+        out.value = "";
+        status.textContent = "Enter a throwaway secret (up to " + SHARE_MAX_SECRET_CHARS +
+          " characters) and a whole number of shares between " + SHARE_MIN_COUNT + " and " +
+          SHARE_MAX_COUNT + ". (If splitting is unavailable in this browser, open the page " +
+          "over HTTPS in a current browser.) Never a real seed phrase — see the warning above.";
+        return;
+      }
+      out.value = res.shares.join("\n");
+      status.textContent = "Split locally into " + res.count + " shares — your secret never " +
+        "left this page. Each share on its own is random bytes and reveals nothing about the " +
+        "secret's content; hand the shares out separately (different people, places or " +
+        "devices), because only ALL " + res.count + " of them together, pasted into the " +
+        "rebuild form below, bring the secret back. Lose one and it is gone — that is the " +
+        "all-of-n bargain, so keep the shares as carefully as the secret itself.";
+    });
+    document.getElementById("split-join").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("join-out");
+      var status = document.getElementById("join-result");
+      var secret = combineShares(document.getElementById("join-in").value);
+      if (secret === null) {
+        out.value = "";
+        status.textContent = "That is not a complete set: paste every share from ONE split, " +
+          "one per line — no missing share, no duplicates, no shares mixed in from another " +
+          "split. All-of-n means there is no partial recovery and no best guess: a set that " +
+          "is not complete and untampered rebuilds nothing.";
+        return;
+      }
+      out.value = secret;
+      status.textContent = "Rebuilt locally — the complete set XORs back to the exact secret, " +
+        "character for character. Nothing left this page. Anyone who collected all the " +
+        "shares could do the same, so once a secret has been rebuilt for use, treat the " +
+        "shares as spent: split fresh shares if you need to store it again.";
     });
 
     /* --- copy donation address --- */

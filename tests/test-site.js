@@ -27,8 +27,8 @@ check("Midnight team X tag in README", readme.includes("@MidnightNtwrk"));
 /* document structure */
 check("exactly one <h1>", (html.match(/<h1[ >]/g) || []).length === 1);
 check("has <main> landmark", /<main[\s>]/.test(html));
-check("all main form controls labelled", ["q", "redact-in", "night", "claim", "secret", "threshold", "snippet-select", "life-night", "life-spend", "life-txs", "commit-secret", "commit-out", "check-commitment", "check-secret", "observer-select", "viewing-select", "strength-secret", "salt-out", "merkle-entries", "merkle-entry"].every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=3") && html.includes("app.js?v=10"));
+check("all main form controls labelled", ["q", "redact-in", "night", "claim", "secret", "threshold", "snippet-select", "life-night", "life-spend", "life-txs", "commit-secret", "commit-out", "check-commitment", "check-secret", "observer-select", "viewing-select", "strength-secret", "salt-out", "merkle-entries", "merkle-entry", "split-secret", "split-count", "split-out", "join-in", "join-out"].every(id => html.includes(`for="${id}"`)));
+check("cache keys present", html.includes("styles.css?v=3") && html.includes("app.js?v=11"));
 check("dApp permission tool present", html.includes('id="dapp-see"') && html.includes('id="dapp-result"'));
 check("ZK claim simulator present", html.includes('id="zk-prover"') && html.includes('id="zk-result"'));
 check("ZK simulator honestly labelled a simulation", html.includes("teaching simulation, not a cryptographic proof"));
@@ -197,6 +197,38 @@ check("salted secret rejects bad salt and empty secret", app.saltedSecret("x", "
 check("merkle tool present", html.includes('id="merkle"') && html.includes('id="merkle-result"') && html.includes('id="merkle-entries"') && html.includes('id="merkle-entry"'));
 check("merkle tool honestly labelled not zero-knowledge", html.includes("a Merkle proof is <em>not</em> zero-knowledge") && html.includes("teaching format, not a specific chain's tree format"));
 check("merkle tool states duplicates are rejected", html.includes("duplicates rejected"));
+
+check("secret-split tool present", html.includes('id="secret-split"') && html.includes('id="split-make"') && html.includes('id="split-join"') && html.includes('id="split-out"') && html.includes('id="join-out"'));
+check("secret-split tool honestly labelled all-of-n, not Shamir", html.includes("losing one share loses the secret forever") && html.includes("threshold (k-of-n) sharing such as Shamir's") && html.includes("not implemented by this tool"));
+check("secret-split tool honestly states length leaks", html.includes("a share's length leaks the secret's length"));
+check("secret-split tool warns never to paste a real seed phrase", html.includes("never paste a real seed phrase"));
+
+/* XOR secret sharing — real local sharing, complete sets only */
+const split3 = app.splitSecret("the cake is in the blue locker", 3);
+check("split returns the requested share count", split3 !== null && split3.count === 3 && split3.shares.length === 3);
+check("every share carries the versioned format", split3.shares.every(s => /^p4a-share-v1:3:[123]:[0-9a-f]+$/.test(s)));
+check("share hex is exactly the secret's byte length", split3.shares.every(s => s.split(":")[3].length === 2 * "the cake is in the blue locker".length));
+check("no share contains the secret in plain text", !split3.shares.join(" ").includes("blue locker"));
+check("all shares differ from each other", new Set(split3.shares).size === 3);
+check("complete set rebuilds the secret exactly", app.combineShares(split3.shares) === "the cake is in the blue locker");
+check("rebuild works from one pasted block, blank lines and padding tolerated", app.combineShares("\n  " + split3.shares.join("  \n") + "\n") === "the cake is in the blue locker");
+check("share order does not matter", app.combineShares([split3.shares[2], split3.shares[0], split3.shares[1]]) === "the cake is in the blue locker");
+check("exact secret is preserved, spaces included", (() => { const s = app.splitSecret(" pad me ", 2); return app.combineShares(s.shares) === " pad me "; })());
+check("unicode secret round-trips exactly", (() => { const s = app.splitSecret("sécret — code 42", 4); return s.shares.length === 4 && app.combineShares(s.shares) === "sécret — code 42"; })());
+check("two-share minimum and eight-share maximum round-trip", (() => { const a = app.splitSecret("tiny", 2); const b = app.splitSecret("tiny", 8); return app.combineShares(a.shares) === "tiny" && app.combineShares(b.shares) === "tiny"; })());
+check("one share alone rebuilds nothing", app.combineShares([split3.shares[0]]) === null);
+check("a missing share rebuilds nothing", app.combineShares(split3.shares.slice(0, 2)) === null);
+check("a duplicated share is not a set", app.combineShares([split3.shares[0], split3.shares[0], split3.shares[1]]) === null);
+check("an extra share rebuilds nothing", app.combineShares(split3.shares.concat(split3.shares[0])) === null);
+check("shares from two splits do not mix", (() => { const other = app.splitSecret("the cake is in the blue locker", 3); return app.combineShares([split3.shares[0], split3.shares[1], other.shares[2]]) !== "the cake is in the blue locker"; })());
+check("a tampered share does not rebuild the secret", (() => { const bad = split3.shares.slice(); const parts = bad[1].split(":"); parts[3] = (parts[3][0] === "0" ? "1" : "0") + parts[3].slice(1); bad[1] = parts.join(":"); const out = app.combineShares(bad); return out !== "the cake is in the blue locker"; })());
+check("mismatched share lengths are rejected", (() => { const short = app.splitSecret("hi", 3); return app.combineShares([split3.shares[0], split3.shares[1], short.shares[2]]) === null; })());
+check("combine rejects junk and empty input", app.combineShares("") === null && app.combineShares([]) === null && app.combineShares(["hello"]) === null && app.combineShares(null) === null && app.combineShares(42) === null);
+check("split rejects bad counts", app.splitSecret("x", 1) === null && app.splitSecret("x", 9) === null && app.splitSecret("x", 2.5) === null && app.splitSecret("x", "3") === null && app.splitSecret("x", null) === null);
+check("split rejects empty, blank, non-string and over-long secrets", app.splitSecret("", 3) === null && app.splitSecret("   ", 3) === null && app.splitSecret(null, 3) === null && app.splitSecret(42, 3) === null && app.splitSecret("x".repeat(app.SHARE_MAX_SECRET_CHARS + 1), 3) === null);
+check("share constants are the labelled bounds", app.SHARE_MIN_COUNT === 2 && app.SHARE_MAX_COUNT === 8 && app.SHARE_FORMAT === "p4a-share-v1");
+check("parseShare reads a valid share", (() => { const p = app.parseShare(split3.shares[1]); return p !== null && p.total === 3 && p.index === 2 && p.bytes.length === "the cake is in the blue locker".length; })());
+check("parseShare rejects junk, bad index and odd hex", app.parseShare("p4a-share-v1:3:9:abcd") === null && app.parseShare("p4a-share-v1:3:1:abc") === null && app.parseShare("hello") === null && app.parseShare(null) === null);
 
 /* Merkle entry parsing — sync validation before any hashing */
 check("merkle parse splits, trims and skips blank lines", JSON.stringify(app.parseMerkleEntries(" alice \n\nbob\r\ncarol ")) === JSON.stringify(["alice", "bob", "carol"]));

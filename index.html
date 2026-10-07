@@ -329,6 +329,29 @@
         <button type="submit" class="btn primary">Build &amp; verify my proof</button>
         <div id="merkle-result" role="status" aria-live="polite"></div>
       </form>
+
+      <div class="tool" id="secret-split">
+        <h3>13 · Split a secret — no single share reveals it</h3>
+        <p>Some secrets should not exist in just one place. Split a secret here and it is XORed with fresh random bytes generated locally, producing shares with a stark property: any share on its own is random bytes and reveals nothing about the secret's content, but all of them together rebuild it exactly. That is real secret sharing computed locally, not a simulation — the same one-time-pad maths that makes each incomplete set useless to whoever holds it. Honestly labelled limits: this is all-of-n sharing — every share is required, so losing one share loses the secret forever; real systems that need recovery use threshold (k-of-n) sharing such as Shamir's, where any k of n shares suffice — that scheme is named here, not implemented by this tool. A share is exactly as long as the secret, so a share's length leaks the secret's length. And never paste a real seed phrase or production secret into any web page, including this one — practise with throwaway secrets.</p>
+        <form id="split-make">
+          <label for="split-secret">Throwaway secret to split (stays on this page)</label>
+          <input id="split-secret" type="password" autocomplete="off" spellcheck="false" placeholder="e.g. the cake is in the blue locker">
+          <label for="split-count">Number of shares (2–8, all of them required)</label>
+          <input id="split-count" inputmode="numeric" autocomplete="off" placeholder="e.g. 3">
+          <button type="submit" class="btn primary">Split it locally</button>
+          <label for="split-out">Your shares — one per line, hand them out separately</label>
+          <textarea id="split-out" rows="5" readonly spellcheck="false"></textarea>
+          <p id="split-result" role="status" aria-live="polite"></p>
+        </form>
+        <form id="split-join">
+          <label for="join-in">Paste the complete set of shares — one per line, all from one split</label>
+          <textarea id="join-in" rows="5" spellcheck="false" placeholder="p4a-share-v1:3:1:…"></textarea>
+          <button type="submit" class="btn primary">Rebuild the secret</button>
+          <label for="join-out">The rebuilt secret</label>
+          <textarea id="join-out" rows="2" readonly spellcheck="false"></textarea>
+          <p id="join-result" role="status" aria-live="polite"></p>
+        </form>
+      </div>
     </div>
   </section>
 
@@ -359,6 +382,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=10"></script>
+<script src="app.js?v=11"></script>
 </body>
 </html>

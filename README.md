@@ -136,6 +136,19 @@ renewable resource that pays for shielded transactions.
   dictionary-checked against their leaf hashes (tool 11's lesson).
   The hashed-message format is a teaching format, not a specific
   chain's tree format; nothing connects to a chain or a wallet.
+- **Split a secret — XOR secret sharing** — split a throwaway secret
+  into 2–8 shares: the secret's bytes are XORed with fresh random
+  bytes from Web Crypto, so any share on its own is random bytes that
+  reveals nothing about the secret's content, and only the complete
+  set rebuilds it, character for character — real secret sharing
+  computed locally, the one-time-pad argument, not a simulation.
+  Combine validates the set strictly (exactly one of each share, one
+  split, one length) rather than guessing at partial sets. Honestly
+  labelled all-of-n: losing one share loses the secret — threshold
+  (k-of-n) sharing such as Shamir's is named as the real-systems
+  answer, not implemented here — and a share's length leaks the
+  secret's length. Never paste a real seed phrase into any web page,
+  including this one.
 
 ## Guides
 
