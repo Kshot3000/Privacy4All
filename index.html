@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy4All — Privacy for everyone, on Midnight</title>
+<meta name="description" content="Privacy4All by Kyle Cox (@kshot9000): open-source privacy apps, tools and guides for the Midnight blockchain — private messaging, selective disclosure, ZK proofs, NIGHT and DUST. Prove it, don't show it.">
+<meta property="og:title" content="Privacy4All — Privacy for everyone, on Midnight">
+<meta property="og:description" content="Open-source Midnight privacy apps, tools and guides by Kyle Cox (@kshot9000), tagging @midnightntwrk.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://kshot3000.github.io/Privacy4All/">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23120724'/%3E%3Cpath d='M21 7a11 11 0 1 0 4 15A13 13 0 0 1 21 7z' fill='%23a78bfa'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="styles.css?v=1">
+</head>
+<body>
+<a class="skip" href="#main">Skip to main content</a>
+<header class="site-head">
+  <a class="brand" href="./" aria-label="Privacy4All home">
+    <span class="brand-mark" aria-hidden="true">☾</span>
+    <span>Privacy<strong>4All</strong></span>
+  </a>
+  <nav aria-label="Main">
+    <a href="#projects">Projects</a>
+    <a href="#tools">Tools</a>
+    <a href="#guides">Guides</a>
+    <a href="#support">Support</a>
+    <a href="https://github.com/Kshot3000/Privacy4All">GitHub</a>
+  </nav>
+</header>
+
+<main id="main" tabindex="-1">
+  <section class="hero">
+    <p class="eyebrow">Open source · Built in public · By <a href="https://x.com/kshot9000">@kshot9000</a> · For <a href="https://github.com/midnightntwrk">@midnightntwrk</a></p>
+    <h1>Privacy for everyone — prove it, don’t show it.</h1>
+    <p class="lede">Privacy4All is my builder hub for the <strong>Midnight blockchain</strong>:
+    private messaging, selective disclosure, zero-knowledge tooling and the NIGHT / DUST
+    economy — built so ordinary people can verify what matters without handing over
+    everything about themselves. Every project here is open source, and every tool on
+    this page runs locally in your browser. Nothing you type leaves this page.</p>
+    <div class="hero-cta">
+      <a class="btn primary" href="#projects">Browse the projects</a>
+      <a class="btn" href="#tools">Try the privacy tools</a>
+    </div>
+    <dl class="stats">
+      <div><dt>Flagship projects</dt><dd>4 live sites</dd></div>
+      <div><dt>Catalogued repos</dt><dd>14 Midnight / privacy</dd></div>
+      <div><dt>Builder loop</dt><dd>Hourly, tested + verified</dd></div>
+    </dl>
+  </section>
+
+  <section id="concepts" aria-labelledby="concepts-h">
+    <h2 id="concepts-h">The idea, in 30 seconds</h2>
+    <ul class="concept-list">
+      <li><strong>Public by default is the problem.</strong> On a normal blockchain anyone can read balances, counterparties and history forever. That works for open markets and badly for real life.</li>
+      <li><strong>Midnight splits the ledger.</strong> Midnight keeps a public state for what must be verifiable and a private state for what must stay yours, using zero-knowledge proofs — mostly generated on your own device.</li>
+      <li><strong>Selective disclosure is the product.</strong> Prove “over 18”, “paid in full” or “this message is from me” without revealing the birth date, the amount, or the rest of the conversation.</li>
+      <li><strong>NIGHT and DUST.</strong> NIGHT is Midnight’s token, held on Cardano; holding NIGHT generates DUST, the renewable resource that pays for shielded Midnight transactions.</li>
+    </ul>
+  </section>
+
+  <section id="projects" aria-labelledby="projects-h">
+    <h2 id="projects-h">Projects</h2>
+    <p>Live flagships first, then the full catalogue of my Midnight and privacy work. Filter by what you need:</p>
+    <div class="filter-row" role="group" aria-label="Filter projects">
+      <label for="q">Search projects</label>
+      <input id="q" type="search" placeholder="e.g. messaging, DUST, Compact, escrow…" autocomplete="off">
+      <div class="chips" role="group" aria-label="Filter by category">
+        <button type="button" class="chip active" data-filter="all">All</button>
+        <button type="button" class="chip" data-filter="messaging">Private messaging</button>
+        <button type="button" class="chip" data-filter="defi">Private DeFi &amp; finance</button>
+        <button type="button" class="chip" data-filter="dev">Developer tools</button>
+        <button type="button" class="chip" data-filter="analytics">Analytics</button>
+      </div>
+    </div>
+    <p id="filter-status" class="sr-status" role="status" aria-live="polite"></p>
+    <ul class="cards" id="cards">
+      <li class="card" data-cat="messaging" data-name="night messenger private dm midnight selective disclosure messaging web android">
+        <h3><a href="https://kshot3000.github.io/Night-Messenger-/">Night Messenger</a> <span class="badge live">Live site</span></h3>
+        <p>Free private direct messages on Midnight with selective disclosure — web + Android. The flagship Privacy4All app: talk first, reveal only what the conversation actually needs.</p>
+        <p class="card-links"><a href="https://kshot3000.github.io/Night-Messenger-/">Visit site</a> · <a href="https://github.com/Kshot3000/Night-Messenger-">Source</a></p>
+      </li>
+      <li class="card" data-cat="defi" data-name="plutusshield insurance defi smart contract cover aiken compact preview preprod depeg exploit midnight">
+        <h3><a href="https://kshot3000.github.io/PlutusShield/">PlutusShield</a> <span class="badge live">Live site</span></h3>
+        <p>DeFi and smart-contract insurance spanning Cardano Preview + Midnight Preprod: Aiken validators for depeg and exploit-cover pools and a Compact policy registry on Midnight. Testnet only, unaudited, no real funds.</p>
+        <p class="card-links"><a href="https://kshot3000.github.io/PlutusShield/">Visit site</a> · <a href="https://github.com/Kshot3000/PlutusShield">Source</a></p>
+      </li>
+      <li class="card" data-cat="dev" data-name="prism cip-113 programmable tokens midnight dapp connector compact koios cip-30">
+        <h3><a href="https://kshot3000.github.io/Grok-CIP-113/">PRISM — CIP-113 Studio</a> <span class="badge live">Live site</span></h3>
+        <p>Design and research studio for programmable tokens, with a Midnight DApp Connector (v4) alongside CIP-30 wallet support and a live Koios explorer. Design/research only — no minting or signing.</p>
+        <p class="card-links"><a href="https://kshot3000.github.io/Grok-CIP-113/">Visit site</a> · <a href="https://github.com/Kshot3000/Grok-CIP-113">Source</a></p>
+      </li>
+      <li class="card" data-cat="analytics" data-name="nightdream midnight night dust analytics charts dex liquidity portfolio">
+        <h3><a href="https://nightdream.xyz/">NightDream</a> <span class="badge live">Live site</span></h3>
+        <p>Analytics desk with a dedicated Midnight / NIGHT desk: live NIGHT data and a DUST calculator alongside Cardano charts, DEX liquidity and portfolio views. Real live data, no demo figures.</p>
+        <p class="card-links"><a href="https://nightdream.xyz/">Visit site</a> · <a href="https://github.com/Kshot3000/nightdream.xyz">Source</a></p>
+      </li>
+      <li class="card" data-cat="messaging" data-name="nocturne private messaging email midnight selective disclosure">
+        <h3><a href="https://github.com/Kshot3000/nocturne">Nocturne</a> <span class="badge repo">Repo</span></h3>
+        <p>Private messaging and email on Midnight, built around selective disclosure — the longer-form companion to Night Messenger’s DMs.</p>
+        <p class="card-links"><a href="https://github.com/Kshot3000/nocturne">Source</a></p>
+      </li>
+      <li class="card" data-cat="dev" data-name="midnight grokbot agent compact lace escrow starters build lab">
+        <h3><a href="https://github.com/Kshot3000/Midnight-GrokBot-Agent">Midnight GrokBot Agent</a> <span class="badge repo">Repo</span></h3>
+        <p>My 24/7 Midnight build lab: Compact contract starters, a Lace wallet kit and an agent-escrow prototype for private-by-default applications.</p>
+        <p class="card-links"><a href="https://github.com/Kshot3000/Midnight-GrokBot-Agent">Source</a></p>
+      </li>
+      <li class="card" data-cat="dev defi" data-name="cardano midnight builder hub agent escrow network monitor privacy dashboard">
+        <h3><a href="https://github.com/Kshot3000/Cardano-Midnight-Qwen-Builder">Cardano + Midnight Builder Hub</a> <span class="badge repo">Repo</span></h3>
+        <p>Earlier builder hub and the fleet’s showcase repo: agent escrow, live network monitors and privacy dashboards for Cardano and Midnight.</p>
+        <p class="card-links"><a href="https://github.com/Kshot3000/Cardano-Midnight-Qwen-Builder">Source</a></p>
+      </li>
+      <li class="card" data-cat="defi" data-name="midnight bank zero knowledge banking private transfers encrypted balances selective disclosure fork example">
+        <h3><a href="https://github.com/Kshot3000/midnight-bank">Midnight Bank (example fork)</a> <span class="badge repo">Fork</span></h3>
+        <p>Zero-knowledge banking example on Midnight — private transfers, encrypted balances and selective disclosure — kept as a fork for study and upstream fix work.</p>
+        <p class="card-links"><a href="https://github.com/Kshot3000/midnight-bank">Source</a></p>
+      </li>
+      <li class="card" data-cat="dev" data-name="midnight contracts compact meshjs examples fork">
+        <h3><a href="https://github.com/Kshot3000/midnight-contracts">Midnight Contracts (fork)</a> <span class="badge repo">Fork</span></h3>
+        <p>Midnight example contracts in Compact / MeshJS, kept for learning, testing and upstream contributions.</p>
+        <p class="card-links"><a href="https://github.com/Kshot3000/midnight-contracts">Source</a></p>
+      </li>
+      <li class="card" data-cat="dev" data-name="midnight apps starter dapps openzeppelin fork">
+        <h3><a href="https://github.com/Kshot3000/midnight-apps">Midnight Apps (fork)</a> <span class="badge repo">Fork</span></h3>
+        <p>A collection of starter dApps on Midnight Network, kept as a fork for upstream fix work.</p>
+        <p class="card-links"><a href="https://github.com/Kshot3000/midnight-apps">Source</a></p>
+      </li>
+      <li class="card" data-cat="dev" data-name="midnight awesome dapps list fork">
+        <h3><a href="https://github.com/Kshot3000/midnight-awesome-dapps">Midnight Awesome dApps (fork)</a> <span class="badge repo">Fork</span></h3>
+        <p>Awesome list of Midnight Network dApps on the Cardano partner chain — ecosystem map, kept current via the fork.</p>
+        <p class="card-links"><a href="https://github.com/Kshot3000/midnight-awesome-dapps">Source</a></p>
+      </li>
+      <li class="card" data-cat="defi" data-name="midnight rwa real world assets brick towers fork">
+        <h3><a href="https://github.com/Kshot3000/midnight-rwa">Midnight RWA (fork)</a> <span class="badge repo">Fork</span></h3>
+        <p>Real-world assets on Midnight (Brick Towers example) — how tokenised assets can stay private and compliant at the same time.</p>
+        <p class="card-links"><a href="https://github.com/Kshot3000/midnight-rwa">Source</a></p>
+      </li>
+      <li class="card" data-cat="dev" data-name="midnight seabattle game brick towers zk fork">
+        <h3><a href="https://github.com/Kshot3000/midnight-seabattle">Midnight Sea Battle (fork)</a> <span class="badge repo">Fork</span></h3>
+        <p>A ZK game on Midnight (Brick Towers example): the cleanest small demo of hiding game state while still proving every move was legal.</p>
+        <p class="card-links"><a href="https://github.com/Kshot3000/midnight-seabattle">Source</a></p>
+      </li>
+      <li class="card" data-cat="analytics dev" data-name="cardano4all hub cardano builder projects catalogue sister">
+        <h3><a href="https://kshot3000.github.io/Cardano4all/">Cardano4All — sister hub</a> <span class="badge live">Live site</span></h3>
+        <p>Midnight is Cardano’s partner chain, so the Cardano side of my work lives in its own hub: analytics, DeFi, CIP-113 tokens, staking and developer utilities.</p>
+        <p class="card-links"><a href="https://kshot3000.github.io/Cardano4all/">Visit site</a> · <a href="https://github.com/Kshot3000/Cardano4all">Source</a></p>
+      </li>
+    </ul>
+    <p id="no-results" hidden>No projects match that filter yet — try “all”.</p>
+  </section>
+
+  <section id="tools" aria-labelledby="tools-h">
+    <h2 id="tools-h">Privacy tools — right here, nothing leaves your browser</h2>
+    <div class="tool-grid">
+      <form class="tool" id="redactor">
+        <h3>1 · Paste-and-protect redactor</h3>
+        <p>Paste a message, post or document before you share it. This finds email addresses, Cardano addresses and US phone numbers and masks them — locally, on this device only.</p>
+        <label for="redact-in">Text to check</label>
+        <textarea id="redact-in" rows="5" spellcheck="false" placeholder="e.g. Email me at me@example.com or send ADA to addr1…"></textarea>
+        <button type="submit" class="btn primary">Redact it</button>
+        <label for="redact-out">Redacted text</label>
+        <textarea id="redact-out" rows="5" readonly spellcheck="false"></textarea>
+        <p id="redact-result" role="status" aria-live="polite"></p>
+      </form>
+
+      <form class="tool" id="planner">
+        <h3>2 · Selective-disclosure planner</h3>
+        <p>Tell it what a service is asking for. It sorts each item the Midnight way: share the raw data, share a <em>proof instead</em>, or keep it private entirely.</p>
+        <fieldset>
+          <legend>What are they asking for?</legend>
+          <label class="check"><input type="checkbox" name="field" value="fullName"> Full name</label>
+          <label class="check"><input type="checkbox" name="field" value="email"> Email address</label>
+          <label class="check"><input type="checkbox" name="field" value="dob"> Date of birth</label>
+          <label class="check"><input type="checkbox" name="field" value="homeAddress"> Home address</label>
+          <label class="check"><input type="checkbox" name="field" value="idNumber"> Government ID number</label>
+          <label class="check"><input type="checkbox" name="field" value="income"> Income</label>
+          <label class="check"><input type="checkbox" name="field" value="walletBalance"> Wallet balance</label>
+          <label class="check"><input type="checkbox" name="field" value="txHistory"> Full transaction history</label>
+        </fieldset>
+        <button type="submit" class="btn primary">Build my disclosure plan</button>
+        <div id="plan-result" role="status" aria-live="polite"></div>
+      </form>
+
+      <form class="tool" id="dust">
+        <h3>3 · NIGHT → DUST capacity estimator</h3>
+        <p>Each NIGHT can sustain up to 5 DUST capacity — the model my NightDream Midnight desk uses. This is a capacity ceiling, not a promise: actual generation depends on holdings and Midnight network parameters.</p>
+        <label for="night">NIGHT you hold</label>
+        <input id="night" inputmode="decimal" placeholder="e.g. 1000" autocomplete="off">
+        <button type="submit" class="btn primary">Estimate DUST capacity</button>
+        <p id="dust-result" role="status" aria-live="polite"></p>
+      </form>
+    </div>
+  </section>
+
+  <section id="guides" aria-labelledby="guides-h">
+    <h2 id="guides-h">Guides</h2>
+    <ul class="guide-list">
+      <li><a href="guides/getting-started-midnight.md">Getting started building on Midnight</a> — the official docs, Compact, Lace and testnets, in the order I’d learn them.</li>
+      <li><a href="https://github.com/Kshot3000/Privacy4All/blob/main/README.md">The full project catalogue</a> — every repo, what it does, and its honest status.</li>
+    </ul>
+  </section>
+
+  <section id="support" aria-labelledby="support-h">
+    <h2 id="support-h">Support this work</h2>
+    <p>Privacy4All is free and open source. If it helped you, tips in ADA (Cardano) keep the builder loop running:</p>
+    <p class="donate">
+      <code id="donation-address">addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</code>
+      <button type="button" id="copy-address" class="btn">Copy ADA address</button>
+    </p>
+    <p id="copy-status" role="status" aria-live="polite"></p>
+    <p>Built by Kyle Cox — <a href="https://x.com/kshot9000">@kshot9000 on X</a> · <a href="https://github.com/Kshot3000">github.com/Kshot3000</a></p>
+    <p class="team-tag">For the Midnight team — <a href="https://github.com/midnightntwrk">@midnightntwrk</a> on GitHub and
+    <a href="https://x.com/MidnightNtwrk">@MidnightNtwrk</a> on X: this is an independent community builder hub for the
+    Midnight ecosystem. Feedback and corrections are welcome in the <a href="https://github.com/Kshot3000/Privacy4All/issues">issues</a>.</p>
+  </section>
+</main>
+
+<footer>
+  <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
+  <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
+</footer>
+<script src="app.js?v=1"></script>
+</body>
+</html>

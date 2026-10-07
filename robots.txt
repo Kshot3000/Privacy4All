@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://kshot3000.github.io/Privacy4All/sitemap.xml
