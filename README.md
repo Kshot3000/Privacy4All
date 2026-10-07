@@ -146,9 +146,9 @@ renewable resource that pays for shielded transactions.
   split, one length) rather than guessing at partial sets. Honestly
   labelled all-of-n: losing one share loses the secret — threshold
   (k-of-n) sharing such as Shamir's is named as the real-systems
-  answer, not implemented here — and a share's length leaks the
-  secret's length. Never paste a real seed phrase into any web page,
-  including this one.
+  answer there and implemented by the next tool — and a share's
+  length leaks the secret's length. Never paste a real seed phrase
+  into any web page, including this one.
 - **Spend it once, stay private — notes & nullifiers** — create a
   shielded note and only its commitment hash is published; spend it
   and a second, domain-separated hash — its nullifier — is published
@@ -163,6 +163,20 @@ renewable resource that pays for shielded transactions.
   ownership proof, a human-chosen secret here can be
   dictionary-checked against both hashes, and a leaked secret links
   its commitment and nullifier after the fact.
+- **Split with a safety net — Shamir k-of-n sharing** — the threshold
+  scheme the XOR tool names: split a throwaway secret into n shares
+  (threshold k from 2, up to 8 shares) where any k rebuild it exactly
+  and k−1 reveal nothing about its content. Real Shamir sharing over
+  GF(256) — each secret byte is a polynomial's constant term, the
+  other coefficients are fresh Web Crypto random bytes, shares are
+  points on it, and rebuilding is Lagrange interpolation at zero,
+  all computed locally. Combine validates strictly (at least k
+  distinct shares, one split, one length). Honestly labelled a
+  teaching implementation, not an audited library: there is no
+  checksum, so with exactly k shares one wrong or mistyped share
+  rebuilds a wrong secret silently, and a share's length leaks the
+  secret's length. Never paste a real seed phrase into any web page,
+  including this one.
 
 ## Guides
 

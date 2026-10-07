@@ -332,7 +332,7 @@
 
       <div class="tool" id="secret-split">
         <h3>13 · Split a secret — no single share reveals it</h3>
-        <p>Some secrets should not exist in just one place. Split a secret here and it is XORed with fresh random bytes generated locally, producing shares with a stark property: any share on its own is random bytes and reveals nothing about the secret's content, but all of them together rebuild it exactly. That is real secret sharing computed locally, not a simulation — the same one-time-pad maths that makes each incomplete set useless to whoever holds it. Honestly labelled limits: this is all-of-n sharing — every share is required, so losing one share loses the secret forever; real systems that need recovery use threshold (k-of-n) sharing such as Shamir's, where any k of n shares suffice — that scheme is named here, not implemented by this tool. A share is exactly as long as the secret, so a share's length leaks the secret's length. And never paste a real seed phrase or production secret into any web page, including this one — practise with throwaway secrets.</p>
+        <p>Some secrets should not exist in just one place. Split a secret here and it is XORed with fresh random bytes generated locally, producing shares with a stark property: any share on its own is random bytes and reveals nothing about the secret's content, but all of them together rebuild it exactly. That is real secret sharing computed locally, not a simulation — the same one-time-pad maths that makes each incomplete set useless to whoever holds it. Honestly labelled limits: this is all-of-n sharing — every share is required, so losing one share loses the secret forever; real systems that need recovery use threshold (k-of-n) sharing such as Shamir's, where any k of n shares suffice — that scheme is named here, not implemented by this tool (tool 15 below implements it). A share is exactly as long as the secret, so a share's length leaks the secret's length. And never paste a real seed phrase or production secret into any web page, including this one — practise with throwaway secrets.</p>
         <form id="split-make">
           <label for="split-secret">Throwaway secret to split (stays on this page)</label>
           <input id="split-secret" type="password" autocomplete="off" spellcheck="false" placeholder="e.g. the cake is in the blue locker">
@@ -374,6 +374,31 @@
         </form>
         <p id="note-ledger-status" role="status" aria-live="polite"></p>
       </div>
+
+      <div class="tool" id="shamir-split">
+        <h3>15 · Split with a safety net — any k of n shares (Shamir)</h3>
+        <p>Tool 13's split has a hard edge: lose one share and the secret is gone. This is the threshold scheme it named — <em>Shamir's secret sharing</em>, computed locally for real. Each byte of your secret becomes the constant term of a polynomial over GF(256) whose other coefficients are fresh random bytes, and each share is that polynomial evaluated at a different point. Any <em>k</em> of the <em>n</em> shares rebuild the secret exactly by interpolation; k−1 shares are consistent with every possible secret, so they reveal nothing about its content. Honestly labelled limits: this is a teaching implementation, not an audited library — and there is <em>no checksum</em>, so with exactly k shares, one wrong or mistyped share rebuilds a wrong secret silently. A share is exactly as long as the secret, so a share's length leaks the secret's length. Never paste a real seed phrase or production secret into any web page, including this one — practise with throwaway secrets.</p>
+        <form id="shamir-make">
+          <label for="shamir-secret">Throwaway secret to split (stays on this page)</label>
+          <input id="shamir-secret" type="password" autocomplete="off" spellcheck="false" placeholder="e.g. the cake is in the blue locker">
+          <label for="shamir-threshold">Shares needed to rebuild — the k (2–8)</label>
+          <input id="shamir-threshold" inputmode="numeric" autocomplete="off" placeholder="e.g. 2">
+          <label for="shamir-count">Shares to make — the n (k–8)</label>
+          <input id="shamir-count" inputmode="numeric" autocomplete="off" placeholder="e.g. 3">
+          <button type="submit" class="btn primary">Split it locally</button>
+          <label for="shamir-out">Your shares — one per line, hand them out separately</label>
+          <textarea id="shamir-out" rows="5" readonly spellcheck="false"></textarea>
+          <p id="shamir-result" role="status" aria-live="polite"></p>
+        </form>
+        <form id="shamir-join">
+          <label for="shamir-join-in">Paste at least k shares from one split — one per line, any order</label>
+          <textarea id="shamir-join-in" rows="5" spellcheck="false" placeholder="p4a-shamir-v1:2:3:1:…"></textarea>
+          <button type="submit" class="btn primary">Rebuild the secret</button>
+          <label for="shamir-join-out">The rebuilt secret</label>
+          <textarea id="shamir-join-out" rows="2" readonly spellcheck="false"></textarea>
+          <p id="shamir-join-result" role="status" aria-live="polite"></p>
+        </form>
+      </div>
     </div>
   </section>
 
@@ -404,6 +429,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=12"></script>
+<script src="app.js?v=13"></script>
 </body>
 </html>

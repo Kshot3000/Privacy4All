@@ -917,6 +917,157 @@ function attemptSpend(commitments, spentNullifiers, secret) {
   });
 }
 
+/* ---------- 15. Split with a safety net (Shamir k-of-n) ---------- */
+/* Shamir's threshold secret sharing, computed locally for real — the
+   scheme tool 13 named but did not implement. Each byte of the secret
+   is the constant term of a polynomial over GF(256) (the AES field,
+   polynomial x^8+x^4+x^3+x+1) whose other coefficients are fresh
+   random bytes; a share is the polynomial evaluated at a non-zero
+   point x. Any THRESHOLD (k) shares rebuild each byte by Lagrange
+   interpolation at x = 0; k-1 shares are consistent with every
+   possible secret byte, so they reveal nothing about the content —
+   that is a property of the maths with truly random coefficients.
+   Honest limits: this is a TEACHING implementation, not an audited
+   library — do not trust it with a real secret. There is NO checksum
+   or authentication: with exactly k shares, one wrong or tampered
+   share rebuilds a WRONG secret silently (extra honest shares are
+   the way to outvote a bad one only if you can tell which rebuild is
+   plausible). Each share is exactly as long as the secret, so a
+   share's length leaks the secret's length. And never paste a real
+   seed phrase or production secret into any web page, including this
+   one — practise with throwaway secrets. */
+var SHAMIR_FORMAT = "p4a-shamir-v1";
+var SHAMIR_MIN_THRESHOLD = 2;
+var SHAMIR_MAX_COUNT = 8;
+
+/* GF(256) tables for generator 3 under the AES polynomial. */
+var GF_EXP = new Uint8Array(512);
+var GF_LOG = new Uint8Array(256);
+(function buildGfTables() {
+  var x = 1;
+  for (var i = 0; i < 255; i++) {
+    GF_EXP[i] = x;
+    GF_LOG[x] = i;
+    var x2 = x << 1;
+    if (x2 & 0x100) x2 ^= 0x11b;
+    x = (x2 & 0xff) ^ x; /* multiply by generator 3: x*2 ^ x */
+  }
+  for (var j = 255; j < 512; j++) GF_EXP[j] = GF_EXP[j - 255];
+})();
+
+function gfMul(a, b) {
+  if (a === 0 || b === 0) return 0;
+  return GF_EXP[GF_LOG[a] + GF_LOG[b]];
+}
+
+function gfDiv(a, b) {
+  if (a === 0) return 0;
+  if (b === 0) return null;
+  var d = GF_LOG[a] - GF_LOG[b];
+  if (d < 0) d += 255;
+  return GF_EXP[d];
+}
+
+function splitThresholdSecret(secret, threshold, count) {
+  if (typeof secret !== "string" || secret.trim() === "") return null;
+  if (secret.length > SHARE_MAX_SECRET_CHARS) return null;
+  if (typeof threshold !== "number" || !Number.isInteger(threshold) ||
+      threshold < SHAMIR_MIN_THRESHOLD || threshold > SHAMIR_MAX_COUNT) return null;
+  if (typeof count !== "number" || !Number.isInteger(count) ||
+      count < threshold || count > SHAMIR_MAX_COUNT) return null;
+  var cryptoObj = (typeof globalThis !== "undefined" && globalThis.crypto) || null;
+  if (!cryptoObj || typeof cryptoObj.getRandomValues !== "function") return null;
+  var data = secretToBytes(secret);
+  var randomBytes = new Uint8Array((threshold - 1) * data.length);
+  cryptoObj.getRandomValues(randomBytes);
+  var shares = [];
+  for (var x = 1; x <= count; x++) {
+    var y = new Uint8Array(data.length);
+    for (var j = 0; j < data.length; j++) {
+      /* Horner evaluation in GF(256): y = s + c1*x + c2*x^2 + ... */
+      var acc = 0;
+      for (var deg = threshold - 1; deg >= 1; deg--) {
+        var coeff = randomBytes[(deg - 1) * data.length + j];
+        acc = gfMul(acc, x) ^ coeff;
+      }
+      y[j] = gfMul(acc, x) ^ data[j];
+    }
+    shares.push(SHAMIR_FORMAT + ":" + threshold + ":" + count + ":" + x + ":" + shareBytesToHex(y));
+  }
+  return { threshold: threshold, count: count, shares: shares };
+}
+
+function parseShamirShare(line) {
+  if (typeof line !== "string") return null;
+  var m = line.trim().toLowerCase().match(/^p4a-shamir-v1:(\d+):(\d+):(\d+):([0-9a-f]+)$/);
+  if (!m) return null;
+  var threshold = parseInt(m[1], 10);
+  var count = parseInt(m[2], 10);
+  var index = parseInt(m[3], 10);
+  if (threshold < SHAMIR_MIN_THRESHOLD || threshold > SHAMIR_MAX_COUNT) return null;
+  if (count < threshold || count > SHAMIR_MAX_COUNT) return null;
+  if (index < 1 || index > count) return null;
+  if (m[4].length === 0 || m[4].length % 2 !== 0) return null;
+  var bytes = new Uint8Array(m[4].length / 2);
+  for (var i = 0; i < bytes.length; i++) {
+    bytes[i] = parseInt(m[4].slice(i * 2, i * 2 + 2), 16);
+  }
+  return { threshold: threshold, count: count, index: index, bytes: bytes };
+}
+
+/* Accepts the shares as one pasted block of text (one per line) or an
+   array of lines. Rebuilds ONLY from at least THRESHOLD distinct,
+   same-split shares of one length; fewer, duplicated or mixed sets
+   are null, never a best-effort guess. (With exactly threshold honest
+   shares the maths is exact; there is no integrity check — see the
+   honest limits above.) */
+function combineThresholdShares(input) {
+  var lines;
+  if (typeof input === "string") lines = input.split(/\r?\n/);
+  else if (Array.isArray(input)) lines = input;
+  else return null;
+  var parsed = [];
+  for (var i = 0; i < lines.length; i++) {
+    if (typeof lines[i] === "string" && lines[i].trim() === "") continue;
+    var p = parseShamirShare(lines[i]);
+    if (!p) return null;
+    parsed.push(p);
+  }
+  if (parsed.length === 0) return null;
+  var threshold = parsed[0].threshold;
+  var count = parsed[0].count;
+  var len = parsed[0].bytes.length;
+  if (len === 0) return null;
+  if (parsed.length < threshold || parsed.length > count) return null;
+  var seen = {};
+  for (i = 0; i < parsed.length; i++) {
+    if (parsed[i].threshold !== threshold || parsed[i].count !== count) return null;
+    if (parsed[i].bytes.length !== len) return null;
+    if (seen[parsed[i].index]) return null;
+    seen[parsed[i].index] = true;
+  }
+  var out = new Uint8Array(len);
+  for (var j = 0; j < len; j++) {
+    var acc = 0;
+    for (i = 0; i < parsed.length; i++) {
+      /* Lagrange basis at x = 0: prod_{m != i} x_m / (x_i ^ x_m) */
+      var num = 1, den = 1;
+      for (var mIdx = 0; mIdx < parsed.length; mIdx++) {
+        if (mIdx === i) continue;
+        num = gfMul(num, parsed[mIdx].index);
+        den = gfMul(den, parsed[i].index ^ parsed[mIdx].index);
+      }
+      var basis = gfDiv(num, den);
+      if (basis === null) return null;
+      acc ^= gfMul(parsed[i].bytes[j], basis);
+    }
+    out[j] = acc;
+  }
+  var secret = bytesToSecret(out);
+  if (secret === null || secret.trim() === "") return null;
+  return secret;
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -934,7 +1085,9 @@ if (typeof module !== "undefined" && module.exports) {
                      SHARE_FORMAT, SHARE_MIN_COUNT, SHARE_MAX_COUNT, SHARE_MAX_SECRET_CHARS,
                      splitSecret, parseShare, combineShares,
                      NOTE_COMMIT_PREFIX, NOTE_NULLIFIER_PREFIX,
-                     noteCommitment, noteNullifier, normalizeHexList, attemptSpend };
+                     noteCommitment, noteNullifier, normalizeHexList, attemptSpend,
+                     SHAMIR_FORMAT, SHAMIR_MIN_THRESHOLD, SHAMIR_MAX_COUNT,
+                     gfMul, gfDiv, splitThresholdSecret, parseShamirShare, combineThresholdShares };
 }
 
 if (typeof document !== "undefined") {
@@ -1478,6 +1631,52 @@ if (typeof document !== "undefined") {
         noteLedgerStatus();
         status.textContent = "Spent. The nullifier above is now public and can never be used again — that is what stops the double-spend. An observer sees this nullifier and, from creation, the note's commitment, but cannot link the two from the hashes alone: linking them means finding the secret behind either hash. What does leak: that a note was spent, and when.";
       });
+    });
+
+    /* --- split with a safety net — Shamir k-of-n --- */
+    document.getElementById("shamir-make").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("shamir-out");
+      var status = document.getElementById("shamir-result");
+      var threshold = Number(document.getElementById("shamir-threshold").value);
+      var count = Number(document.getElementById("shamir-count").value);
+      var res = splitThresholdSecret(document.getElementById("shamir-secret").value, threshold, count);
+      if (!res) {
+        out.value = "";
+        status.textContent = "Enter a throwaway secret (up to " + SHARE_MAX_SECRET_CHARS +
+          " characters), a threshold of at least " + SHAMIR_MIN_THRESHOLD + ", and a share " +
+          "count between the threshold and " + SHAMIR_MAX_COUNT + ". Never a real seed phrase — see the warning above.";
+        return;
+      }
+      out.value = res.shares.join("\n");
+      status.textContent = "Split locally into " + res.count + " shares — your secret never " +
+        "left this page. Any " + res.threshold + " of them rebuild it; " + (res.threshold - 1) +
+        " or fewer reveal nothing about its content. You can lose up to " + (res.count - res.threshold) +
+        " share" + (res.count - res.threshold === 1 ? "" : "s") + " and still recover it — the " +
+        "safety net tool 13's all-of-n split does not have. Hand the shares out separately, and " +
+        "remember there is no checksum: a mistyped share rebuilds a wrong secret silently, so " +
+        "copy shares exactly.";
+    });
+    document.getElementById("shamir-join").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("shamir-join-out");
+      var status = document.getElementById("shamir-join-result");
+      var secret = combineThresholdShares(document.getElementById("shamir-join-in").value);
+      if (secret === null) {
+        out.value = "";
+        status.textContent = "That set does not rebuild: paste at least the threshold number of " +
+          "shares from ONE split, one per line — no duplicates, no shares mixed in from another " +
+          "split. Fewer than the threshold reveal nothing at all, by design, so there is no " +
+          "partial recovery and no best guess. A set that is big enough but contains a wrong or " +
+          "mistyped share rebuilds a wrong secret — if the result looks like gibberish, check " +
+          "each share character for character.";
+        return;
+      }
+      out.value = secret;
+      status.textContent = "Rebuilt locally — the shares you pasted interpolate back to the exact " +
+        "secret, character for character. Nothing left this page. Read it carefully before trusting " +
+        "it: this scheme has no checksum, so if one share was wrong the rebuilt text would be wrong " +
+        "too, with no error shown.";
     });
 
     /* --- copy donation address --- */

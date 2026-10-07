@@ -27,8 +27,8 @@ check("Midnight team X tag in README", readme.includes("@MidnightNtwrk"));
 /* document structure */
 check("exactly one <h1>", (html.match(/<h1[ >]/g) || []).length === 1);
 check("has <main> landmark", /<main[\s>]/.test(html));
-check("all main form controls labelled", ["q", "redact-in", "night", "claim", "secret", "threshold", "snippet-select", "life-night", "life-spend", "life-txs", "commit-secret", "commit-out", "check-commitment", "check-secret", "observer-select", "viewing-select", "strength-secret", "salt-out", "merkle-entries", "merkle-entry", "split-secret", "split-count", "split-out", "join-in", "join-out", "note-secret", "note-commit-out", "spend-secret", "spend-nullifier-out"].every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=3") && html.includes("app.js?v=12"));
+check("all main form controls labelled", ["q", "redact-in", "night", "claim", "secret", "threshold", "snippet-select", "life-night", "life-spend", "life-txs", "commit-secret", "commit-out", "check-commitment", "check-secret", "observer-select", "viewing-select", "strength-secret", "salt-out", "merkle-entries", "merkle-entry", "split-secret", "split-count", "split-out", "join-in", "join-out", "note-secret", "note-commit-out", "spend-secret", "spend-nullifier-out", "shamir-secret", "shamir-threshold", "shamir-count", "shamir-out", "shamir-join-in", "shamir-join-out"].every(id => html.includes(`for="${id}"`)));
+check("cache keys present", html.includes("styles.css?v=3") && html.includes("app.js?v=13"));
 check("dApp permission tool present", html.includes('id="dapp-see"') && html.includes('id="dapp-result"'));
 check("ZK claim simulator present", html.includes('id="zk-prover"') && html.includes('id="zk-result"'));
 check("ZK simulator honestly labelled a simulation", html.includes("teaching simulation, not a cryptographic proof"));
@@ -206,6 +206,12 @@ check("note-nullifier tool present", html.includes('id="note-nullifier"') && htm
 check("note-nullifier tool honestly labelled a simplified teaching model, not a real note", html.includes("simplified teaching model of the note-and-nullifier idea") && html.includes("not how a real Midnight note is constructed"));
 check("note-nullifier tool honestly states the dictionary-check and retroactive-link limits", html.includes("dictionary-checked against both hashes") && html.includes("become linkable after the fact"));
 check("note-nullifier tool honestly states a spend event still leaks", html.includes("a nullifier may appear only once, ever"));
+check("shamir tool present", html.includes('id="shamir-split"') && html.includes('id="shamir-make"') && html.includes('id="shamir-join"') && html.includes('id="shamir-out"') && html.includes('id="shamir-join-out"'));
+check("shamir tool honestly labelled a teaching implementation, not audited", html.includes("teaching implementation, not an audited library") && html.includes("computed locally for real"));
+check("shamir tool honestly states there is no checksum, so a wrong share rebuilds silently wrong", html.includes("no checksum") && html.includes("rebuilds a wrong secret silently"));
+check("shamir tool states fewer than k shares reveal nothing", html.includes("k−1 shares are consistent with every possible secret"));
+check("shamir tool states a share's length leaks the secret's length", html.includes("a share's length leaks the secret's length"));
+check("tool 13 now points at tool 15 for Shamir", html.includes("not implemented by this tool (tool 15 below implements it)"));
 
 /* XOR secret sharing — real local sharing, complete sets only */
 const split3 = app.splitSecret("the cake is in the blue locker", 3);
@@ -233,6 +239,39 @@ check("split rejects empty, blank, non-string and over-long secrets", app.splitS
 check("share constants are the labelled bounds", app.SHARE_MIN_COUNT === 2 && app.SHARE_MAX_COUNT === 8 && app.SHARE_FORMAT === "p4a-share-v1");
 check("parseShare reads a valid share", (() => { const p = app.parseShare(split3.shares[1]); return p !== null && p.total === 3 && p.index === 2 && p.bytes.length === "the cake is in the blue locker".length; })());
 check("parseShare rejects junk, bad index and odd hex", app.parseShare("p4a-share-v1:3:9:abcd") === null && app.parseShare("p4a-share-v1:3:1:abc") === null && app.parseShare("hello") === null && app.parseShare(null) === null);
+
+/* Shamir k-of-n sharing — real GF(256) threshold sharing */
+check("gf(256) multiplication known values", app.gfMul(0, 0x53) === 0 && app.gfMul(1, 0x53) === 0x53 && app.gfMul(2, 2) === 4 && app.gfMul(2, 3) === 6 && app.gfMul(3, 3) === 5 && app.gfMul(0x57, 0x83) === 0xc1);
+check("gf(256) division inverts multiplication and rejects division by zero", app.gfDiv(app.gfMul(0x57, 0x83), 0x83) === 0x57 && app.gfDiv(0, 7) === 0 && app.gfDiv(5, 0) === null);
+check("shamir known-answer vector: 'A' under y = 0x41 + 2x rebuilds from any two points", app.combineThresholdShares(["p4a-shamir-v1:2:3:1:43", "p4a-shamir-v1:2:3:2:45"]) === "A" && app.combineThresholdShares(["p4a-shamir-v1:2:3:1:43", "p4a-shamir-v1:2:3:3:47"]) === "A" && app.combineThresholdShares(["p4a-shamir-v1:2:3:2:45", "p4a-shamir-v1:2:3:3:47"]) === "A" && app.combineThresholdShares(["p4a-shamir-v1:2:3:1:43", "p4a-shamir-v1:2:3:2:45", "p4a-shamir-v1:2:3:3:47"]) === "A");
+const sham23 = app.splitThresholdSecret("the cake is in the blue locker", 2, 3);
+check("shamir split returns the requested shares and threshold", sham23 !== null && sham23.threshold === 2 && sham23.count === 3 && sham23.shares.length === 3);
+check("every shamir share carries the versioned format", sham23.shares.every(s => /^p4a-shamir-v1:2:3:[123]:[0-9a-f]+$/.test(s)));
+check("shamir share hex is exactly the secret's byte length", sham23.shares.every(s => s.split(":")[4].length === 2 * "the cake is in the blue locker".length));
+check("no shamir share contains the secret in plain text", !sham23.shares.join(" ").includes("blue locker"));
+check("all shamir shares differ from each other", new Set(sham23.shares).size === 3);
+check("any two of three shamir shares rebuild the secret", app.combineThresholdShares([sham23.shares[0], sham23.shares[1]]) === "the cake is in the blue locker" && app.combineThresholdShares([sham23.shares[0], sham23.shares[2]]) === "the cake is in the blue locker" && app.combineThresholdShares([sham23.shares[1], sham23.shares[2]]) === "the cake is in the blue locker");
+check("all three shamir shares also rebuild (more than k)", app.combineThresholdShares(sham23.shares) === "the cake is in the blue locker");
+check("shamir share order does not matter", app.combineThresholdShares([sham23.shares[2], sham23.shares[0]]) === "the cake is in the blue locker");
+check("shamir rebuild works from one pasted block, blank lines and padding tolerated", app.combineThresholdShares("\n  " + sham23.shares.slice(0, 2).join("  \n") + "\n") === "the cake is in the blue locker");
+check("one shamir share alone rebuilds nothing (below threshold)", app.combineThresholdShares([sham23.shares[0]]) === null);
+const sham35 = app.splitThresholdSecret("sécret — code 42", 3, 5);
+check("unicode secret round-trips from any three of five", sham35.shares.length === 5 && app.combineThresholdShares([sham35.shares[4], sham35.shares[1], sham35.shares[3]]) === "sécret — code 42" && app.combineThresholdShares(sham35.shares) === "sécret — code 42");
+check("two of a 3-of-5 split rebuild nothing", app.combineThresholdShares(sham35.shares.slice(0, 2)) === null);
+check("exact secret is preserved by shamir, spaces included", (() => { const s = app.splitThresholdSecret(" pad me ", 2, 2); return app.combineThresholdShares(s.shares) === " pad me "; })());
+check("maximum bounds round-trip (8-of-8 and 2-of-8)", (() => { const a = app.splitThresholdSecret("tiny", 8, 8); const b = app.splitThresholdSecret("tiny", 2, 8); return app.combineThresholdShares(a.shares) === "tiny" && app.combineThresholdShares(b.shares.slice(0, 2)) === "tiny" && app.combineThresholdShares(b.shares.slice(0, 7)) === "tiny"; })());
+check("a duplicated shamir share is not a set", app.combineThresholdShares([sham23.shares[0], sham23.shares[0]]) === null);
+check("more shares than the split made are rejected", app.combineThresholdShares(sham23.shares.concat(sham23.shares[0])) === null);
+check("shares from two shamir splits do not rebuild the secret", (() => { const other = app.splitThresholdSecret("the cake is in the blue locker", 2, 3); const out = app.combineThresholdShares([sham23.shares[0], other.shares[1]]); return out !== "the cake is in the blue locker"; })());
+check("mixed thresholds do not combine", (() => { const t3 = app.splitThresholdSecret("the cake is in the blue locker", 3, 3); return app.combineThresholdShares([sham23.shares[0], t3.shares[1], t3.shares[2]]) === null; })());
+check("mismatched shamir share lengths are rejected", (() => { const short = app.splitThresholdSecret("hi", 2, 3); return app.combineThresholdShares([sham23.shares[0], short.shares[1]]) === null; })());
+check("a tampered shamir share does not rebuild the secret (no checksum — a wrong result, not an error)", (() => { const bad = sham23.shares.slice(0, 2); const parts = bad[1].split(":"); parts[4] = (parts[4][0] === "0" ? "1" : "0") + parts[4].slice(1); bad[1] = parts.join(":"); const out = app.combineThresholdShares(bad); return out !== "the cake is in the blue locker"; })());
+check("shamir combine rejects junk and empty input", app.combineThresholdShares("") === null && app.combineThresholdShares([]) === null && app.combineThresholdShares(["hello"]) === null && app.combineThresholdShares(null) === null && app.combineThresholdShares(42) === null);
+check("shamir split rejects bad thresholds and counts", app.splitThresholdSecret("x", 1, 3) === null && app.splitThresholdSecret("x", 3, 2) === null && app.splitThresholdSecret("x", 2, 9) === null && app.splitThresholdSecret("x", 9, 9) === null && app.splitThresholdSecret("x", 2.5, 3) === null && app.splitThresholdSecret("x", "2", 3) === null && app.splitThresholdSecret("x", 2, "3") === null && app.splitThresholdSecret("x", null, null) === null);
+check("shamir split rejects empty, blank, non-string and over-long secrets", app.splitThresholdSecret("", 2, 3) === null && app.splitThresholdSecret("   ", 2, 3) === null && app.splitThresholdSecret(null, 2, 3) === null && app.splitThresholdSecret(42, 2, 3) === null && app.splitThresholdSecret("x".repeat(app.SHARE_MAX_SECRET_CHARS + 1), 2, 3) === null);
+check("shamir constants are the labelled bounds", app.SHAMIR_MIN_THRESHOLD === 2 && app.SHAMIR_MAX_COUNT === 8 && app.SHAMIR_FORMAT === "p4a-shamir-v1");
+check("parseShamirShare reads a valid share", (() => { const p = app.parseShamirShare(sham23.shares[1]); return p !== null && p.threshold === 2 && p.count === 3 && p.index === 2 && p.bytes.length === "the cake is in the blue locker".length; })());
+check("parseShamirShare rejects junk, bad index, threshold above count and odd hex", app.parseShamirShare("p4a-shamir-v1:2:3:9:abcd") === null && app.parseShamirShare("p4a-shamir-v1:3:2:1:abcd") === null && app.parseShamirShare("p4a-shamir-v1:2:3:1:abc") === null && app.parseShamirShare("p4a-share-v1:3:1:abcd") === null && app.parseShamirShare("hello") === null && app.parseShamirShare(null) === null);
 
 /* Merkle entry parsing — sync validation before any hashing */
 check("merkle parse splits, trims and skips blank lines", JSON.stringify(app.parseMerkleEntries(" alice \n\nbob\r\ncarol ")) === JSON.stringify(["alice", "bob", "carol"]));
