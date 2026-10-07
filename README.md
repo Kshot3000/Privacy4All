@@ -91,6 +91,14 @@ renewable resource that pays for shielded transactions.
   a short or guessable secret can be brute-forced from its hash (real
   systems add a long random salt), and the digest format is a teaching
   format, not Compact's on-chain persistent hash.
+- **What can an observer see? — public vs shielded** — pick an action
+  (a public-chain transfer, a shielded Midnight transfer, a proof with
+  one disclosed claim, a shielded contract call) and see it from a
+  stranger reading the ledger: what they can see, what they cannot, and
+  what still leaks anyway. Honestly labelled a simplified teaching
+  model of ledger visibility only — it does not model network-level
+  metadata (timing, IP addresses) as solved, and every scenario names
+  its residual leaks.
 
 ## Guides
 

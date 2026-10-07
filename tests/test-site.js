@@ -27,8 +27,8 @@ check("Midnight team X tag in README", readme.includes("@MidnightNtwrk"));
 /* document structure */
 check("exactly one <h1>", (html.match(/<h1[ >]/g) || []).length === 1);
 check("has <main> landmark", /<main[\s>]/.test(html));
-check("all main form controls labelled", ["q", "redact-in", "night", "claim", "secret", "threshold", "snippet-select", "life-night", "life-spend", "life-txs", "commit-secret", "commit-out", "check-commitment", "check-secret"].every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=3") && html.includes("app.js?v=6"));
+check("all main form controls labelled", ["q", "redact-in", "night", "claim", "secret", "threshold", "snippet-select", "life-night", "life-spend", "life-txs", "commit-secret", "commit-out", "check-commitment", "check-secret", "observer-select"].every(id => html.includes(`for="${id}"`)));
+check("cache keys present", html.includes("styles.css?v=3") && html.includes("app.js?v=7"));
 check("dApp permission tool present", html.includes('id="dapp-see"') && html.includes('id="dapp-result"'));
 check("ZK claim simulator present", html.includes('id="zk-prover"') && html.includes('id="zk-result"'));
 check("ZK simulator honestly labelled a simulation", html.includes("teaching simulation, not a cryptographic proof"));
@@ -39,6 +39,8 @@ check("DUST lifecycle honestly states no generation rate", html.includes("states
 check("commitment tool present", html.includes('id="commit-make"') && html.includes('id="commit-check"') && html.includes('id="commit-out"'));
 check("commitment tool honestly states its limits", html.includes("brute-forced from its hash") && html.includes("not Compact's on-chain persistent hash"));
 check("commitment tool honestly states real local hashing", html.includes("real SHA-256 hash computed locally"));
+check("observer tool present", html.includes('id="observer"') && html.includes('id="observer-result"'));
+check("observer tool honestly scoped to ledger visibility", html.includes("simplified teaching model of ledger visibility only") && html.includes("does not model network-level metadata"));
 
 /* flagship links */
 for (const url of ["https://kshot3000.github.io/Night-Messenger-/", "https://kshot3000.github.io/PlutusShield/",
@@ -137,6 +139,18 @@ check("lifecycle fractional amounts are exact", app.simulateDustLifecycle("2.5",
 check("lifecycle rejects junk amounts", app.simulateDustLifecycle("abc", "1", "1") === null && app.simulateDustLifecycle("100", "-1", "1") === null && app.simulateDustLifecycle("100", "0.0000001", "1") === null);
 check("lifecycle rejects non-whole or zero tx counts", app.simulateDustLifecycle("100", "1", "2.5") === null && app.simulateDustLifecycle("100", "1", "0") === null && app.simulateDustLifecycle("100", "1", "") === null);
 check("lifecycle rejects null input", app.simulateDustLifecycle(null, null, null) === null);
+
+/* observer explainer — ledger visibility, honest about residual leaks */
+check("observer catalog has 4 scenarios", Object.keys(app.OBSERVER_CATALOG).length === 4);
+check("every HTML observer value exists in catalog", ["public-transfer", "shielded-transfer", "disclosed-claim", "shielded-contract"].every(v => html.includes(`value="${v}"`) && app.OBSERVER_CATALOG[v]));
+check("unknown observer scenario is null, not a crash", app.getObserverView("nope") === null && app.getObserverView(null) === null);
+check("every scenario has a note and all three lists", Object.values(app.OBSERVER_CATALOG).every(s => s.note.length > 30 && s.sees.length >= 2 && s.cannot.length >= 2 && s.leaks.length >= 1));
+check("public transfer observer sees the exact amount", app.getObserverView("public-transfer").sees.join(" ").includes("exact amount"));
+check("shielded transfer observer does NOT see the exact amount", !app.getObserverView("shielded-transfer").sees.join(" ").includes("exact amount") && app.getObserverView("shielded-transfer").cannot.join(" ").includes("exact amount"));
+check("disclosed claim reveals the claim but not the birth date", app.getObserverView("disclosed-claim").sees.join(" ").includes("over 18") && app.getObserverView("disclosed-claim").cannot.join(" ").includes("date of birth"));
+check("shielded contract keeps witness values off the ledger view", app.getObserverView("shielded-contract").cannot.join(" ").includes("witness"));
+check("every scenario names at least one residual leak", Object.values(app.OBSERVER_CATALOG).every(s => s.leaks.every(l => l.length > 20)));
+check("getObserverView returns copies, not the catalog itself", (() => { const v = app.getObserverView("shielded-transfer"); v.sees.push("tampered"); return app.getObserverView("shielded-transfer").sees.length === 2; })());
 
 /* hash commitments — real SHA-256 via Web Crypto (async) */
 check("commitment message is versioned and exact", app.commitmentMessage("my bid is 250") === app.COMMIT_PREFIX + "\nmy bid is 250");

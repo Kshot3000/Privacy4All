@@ -3,7 +3,8 @@
    a selective-disclosure planner, a NIGHT -> DUST capacity estimator,
    a "what does this dApp see?" permission explainer, a ZK claim
    simulator, a Compact snippet library, a DUST lifecycle explainer,
-   and a SHA-256 hash commitment maker/checker.
+   a SHA-256 hash commitment maker/checker, and a public-vs-shielded
+   ledger observer explainer.
    Everything runs locally. Pure functions are exported for tests. */
 
 /* ---------- 1. Redactor ---------- */
@@ -386,13 +387,59 @@ function verifyCommitment(commitmentHex, secret) {
   });
 }
 
+/* ---------- 9. What can an observer see? ---------- */
+/* A simplified TEACHING model of ledger visibility only: pick an action
+   and see what an observer reading the ledger can see, what stays
+   private, and what still leaks anyway. It deliberately does NOT model
+   network-level metadata (timing, IP addresses) as solved — every
+   scenario names its residual leaks, because a private ledger is one
+   layer of privacy, not the whole of it. */
+var OBSERVER_CATALOG = {
+  "public-transfer": {
+    title: "A transfer on a fully public chain",
+    note: "The baseline most people picture when they hear “blockchain”: every fact about the transfer is world-readable, forever. Fine for open markets — a biography when it is your rent, wages and donations.",
+    sees: ["The sending and receiving addresses", "The exact amount moved", "When it happened — and the full history of both addresses, before and after"],
+    cannot: ["Why the payment was made — a purpose or note is not part of a plain transfer record", "The legal names behind the addresses — until an exchange, merchant or leak links one address to a person, and then that whole history is exposed at once"],
+    leaks: ["Store-now, identify-later: the record is public forever, so a leak years from now can re-identify transactions made today"]
+  },
+  "shielded-transfer": {
+    title: "A shielded Midnight transfer",
+    note: "The amounts and parties move into private state and a zero-knowledge proof convinces the ledger the transfer is valid without publishing them. Shielded means the facts are hidden — it does not mean no event happened.",
+    sees: ["That a shielded transaction was submitted and its zero-knowledge proof verified", "Any public state change the transaction deliberately makes — shielded does not mean invisible as an event"],
+    cannot: ["The exact amount moved", "Which shielded party sent it and which received it — those stay in private state"],
+    leaks: ["Timing and frequency of your transactions, and network-level metadata such as your IP address if you broadcast without separate protection", "Anything you disclose yourself afterwards — a receipt, a screenshot, or telling the counterparty who you are"]
+  },
+  "disclosed-claim": {
+    title: "A Midnight proof with one disclosed claim",
+    note: "Selective disclosure in action: the verifier gets exactly one fact, proved — and the credential behind it stays private. This is the pattern tools 2 and 5 build toward.",
+    sees: ["The one claim being proved, stated plainly — for example “over 18”", "Whether the proof verified — true or not true, for that claim"],
+    cannot: ["The date of birth behind the claim", "Any other field from the credential — name, document number, address — unless it is separately disclosed"],
+    leaks: ["The disclosed claim itself is revealed on purpose — keep claims narrow (“over 18”, never the exact age)", "When and where you proved it, if the verifier logs the interaction — a ledger cannot control a verifier's own records"]
+  },
+  "shielded-contract": {
+    title: "A shielded Midnight contract call",
+    note: "A Compact contract splits its state: witness inputs and private state stay with the user, the public ledger state is what the contract chooses to publish. The split is a design decision in every contract — this is tool 6's split, seen from the observer's side.",
+    sees: ["That the contract was called and its proof verified", "The contract's public ledger state after the call — counters, tallies, and anything the contract deliberately discloses"],
+    cannot: ["Your private inputs (witness values) — they stay on your device", "Your private state — the balances, choices or records the contract keeps private"],
+    leaks: ["Aggregates need a crowd: a public tally of one reveals that one person's contribution", "Patterns over many calls: repeated timing, or public outputs that track private inputs too closely, can hint at what was hidden"]
+  }
+};
+
+function getObserverView(id) {
+  var s = OBSERVER_CATALOG[id];
+  if (!s) return null;
+  return { id: id, title: s.title, note: s.note,
+           sees: s.sees.slice(), cannot: s.cannot.slice(), leaks: s.leaks.slice() };
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
                      evaluateProof, CLAIM_CATALOG,
                      getSnippet, searchSnippets, SNIPPET_CATALOG,
                      simulateDustLifecycle,
-                     COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment };
+                     COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
+                     getObserverView, OBSERVER_CATALOG };
 }
 
 if (typeof document !== "undefined") {
@@ -637,6 +684,41 @@ if (typeof document !== "undefined") {
           ? "Match — the revealed secret produces exactly this commitment. Whoever published that hash earlier was committed to this secret; it was not swapped afterwards."
           : "No match — this secret does not produce that commitment. Either the secret is typed differently (check capitals and spaces) or it is not the secret that was committed.";
       });
+    });
+
+    /* --- what can an observer see? --- */
+    document.getElementById("observer").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var view = getObserverView(document.getElementById("observer-select").value);
+      var host = document.getElementById("observer-result");
+      host.textContent = "";
+      if (!view) {
+        host.textContent = "Pick a scenario from the list.";
+        return;
+      }
+      var note = document.createElement("p");
+      note.textContent = view.note;
+      host.appendChild(note);
+      [["An observer reading the ledger CAN see", view.sees],
+       ["An observer CANNOT see", view.cannot],
+       ["What still leaks anyway", view.leaks]].forEach(function (pair) {
+        var p = document.createElement("p");
+        var strong = document.createElement("strong");
+        strong.textContent = pair[0] + ":";
+        p.appendChild(strong);
+        host.appendChild(p);
+        var ul = document.createElement("ul");
+        ul.className = "plan-list";
+        pair[1].forEach(function (item) {
+          var li = document.createElement("li");
+          li.textContent = item;
+          ul.appendChild(li);
+        });
+        host.appendChild(ul);
+      });
+      var foot = document.createElement("p");
+      foot.textContent = "Teaching model of ledger visibility only, run locally — nothing left this page, no wallet connected. Network-level privacy (timing, IP addresses) needs separate protection on top of any ledger.";
+      host.appendChild(foot);
     });
 
     /* --- copy donation address --- */

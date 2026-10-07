@@ -273,6 +273,20 @@
           <p id="commit-check-result" role="status" aria-live="polite"></p>
         </form>
       </div>
+
+      <form class="tool" id="observer">
+        <h3>9 · What can an observer see? — public vs shielded</h3>
+        <p>Pick an action and stand in the shoes of a stranger reading the ledger: what can they see, what stays private, and what still leaks anyway? This is a simplified teaching model of ledger visibility only — it does not model network-level metadata (timing, IP addresses) as solved, and every scenario names those residual leaks, because a private ledger is one layer of privacy, not the whole of it.</p>
+        <label for="observer-select">Scenario</label>
+        <select id="observer-select">
+          <option value="public-transfer">A transfer on a fully public chain</option>
+          <option value="shielded-transfer">A shielded Midnight transfer</option>
+          <option value="disclosed-claim">A Midnight proof with one disclosed claim</option>
+          <option value="shielded-contract">A shielded Midnight contract call</option>
+        </select>
+        <button type="submit" class="btn primary">Show me the observer's view</button>
+        <div id="observer-result" role="status" aria-live="polite"></div>
+      </form>
     </div>
   </section>
 
@@ -303,6 +317,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=6"></script>
+<script src="app.js?v=7"></script>
 </body>
 </html>
