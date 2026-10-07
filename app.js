@@ -6,7 +6,8 @@
    a SHA-256 hash commitment maker/checker, a public-vs-shielded
    ledger observer explainer, a viewing-key scope simulator, a
    commitment secret-strength checker with a random salt generator,
-   and a password-sealed (AES-GCM) message tool.
+   a password-sealed (AES-GCM) message tool, and an ECDSA (P-256)
+   message-signing tool.
    Everything runs locally. Pure functions are exported for tests. */
 
 /* ---------- 1. Redactor ---------- */
@@ -1177,6 +1178,119 @@ function unsealMessage(sealed, password) {
   });
 }
 
+/* ---------- 17. Sign it — prove it came from you ---------- */
+/* Encryption (tool 16) hides a message; a SIGNATURE does the
+   opposite job: the message stays public, but anyone can check
+   that whoever holds one private key endorsed exactly these
+   words, and that not one character changed since. This tool
+   generates a real ECDSA key pair on the P-256 curve (the curve
+   behind passkeys/WebAuthn; Bitcoin and Ethereum use its sibling
+   secp256k1, which Web Crypto does not offer), signs locally
+   with ECDSA over SHA-256, and handles keys as hex: the public
+   key is the 91-byte SPKI encoding, the private key the 138-byte
+   PKCS#8 encoding, and a signature is 64 bytes (r || s) in one
+   versioned line: p4a-sig-v1:<sigHex>. The public key is safe to
+   publish — it is how people recognise "you". The private key IS
+   the identity: anyone holding it can sign as you, with no
+   recovery and no undo. Honest limits: a signature does NOT hide
+   the message, does NOT prove a legal name or real-world
+   identity, and does NOT prove when the signing happened. Keys
+   exist only in this page: nothing is stored or sent, and
+   reloading loses the private key unless you saved it — and a
+   saved private key is a secret to guard exactly like a seed
+   phrase. Teaching implementation, not an audited wallet. Never
+   paste a real wallet's private key into any web page, including
+   this one — practise with throwaway keys. */
+var SIGN_FORMAT = "p4a-sig-v1";
+var SIGN_MAX_MESSAGE_CHARS = 2000;
+var SIGN_PUBLIC_KEY_BYTES = 91;   /* SPKI encoding of a P-256 public key */
+var SIGN_PRIVATE_KEY_BYTES = 138; /* PKCS#8 encoding of a P-256 private key */
+var SIGN_SIGNATURE_BYTES = 64;    /* ECDSA P-256 raw signature, r || s */
+
+function signCrypto() {
+  var c = (typeof globalThis !== "undefined" && globalThis.crypto) || null;
+  return (c && c.subtle && typeof c.subtle.generateKey === "function") ? c : null;
+}
+
+function parseKeyHex(text, expectedBytes) {
+  if (typeof text !== "string") return null;
+  var bytes = hexToBytes(text.trim().toLowerCase());
+  if (!bytes || bytes.length !== expectedBytes) return null;
+  return bytes;
+}
+
+function parseSignature(text) {
+  if (typeof text !== "string") return null;
+  var m = text.trim().toLowerCase().match(/^p4a-sig-v1:([0-9a-f]+)$/);
+  if (!m) return null;
+  var sig = hexToBytes(m[1]);
+  if (!sig || sig.length !== SIGN_SIGNATURE_BYTES) return null;
+  return { signature: sig };
+}
+
+function generateSigningKeyPair() {
+  var cryptoObj = signCrypto();
+  if (!cryptoObj) return Promise.resolve(null);
+  return cryptoObj.subtle.generateKey(
+    { name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"])
+    .then(function (pair) {
+      return Promise.all([
+        cryptoObj.subtle.exportKey("spki", pair.publicKey),
+        cryptoObj.subtle.exportKey("pkcs8", pair.privateKey)
+      ]).then(function (keys) {
+        return { publicKey: shareBytesToHex(new Uint8Array(keys[0])),
+                 privateKey: shareBytesToHex(new Uint8Array(keys[1])) };
+      }, function () { return null; });
+    }, function () { return null; });
+}
+
+function importSigningKey(hex, expectedBytes, format, usages) {
+  var bytes = parseKeyHex(hex, expectedBytes);
+  if (!bytes) return Promise.resolve(null);
+  var cryptoObj = signCrypto();
+  if (!cryptoObj) return Promise.resolve(null);
+  return cryptoObj.subtle.importKey(
+    format, bytes, { name: "ECDSA", namedCurve: "P-256" }, true, usages)
+    .then(function (key) { return key; }, function () { return null; });
+}
+
+function validSignMessage(message) {
+  return typeof message === "string" && message.trim() !== "" &&
+    message.length <= SIGN_MAX_MESSAGE_CHARS;
+}
+
+function signMessage(privateKeyHex, message) {
+  if (!validSignMessage(message)) return Promise.resolve(null);
+  return importSigningKey(privateKeyHex, SIGN_PRIVATE_KEY_BYTES, "pkcs8", ["sign"])
+    .then(function (key) {
+      if (!key) return null;
+      var cryptoObj = signCrypto();
+      return cryptoObj.subtle.sign(
+        { name: "ECDSA", hash: "SHA-256" }, key, secretToBytes(message))
+        .then(function (sig) {
+          return SIGN_FORMAT + ":" + shareBytesToHex(new Uint8Array(sig));
+        }, function () { return null; });
+    });
+}
+
+/* true = this exact message, signed by this key. false = well-formed
+   inputs, but the signature does not match. null = malformed input
+   (bad key, bad signature format, blank message) — distinct from a
+   failed check, the same convention as tools 8 and 16. */
+function verifySignature(publicKeyHex, message, signatureText) {
+  var parsed = parseSignature(signatureText);
+  if (!parsed) return Promise.resolve(null);
+  if (!validSignMessage(message)) return Promise.resolve(null);
+  return importSigningKey(publicKeyHex, SIGN_PUBLIC_KEY_BYTES, "spki", ["verify"])
+    .then(function (key) {
+      if (!key) return null;
+      var cryptoObj = signCrypto();
+      return cryptoObj.subtle.verify(
+        { name: "ECDSA", hash: "SHA-256" }, key, parsed.signature, secretToBytes(message))
+        .then(function (ok) { return ok === true; }, function () { return null; });
+    });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -1198,7 +1312,10 @@ if (typeof module !== "undefined" && module.exports) {
                      SHAMIR_FORMAT, SHAMIR_MIN_THRESHOLD, SHAMIR_MAX_COUNT,
                      gfMul, gfDiv, splitThresholdSecret, parseShamirShare, combineThresholdShares,
                      SEAL_FORMAT, SEAL_ITERATIONS, SEAL_MAX_MESSAGE_CHARS,
-                     parseSealed, sealMessage, unsealMessage };
+                     parseSealed, sealMessage, unsealMessage,
+                     SIGN_FORMAT, SIGN_MAX_MESSAGE_CHARS,
+                     SIGN_PUBLIC_KEY_BYTES, SIGN_PRIVATE_KEY_BYTES, SIGN_SIGNATURE_BYTES,
+                     parseSignature, generateSigningKeyPair, signMessage, verifySignature };
 }
 
 if (typeof document !== "undefined") {
@@ -1830,6 +1947,71 @@ if (typeof document !== "undefined") {
         out.value = msg;
         status.textContent = "Opened locally — exactly the message that was sealed, character " +
           "for character. Nothing left this page.";
+      });
+    });
+
+    /* --- sign it — prove it came from you (ECDSA P-256) --- */
+    document.getElementById("sign-keys").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var pubOut = document.getElementById("sign-pub-out");
+      var privOut = document.getElementById("sign-priv-out");
+      var status = document.getElementById("sign-keys-result");
+      status.textContent = "Making keys locally…";
+      generateSigningKeyPair().then(function (pair) {
+        if (!pair) {
+          pubOut.value = "";
+          privOut.value = "";
+          status.textContent = "This browser could not make keys locally. Nothing was sent anywhere — try a current browser.";
+          return;
+        }
+        pubOut.value = pair.publicKey;
+        privOut.value = pair.privateKey;
+        document.getElementById("sign-priv-in").value = pair.privateKey;
+        document.getElementById("verify-pub").value = pair.publicKey;
+        status.textContent = "Keys made locally — nothing was stored or sent, and reloading this page " +
+          "loses them. The public key is safe to publish: it is how people recognise your signatures. " +
+          "The private key IS the identity: anyone holding it can sign as you, so guard it like a seed " +
+          "phrase and never share it. Your private key was copied into the signing box below so you can " +
+          "sign right away; the checking box got your public key.";
+      });
+    });
+    document.getElementById("sign-do").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("sign-out");
+      var status = document.getElementById("sign-result");
+      status.textContent = "Signing locally…";
+      signMessage(document.getElementById("sign-priv-in").value,
+        document.getElementById("sign-message").value).then(function (sig) {
+        if (!sig) {
+          out.value = "";
+          status.textContent = "Enter a message (up to " + SIGN_MAX_MESSAGE_CHARS + " characters) and " +
+            "paste a whole private key made by the key box above. A public key cannot sign — that is the point.";
+          return;
+        }
+        out.value = sig;
+        status.textContent = "Signed locally — your private key never left this page. Share the message, " +
+          "your public key and this signature together: anyone can then check the words are exactly yours " +
+          "and unchanged. The signature does not hide the message and does not prove when you signed it.";
+      });
+    });
+    document.getElementById("sign-verify").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("verify-result");
+      status.textContent = "Checking locally…";
+      verifySignature(document.getElementById("verify-pub").value,
+        document.getElementById("verify-message").value,
+        document.getElementById("verify-sig").value).then(function (ok) {
+        if (ok === null) {
+          status.textContent = "That cannot be checked: paste a whole public key, the exact message, " +
+            "and a whole p4a-sig-v1 signature line. Malformed input is different from a failed check.";
+          return;
+        }
+        status.textContent = ok
+          ? "✓ Signature checks out — this exact message was signed by whoever holds the private key " +
+            "matching that public key, and not one character has changed since. It proves the key, not a " +
+            "legal name: trust the key because you got it from the person directly, not from this page."
+          : "✗ Signature does NOT check out — the message was changed after signing, or this signature " +
+            "belongs to a different message or a different key. Do not trust it as this signer's words.";
       });
     });
 

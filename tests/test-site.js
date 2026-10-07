@@ -27,8 +27,8 @@ check("Midnight team X tag in README", readme.includes("@MidnightNtwrk"));
 /* document structure */
 check("exactly one <h1>", (html.match(/<h1[ >]/g) || []).length === 1);
 check("has <main> landmark", /<main[\s>]/.test(html));
-check("all main form controls labelled", ["q", "redact-in", "night", "claim", "secret", "threshold", "snippet-select", "life-night", "life-spend", "life-txs", "commit-secret", "commit-out", "check-commitment", "check-secret", "observer-select", "viewing-select", "strength-secret", "salt-out", "merkle-entries", "merkle-entry", "split-secret", "split-count", "split-out", "join-in", "join-out", "note-secret", "note-commit-out", "spend-secret", "spend-nullifier-out", "shamir-secret", "shamir-threshold", "shamir-count", "shamir-out", "shamir-join-in", "shamir-join-out", "seal-message", "seal-password", "seal-out", "open-sealed", "open-password", "open-out"].every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=3") && html.includes("app.js?v=14"));
+check("all main form controls labelled", ["q", "redact-in", "night", "claim", "secret", "threshold", "snippet-select", "life-night", "life-spend", "life-txs", "commit-secret", "commit-out", "check-commitment", "check-secret", "observer-select", "viewing-select", "strength-secret", "salt-out", "merkle-entries", "merkle-entry", "split-secret", "split-count", "split-out", "join-in", "join-out", "note-secret", "note-commit-out", "spend-secret", "spend-nullifier-out", "shamir-secret", "shamir-threshold", "shamir-count", "shamir-out", "shamir-join-in", "shamir-join-out", "seal-message", "seal-password", "seal-out", "open-sealed", "open-password", "open-out", "sign-pub-out", "sign-priv-out", "sign-message", "sign-priv-in", "sign-out", "verify-pub", "verify-message", "verify-sig"].every(id => html.includes(`for="${id}"`)));
+check("cache keys present", html.includes("styles.css?v=3") && html.includes("app.js?v=15"));
 check("dApp permission tool present", html.includes('id="dapp-see"') && html.includes('id="dapp-result"'));
 check("ZK claim simulator present", html.includes('id="zk-prover"') && html.includes('id="zk-result"'));
 check("ZK simulator honestly labelled a simulation", html.includes("teaching simulation, not a cryptographic proof"));
@@ -218,6 +218,12 @@ check("sealed-message tool honestly states password is its safety and length lea
 check("sealed-message tool states GCM authentication fails rather than gibberish", html.includes("fails to open instead of returning gibberish"));
 check("sealed-message tool states PBKDF2 parameters plainly", html.includes("PBKDF2 (210,000 rounds, a fresh random salt per seal)"));
 check("sealed constants are the labelled values", app.SEAL_FORMAT === "p4a-sealed-v1" && app.SEAL_ITERATIONS === 210000 && app.SEAL_MAX_MESSAGE_CHARS === 2000);
+check("signed-message tool present", html.includes('id="signed-message"') && html.includes('id="sign-keys"') && html.includes('id="sign-do"') && html.includes('id="sign-verify"') && html.includes('id="sign-out"') && html.includes('id="verify-pub"'));
+check("signed-message tool honestly labelled a teaching implementation, not an audited wallet", html.includes("teaching implementation, not an audited wallet") && html.includes("signs with ECDSA over SHA-256"));
+check("signed-message tool honestly states a signature proves the key, not a name or a time", html.includes("does not prove a legal name or real-world identity") && html.includes("does not prove when the signing happened"));
+check("signed-message tool honestly states signing does not hide the message and the private key is the identity", html.includes("signing does not hide it") && html.includes("anyone holding it can sign as you"));
+check("signed-message tool states the P-256 vs secp256k1 curve distinction plainly", html.includes("Bitcoin and Ethereum use its sibling curve secp256k1, which Web Crypto does not offer"));
+check("signing constants are the labelled values", app.SIGN_FORMAT === "p4a-sig-v1" && app.SIGN_MAX_MESSAGE_CHARS === 2000 && app.SIGN_PUBLIC_KEY_BYTES === 91 && app.SIGN_PRIVATE_KEY_BYTES === 138 && app.SIGN_SIGNATURE_BYTES === 64);
 
 /* XOR secret sharing — real local sharing, complete sets only */
 const split3 = app.splitSecret("the cake is in the blue locker", 3);
@@ -406,6 +412,32 @@ check("commitment message rejects empty, blank and non-string", app.commitmentMe
   check("unseal rejects malformed text and blank passwords as null", await app.unsealMessage("p4a-sealed-v1:xyz", "pw") === null && await app.unsealMessage(sealed1, "") === null && await app.unsealMessage(sealed1, "   ") === null && await app.unsealMessage(null, null) === null);
   check("seal rejects empty, blank, non-string and over-long messages", await app.sealMessage("", "pw") === null && await app.sealMessage("   ", "pw") === null && await app.sealMessage(null, "pw") === null && await app.sealMessage("x".repeat(app.SEAL_MAX_MESSAGE_CHARS + 1), "pw") === null);
   check("seal rejects blank and non-string passwords", await app.sealMessage("hello", "") === null && await app.sealMessage("hello", "   ") === null && await app.sealMessage("hello", null) === null && await app.sealMessage("hello", 42) === null);
+
+  /* signed messages — real ECDSA P-256 via Web Crypto (async) */
+  const pairA = await app.generateSigningKeyPair();
+  const pairB = await app.generateSigningKeyPair();
+  check("generated key pair carries hex keys of the labelled sizes", pairA !== null && /^[0-9a-f]{182}$/.test(pairA.publicKey) && /^[0-9a-f]{276}$/.test(pairA.privateKey));
+  check("two generated key pairs differ", pairA.publicKey !== pairB.publicKey && pairA.privateKey !== pairB.privateKey);
+  check("key material never contains the message to be signed", !pairA.publicKey.includes("blue locker") && !pairA.privateKey.includes("blue locker"));
+  const sigMsg = "I agree to sell the blue locker for 40 ADA — signed, me";
+  const sigA = await app.signMessage(pairA.privateKey, sigMsg);
+  check("signature carries the versioned format at 64 bytes", /^p4a-sig-v1:[0-9a-f]{128}$/.test(sigA));
+  check("signature never contains the message", !sigA.includes("blue locker"));
+  check("the signer's own key verifies the exact message", await app.verifySignature(pairA.publicKey, sigMsg, sigA) === true);
+  check("verify tolerates uppercase and padded key and signature input", await app.verifySignature("  " + pairA.publicKey.toUpperCase() + " ", sigMsg, " " + sigA.toUpperCase() + " ") === true);
+  check("exact message is preserved by signing, spaces and unicode included", await app.verifySignature(pairA.publicKey, " sécret — code 42 ", await app.signMessage(pairA.privateKey, " sécret — code 42 ")) === true);
+  const sigA2 = await app.signMessage(pairA.privateKey, sigMsg);
+  check("two signatures of one message under one key differ (ECDSA is randomised) yet both verify", sigA2 !== sigA && await app.verifySignature(pairA.publicKey, sigMsg, sigA2) === true);
+  check("one changed message character fails verification — false, not null", await app.verifySignature(pairA.publicKey, sigMsg.replace("40 ADA", "41 ADA"), sigA) === false);
+  check("a near-miss message (trailing space) fails verification — messages are exact", await app.verifySignature(pairA.publicKey, sigMsg + " ", sigA) === false);
+  check("a different key fails verification of this signature", await app.verifySignature(pairB.publicKey, sigMsg, sigA) === false);
+  check("a signature made by a different key fails against this key", await app.verifySignature(pairA.publicKey, sigMsg, await app.signMessage(pairB.privateKey, sigMsg)) === false);
+  const tamperedSig = (() => { const p = sigA.split(":"); p[1] = (p[1][0] === "0" ? "1" : "0") + p[1].slice(1); return p.join(":"); })();
+  check("one changed signature character fails verification", await app.verifySignature(pairA.publicKey, sigMsg, tamperedSig) === false);
+  check("parseSignature reads a valid signature at 64 bytes", (() => { const p = app.parseSignature(sigA); return p !== null && p.signature.length === 64; })());
+  check("parseSignature rejects junk, wrong sizes and missing prefix", app.parseSignature("hello") === null && app.parseSignature(null) === null && app.parseSignature("p4a-sig-v1:abcd") === null && app.parseSignature(sigA.slice(0, sigA.length - 2)) === null && app.parseSignature(sigA.replace("p4a-sig-v1", "p4a-sig-v2")) === null);
+  check("verify returns null (not false) for malformed key, signature and message inputs", await app.verifySignature("xyz", sigMsg, sigA) === null && await app.verifySignature(pairA.privateKey, sigMsg, sigA) === null && await app.verifySignature(pairA.publicKey, sigMsg, "p4a-sig-v1:zz") === null && await app.verifySignature(pairA.publicKey, "", sigA) === null && await app.verifySignature(pairA.publicKey, "   ", sigA) === null && await app.verifySignature(null, null, null) === null);
+  check("sign rejects a public key, junk keys, and empty, blank, non-string and over-long messages", await app.signMessage(pairA.publicKey, sigMsg) === null && await app.signMessage("xyz", sigMsg) === null && await app.signMessage(pairA.privateKey, "") === null && await app.signMessage(pairA.privateKey, "   ") === null && await app.signMessage(pairA.privateKey, null) === null && await app.signMessage(pairA.privateKey, "x".repeat(app.SIGN_MAX_MESSAGE_CHARS + 1)) === null && await app.signMessage(null, sigMsg) === null);
 
   console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
   process.exit(failures === 0 ? 0 : 1);

@@ -424,6 +424,39 @@
           <p id="open-result" role="status" aria-live="polite"></p>
         </form>
       </div>
+
+      <div class="tool" id="signed-message">
+        <h3>17 · Sign it — prove it came from you, without sharing your key</h3>
+        <p>Encryption (tool 16) hides a message; a signature does the opposite job: the message stays public, but anyone can check that whoever holds one private key endorsed exactly these words — and that not one character changed since. This makes a real ECDSA key pair locally on this device, on the P-256 curve (the curve behind passkeys and WebAuthn; Bitcoin and Ethereum use its sibling curve secp256k1, which Web Crypto does not offer) and signs with ECDSA over SHA-256. The public key is safe to publish — it is how people recognise “you”. The private key IS the identity: anyone holding it can sign as you, with no recovery and no undo, so guard it exactly like a seed phrase. Honestly labelled limits: this is a teaching implementation, not an audited wallet; a signature does not hide the message, does not prove a legal name or real-world identity, and does not prove when the signing happened. Keys exist only in this page — nothing is stored or sent, and reloading loses the private key unless you saved it. Never paste a real wallet's private key into any web page, including this one — practise with throwaway keys.</p>
+        <form id="sign-keys">
+          <button type="submit" class="btn primary">Make my signing keys locally</button>
+          <label for="sign-pub-out">Your public key — publish this; it identifies your signatures</label>
+          <textarea id="sign-pub-out" rows="3" readonly spellcheck="false"></textarea>
+          <label for="sign-priv-out">Your private key — keep this secret; anyone holding it can sign as you</label>
+          <textarea id="sign-priv-out" rows="3" readonly spellcheck="false"></textarea>
+          <p id="sign-keys-result" role="status" aria-live="polite"></p>
+        </form>
+        <form id="sign-do">
+          <label for="sign-message">Message to sign (it stays public — signing does not hide it)</label>
+          <textarea id="sign-message" rows="3" spellcheck="false" placeholder="e.g. I agree to sell the blue locker for 40 ADA — signed, me"></textarea>
+          <label for="sign-priv-in">Your private key (from the key box above — never a real wallet key)</label>
+          <textarea id="sign-priv-in" rows="3" spellcheck="false" placeholder="Paste the private key hex here"></textarea>
+          <button type="submit" class="btn primary">Sign it locally</button>
+          <label for="sign-out">Your signature — share it with the message and your public key</label>
+          <textarea id="sign-out" rows="3" readonly spellcheck="false"></textarea>
+          <p id="sign-result" role="status" aria-live="polite"></p>
+        </form>
+        <form id="sign-verify">
+          <label for="verify-pub">The signer's public key</label>
+          <textarea id="verify-pub" rows="3" spellcheck="false" placeholder="Paste the public key hex here"></textarea>
+          <label for="verify-message">The message, exactly as it was signed</label>
+          <textarea id="verify-message" rows="3" spellcheck="false" placeholder="One changed character fails the check"></textarea>
+          <label for="verify-sig">The signature (one p4a-sig-v1 line)</label>
+          <textarea id="verify-sig" rows="3" spellcheck="false" placeholder="p4a-sig-v1:…"></textarea>
+          <button type="submit" class="btn primary">Check the signature locally</button>
+          <p id="verify-result" role="status" aria-live="polite"></p>
+        </form>
+      </div>
     </div>
   </section>
 
@@ -454,6 +487,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=14"></script>
+<script src="app.js?v=15"></script>
 </body>
 </html>

@@ -193,6 +193,25 @@ renewable resource that pays for shielded transactions.
   length, and anyone with both the sealed text and the password
   can read it — so share them by different channels. Never paste a
   real seed phrase into any web page, including this one.
+- **Sign it — prove it came from you, without sharing your key** —
+  the public counterpart to sealing: the message stays public, but
+  anyone can check that whoever holds one private key endorsed
+  exactly these words, and that not one character changed since.
+  Generates a real ECDSA key pair locally on the P-256 curve (the
+  curve behind passkeys/WebAuthn; Bitcoin and Ethereum use its
+  sibling secp256k1, which Web Crypto does not offer) and signs
+  with ECDSA over SHA-256, in a versioned `p4a-sig-v1` format;
+  keys are handled as hex (91-byte SPKI public key, 138-byte
+  PKCS#8 private key). Verification is strict about the
+  distinction that matters: a matching signature is true, a
+  well-formed mismatch is false, malformed input is null.
+  Honestly labelled a teaching implementation, not an audited
+  wallet: a signature does not hide the message, does not prove
+  a legal name or real-world identity, and does not prove when
+  the signing happened; the private key IS the identity — anyone
+  holding it can sign as you, with no recovery — and keys exist
+  only in the page, so reloading loses them. Never paste a real
+  wallet's private key into any web page, including this one.
 
 ## Guides
 
