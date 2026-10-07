@@ -63,6 +63,8 @@ h3{margin:.2rem 0 .5rem}
 .tool fieldset{border:1px solid var(--line);border-radius:10px;display:grid;gap:.35rem;margin:0}
 .tool .check{font-weight:400;display:flex;gap:.5rem;align-items:center}
 .plan-list{color:var(--muted);margin:.4rem 0;padding-left:1.2rem}
+.snippet-code{background:#0a0618;border:1px solid var(--line);border-radius:10px;padding:.8rem .9rem;
+  overflow-x:auto;font-size:.85rem;line-height:1.5;color:var(--moon);margin:0;white-space:pre}
 .plan-list strong{color:var(--ink)}
 .guide-list li{margin:.4rem 0;color:var(--muted)}
 .donate{display:flex;gap:.7rem;align-items:center;flex-wrap:wrap}

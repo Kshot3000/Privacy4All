@@ -69,6 +69,12 @@ renewable resource that pays for shielded transactions.
   proof (the claim, and whether it holds) and what stays hidden. Honestly
   labelled a teaching simulation, not a cryptographic proof: the exact
   BigInt comparison runs locally in your browser.
+- **Compact snippet library** — five privacy patterns (public counter,
+  hash commitment, selective disclosure, threshold proof, private vote),
+  each showing what stays private, what goes on the public ledger and
+  what is deliberately disclosed with `disclose()`. Honestly labelled
+  simplified teaching patterns, not production contracts — Compact is
+  still evolving, so check the current docs and compile before real use.
 
 ## Guides
 

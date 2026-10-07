@@ -1,7 +1,8 @@
 "use strict";
 /* Privacy4All hub logic: project filtering, a local text redactor,
    a selective-disclosure planner, a NIGHT -> DUST capacity estimator,
-   and a "what does this dApp see?" permission explainer.
+   a "what does this dApp see?" permission explainer, a ZK claim
+   simulator, and a Compact snippet library.
    Everything runs locally. Pure functions are exported for tests. */
 
 /* ---------- 1. Redactor ---------- */
@@ -175,10 +176,140 @@ function evaluateProof(claimKey, secretStr, thresholdStr) {
   };
 }
 
+/* ---------- 6. Compact snippet library ---------- */
+/* Simplified TEACHING patterns, not production contracts: each one exists
+   to show the Midnight split — what a witness keeps private on the user's
+   device, what the ledger publishes, and what disclose() reveals on purpose.
+   Compact evolves; verify syntax against the current docs before real use. */
+var SNIPPET_CATALOG = {
+  "public-counter": {
+    title: "Public counter — the fully public baseline",
+    category: "basics",
+    note: "The starting point every Midnight developer should contrast against: a ledger counter is world-readable forever. Fine for visit counts and totals that harm nobody — and the reason the other patterns exist for anything personal.",
+    priv: ["Nothing — this pattern is fully public by design, which is exactly its lesson"],
+    pub: ["The visits counter, on the public ledger, readable by anyone"],
+    disclosed: ["That a visit happened — each increment is a public event"],
+    code: [
+      "pragma language_version >= 0.22;",
+      "import CompactStandardLibrary;",
+      "",
+      "export ledger visits: Counter;",
+      "",
+      "export circuit recordVisit(): [] {",
+      "  visits.increment(1);",
+      "}"
+    ].join("\n")
+  },
+  "commit-secret": {
+    title: "Commit to a secret — publish the hash, not the value",
+    category: "commitments",
+    note: "The witness supplies the secret from the user's own device and only its hash reaches the ledger. Later the user can reveal the secret and anyone can check it against the commitment — the value was provably fixed earlier, without ever being public in between.",
+    priv: ["The secret value itself — it is supplied by a witness and stays on the user's device"],
+    pub: ["The hash commitment, on the public ledger"],
+    disclosed: ["Only the hash, deliberately, via disclose() — revealing the secret later is a separate, chosen step"],
+    code: [
+      "pragma language_version >= 0.22;",
+      "import CompactStandardLibrary;",
+      "",
+      "witness secret(): Bytes<32>;",
+      "",
+      "export ledger commitment: Bytes<32>;",
+      "",
+      "export circuit commit(): [] {",
+      "  commitment = disclose(hash<Bytes<32>>(secret()));",
+      "}"
+    ].join("\n")
+  },
+  "selective-disclose": {
+    title: "Selective disclosure — disclose one field, deliberately",
+    category: "selective-disclosure",
+    note: "Compact makes disclosure an explicit act: a witness value cannot silently flow onto the ledger, it must pass through disclose(). Here exactly one fact — that the holder is an adult — is disclosed, while the birth date behind it never leaves the device.",
+    priv: ["The exact date of birth — supplied by a witness, kept in private state on the user's device"],
+    pub: ["Nothing about the person — the ledger only records that the circuit ran"],
+    disclosed: ["The single boolean fact “is an adult”, and nothing else, via disclose()"],
+    code: [
+      "pragma language_version >= 0.22;",
+      "import CompactStandardLibrary;",
+      "",
+      "witness isAdult(): Boolean;",
+      "",
+      "export circuit proveAdult(): Boolean {",
+      "  const adult = isAdult();",
+      "  assert adult;",
+      "  return disclose(adult);",
+      "}"
+    ].join("\n")
+  },
+  "threshold-proof": {
+    title: "Threshold proof — prove “at least X”, hide the amount",
+    category: "proofs",
+    note: "The balance never becomes public: the circuit checks it against the required amount inside the proof and discloses only the comparison result. A verifier learns that the threshold is met — not the balance, the address, or the history behind it.",
+    priv: ["The exact balance — supplied by a witness and compared inside the proof, never published"],
+    pub: ["Nothing about the wallet — no balance, address or history reaches the ledger"],
+    disclosed: ["Only whether balance >= required, via disclose() — a yes/no answer to a specific question"],
+    code: [
+      "pragma language_version >= 0.22;",
+      "import CompactStandardLibrary;",
+      "",
+      "witness balance(): Uint<64>;",
+      "",
+      "export circuit proveCovers(required: Uint<64>): Boolean {",
+      "  const covers = balance() >= required;",
+      "  assert covers;",
+      "  return disclose(covers);",
+      "}"
+    ].join("\n")
+  },
+  "private-vote": {
+    title: "Private vote — choice stays local, only the tally is public",
+    category: "voting",
+    note: "Each choice arrives by witness and stays on the voter's device; only the aggregate counters move. Honest limit: an aggregate only protects you inside a crowd — a tally of one voter reveals that voter, so real elections need many voters and careful timing.",
+    priv: ["Each voter's individual choice — supplied by a witness, never written to the ledger"],
+    pub: ["The running yes/no tallies, on the public ledger"],
+    disclosed: ["That this voter voted for the counted side, as an aggregate increment via disclose() — meaningful only among many voters"],
+    code: [
+      "pragma language_version >= 0.22;",
+      "import CompactStandardLibrary;",
+      "",
+      "witness myVoteIsYes(): Boolean;",
+      "",
+      "export ledger yesVotes: Counter;",
+      "export ledger noVotes: Counter;",
+      "",
+      "export circuit vote(): [] {",
+      "  if (disclose(myVoteIsYes())) {",
+      "    yesVotes.increment(1);",
+      "  } else {",
+      "    noVotes.increment(1);",
+      "  }",
+      "}"
+    ].join("\n")
+  }
+};
+
+function getSnippet(id) {
+  var s = SNIPPET_CATALOG[id];
+  if (!s) return null;
+  return { id: id, title: s.title, category: s.category, note: s.note,
+           priv: s.priv.slice(), pub: s.pub.slice(), disclosed: s.disclosed.slice(), code: s.code };
+}
+
+function searchSnippets(query) {
+  var needle = (query == null ? "" : String(query)).trim().toLowerCase();
+  return Object.keys(SNIPPET_CATALOG).filter(function (id) {
+    if (!needle) return true;
+    var s = SNIPPET_CATALOG[id];
+    var hay = [s.title, s.category, s.note, s.code,
+               s.priv.join(" "), s.pub.join(" "), s.disclosed.join(" ")].join(" ").toLowerCase();
+    return hay.indexOf(needle) !== -1;
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
-                     evaluateProof, CLAIM_CATALOG };
+                     evaluateProof, CLAIM_CATALOG,
+                     getSnippet, searchSnippets, SNIPPET_CATALOG };
 }
 
 if (typeof document !== "undefined") {
@@ -325,6 +456,38 @@ if (typeof document !== "undefined") {
       var note = document.createElement("p");
       note.textContent = "This is a local simulation of the pattern, not a cryptographic proof: your value was compared on this device only and never left this page. On Midnight, a real zero-knowledge proof gives the verifier the same two facts — the claim, and that it holds — with the value itself staying in your private state.";
       host.appendChild(note);
+    });
+
+    /* --- Compact snippet library --- */
+    document.getElementById("snippets").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var snip = getSnippet(document.getElementById("snippet-select").value);
+      var host = document.getElementById("snippet-result");
+      host.textContent = "";
+      if (!snip) {
+        host.textContent = "Pick a pattern from the list.";
+        return;
+      }
+      var note = document.createElement("p");
+      note.textContent = snip.note;
+      host.appendChild(note);
+      [["Stays private", snip.priv], ["Goes public", snip.pub], ["Deliberately disclosed", snip.disclosed]].forEach(function (pair) {
+        var p = document.createElement("p");
+        var strong = document.createElement("strong");
+        strong.textContent = pair[0] + ": ";
+        p.appendChild(strong);
+        p.appendChild(document.createTextNode(pair[1].join(" ")));
+        host.appendChild(p);
+      });
+      var pre = document.createElement("pre");
+      pre.className = "snippet-code";
+      var code = document.createElement("code");
+      code.textContent = snip.code;
+      pre.appendChild(code);
+      host.appendChild(pre);
+      var warn = document.createElement("p");
+      warn.textContent = "Simplified teaching pattern, not a production contract — check the current Compact docs and compile before real use. Everything here ran locally; nothing left this page.";
+      host.appendChild(warn);
     });
 
     /* --- copy donation address --- */

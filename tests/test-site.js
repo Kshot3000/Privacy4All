@@ -27,11 +27,13 @@ check("Midnight team X tag in README", readme.includes("@MidnightNtwrk"));
 /* document structure */
 check("exactly one <h1>", (html.match(/<h1[ >]/g) || []).length === 1);
 check("has <main> landmark", /<main[\s>]/.test(html));
-check("all main form controls labelled", ["q", "redact-in", "night", "claim", "secret", "threshold"].every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=2") && html.includes("app.js?v=3"));
+check("all main form controls labelled", ["q", "redact-in", "night", "claim", "secret", "threshold", "snippet-select"].every(id => html.includes(`for="${id}"`)));
+check("cache keys present", html.includes("styles.css?v=3") && html.includes("app.js?v=4"));
 check("dApp permission tool present", html.includes('id="dapp-see"') && html.includes('id="dapp-result"'));
 check("ZK claim simulator present", html.includes('id="zk-prover"') && html.includes('id="zk-result"'));
 check("ZK simulator honestly labelled a simulation", html.includes("teaching simulation, not a cryptographic proof"));
+check("snippet library present", html.includes('id="snippets"') && html.includes('id="snippet-result"'));
+check("snippet library honestly labelled not production", html.includes("not production contracts"));
 
 /* flagship links */
 for (const url of ["https://kshot3000.github.io/Night-Messenger-/", "https://kshot3000.github.io/PlutusShield/",
@@ -101,6 +103,20 @@ check("every HTML claim value exists in catalog", ["age", "balance", "income", "
 check("proof rejects junk, negatives and 7 decimals", app.evaluateProof("age", "abc", "18") === null && app.evaluateProof("age", "-1", "18") === null && app.evaluateProof("age", "18", "0.0000001") === null && app.evaluateProof("age", "", "18") === null);
 check("proof rejects unknown claim and null input", app.evaluateProof("nope", "1", "1") === null && app.evaluateProof("age", null, null) === null);
 check("failed proof still hides the secret", !app.evaluateProof("balance", "12345", "99999").revealed.join(" ").includes("12345"));
+
+/* Compact snippet library */
+check("library has 5 patterns", Object.keys(app.SNIPPET_CATALOG).length === 5);
+check("known snippet returns its code", app.getSnippet("commit-secret").code.includes("commitment") && app.getSnippet("commit-secret").title.includes("Commit"));
+check("unknown snippet is null, not a crash", app.getSnippet("nope") === null && app.getSnippet(null) === null);
+check("every snippet has code, a note, and all three split lists", Object.values(app.SNIPPET_CATALOG).every(s => s.code.length > 80 && s.note.length > 30 && s.priv.length >= 1 && s.pub.length >= 1 && s.disclosed.length >= 1));
+check("every snippet code declares a ledger or a witness", Object.values(app.SNIPPET_CATALOG).every(s => s.code.includes("ledger") || s.code.includes("witness")));
+check("at least 3 patterns teach disclose()", Object.values(app.SNIPPET_CATALOG).filter(s => s.code.includes("disclose(")).length >= 3);
+check("every HTML snippet value exists in catalog", ["public-counter", "commit-secret", "selective-disclose", "threshold-proof", "private-vote"].every(v => html.includes(`value="${v}"`) && app.SNIPPET_CATALOG[v]));
+check("search with no query returns all patterns", app.searchSnippets("").length === 5 && app.searchSnippets(null).length === 5);
+check("search finds the vote pattern case-insensitively", app.searchSnippets("VOTE").includes("private-vote"));
+check("search finds commitment by its disclosed hash", app.searchSnippets("hash").includes("commit-secret"));
+check("search with no match is empty, not a crash", app.searchSnippets("zzz-no-such-pattern").length === 0);
+check("getSnippet returns copies, not the catalog itself", (() => { const c = app.getSnippet("public-counter"); c.priv.push("tampered"); return app.getSnippet("public-counter").priv.length === 1; })());
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
