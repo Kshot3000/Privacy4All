@@ -110,6 +110,18 @@ renewable resource that pays for shielded transactions.
   model of scoped disclosure in principle — exact capabilities depend
   on the wallet and contract, so check the current docs before
   granting a real one. No key is entered or generated on the page.
+- **Make it unguessable — secret strength & salt for commitments** —
+  tool 8's honest limit made measurable: check a commitment secret's
+  strength (character pool, best-case entropy bits, and how long an
+  offline guessing attack at a labelled assumed rate of 10 billion
+  guesses a second would take on average), then generate the standard
+  fix — a 16-byte (128-bit) random salt from Web Crypto
+  `getRandomValues`, with the exact combined `secret|salt` format to
+  commit in tool 8 and reveal together later. Honestly labelled a
+  rough teaching estimate, not a security audit: it assumes uniformly
+  random characters, and human-chosen secrets are far more
+  predictable — so its numbers are a ceiling on safety, never a
+  guarantee. Everything runs locally; nothing is sent anywhere.
 
 ## Guides
 

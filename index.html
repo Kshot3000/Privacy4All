@@ -301,6 +301,23 @@
         <button type="submit" class="btn primary">Show me this scope</button>
         <div id="viewing-result" role="status" aria-live="polite"></div>
       </form>
+
+      <div class="tool" id="secret-strength">
+        <h3>11 · Make it unguessable — secret strength &amp; salt for commitments</h3>
+        <p>Tool 8's honest limit, made measurable: anyone holding your commitment hash can guess at it offline, at machine speed, with nobody watching — so a commitment is only as safe as the secret behind it. Check a secret's strength here, then generate the standard fix: a long random salt. This is a rough teaching estimate, not a security audit: it assumes every character was picked uniformly at random from the character types you used, and human-chosen secrets are far more predictable than that model — words, names and dates fall to dictionary guessing long before brute force. The guessing rate used (10 billion a second) is a labelled assumption about a well-equipped offline attacker, not a measurement.</p>
+        <form id="strength-check">
+          <label for="strength-secret">Secret you plan to commit (stays on this page)</label>
+          <input id="strength-secret" type="password" autocomplete="off" spellcheck="false" placeholder="e.g. the bridge opens on Friday">
+          <button type="submit" class="btn primary">Check its strength</button>
+          <div id="strength-result" role="status" aria-live="polite"></div>
+        </form>
+        <form id="salt-make">
+          <button type="submit" class="btn primary">Generate a random salt</button>
+          <label for="salt-out">Your salt — 16 random bytes (128 bits), generated locally</label>
+          <textarea id="salt-out" rows="2" readonly spellcheck="false"></textarea>
+          <p id="salt-result" role="status" aria-live="polite"></p>
+        </form>
+      </div>
     </div>
   </section>
 
@@ -331,6 +348,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=8"></script>
+<script src="app.js?v=9"></script>
 </body>
 </html>

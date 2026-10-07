@@ -4,7 +4,8 @@
    a "what does this dApp see?" permission explainer, a ZK claim
    simulator, a Compact snippet library, a DUST lifecycle explainer,
    a SHA-256 hash commitment maker/checker, a public-vs-shielded
-   ledger observer explainer, and a viewing-key scope simulator.
+   ledger observer explainer, a viewing-key scope simulator, and a
+   commitment secret-strength checker with a random salt generator.
    Everything runs locally. Pure functions are exported for tests. */
 
 /* ---------- 1. Redactor ---------- */
@@ -481,6 +482,94 @@ function getViewingView(id) {
            sees: s.sees.slice(), cannot: s.cannot.slice(), risks: s.risks.slice() };
 }
 
+/* ---------- 11. Make it unguessable — strength + salt ---------- */
+/* Tool 8's honest limit, made measurable: a commitment is only as safe
+   as the secret behind it, because anyone holding the hash can guess
+   offline, at machine speed, with nobody watching. This checker gives
+   a ROUGH TEACHING ESTIMATE, not a security audit: it assumes every
+   character was picked uniformly at random from the character types
+   present (lowercase, capitals, digits, symbols), which is the best
+   case. Human-chosen secrets are far more predictable than this model
+   — names, dates, words and patterns fall to dictionary and rule-based
+   guessing long before raw brute force reaches them — so treat the
+   numbers here as a ceiling on safety, never a guarantee. The assumed
+   guessing rate is labelled, not measured: a well-equipped offline
+   attacker testing fast hashes like SHA-256.
+   The second half is the standard fix: a long random salt. The salt is
+   generated locally with crypto.getRandomValues (the same Web Crypto
+   source tool 8 hashes with). Keep the salt private alongside the
+   secret and reveal both together: while the salt is secret, a guesser
+   must find the secret AND the salt; if the salt is published with
+   the commitment it still defeats precomputed rainbow tables, but a
+   weak secret alone can still be dictionary-guessed — salt is not a
+   substitute for a strong secret, it is a multiplier on one. */
+var GUESSES_PER_SECOND = 10000000000; /* 10 billion — labelled assumption */
+
+function analyzeSecret(secret) {
+  if (typeof secret !== "string" || secret.length === 0) return null;
+  var classes = {
+    lower: /[a-z]/.test(secret),
+    upper: /[A-Z]/.test(secret),
+    digit: /[0-9]/.test(secret),
+    symbol: /[^A-Za-z0-9]/.test(secret)
+  };
+  var pool = (classes.lower ? 26 : 0) + (classes.upper ? 26 : 0) +
+             (classes.digit ? 10 : 0) + (classes.symbol ? 33 : 0);
+  var entropyBits = Math.round(secret.length * Math.log2(pool) * 10) / 10;
+  var verdict = entropyBits < 28 ? "very weak"
+    : entropyBits < 36 ? "weak"
+    : entropyBits < 60 ? "fair"
+    : entropyBits < 80 ? "strong"
+    : entropyBits < 128 ? "very strong" : "excellent";
+  return { length: secret.length, pool: pool, classes: classes,
+           entropyBits: entropyBits, verdict: verdict };
+}
+
+function estimateCrackSeconds(secret) {
+  var a = analyzeSecret(secret);
+  if (!a) return null;
+  /* On average an attacker finds it halfway through the search space. */
+  return Math.pow(2, a.entropyBits - 1) / GUESSES_PER_SECOND;
+}
+
+function formatApproxDuration(seconds) {
+  if (typeof seconds !== "number" || isNaN(seconds) || seconds < 0) return null;
+  if (!isFinite(seconds)) return "longer than the age of the universe, many times over";
+  if (seconds < 1) return "less than a second";
+  if (seconds < 60) return "about " + Math.round(seconds) + " seconds";
+  var minutes = seconds / 60;
+  if (minutes < 60) return "about " + Math.round(minutes) + (Math.round(minutes) === 1 ? " minute" : " minutes");
+  var hours = minutes / 60;
+  if (hours < 24) return "about " + Math.round(hours) + (Math.round(hours) === 1 ? " hour" : " hours");
+  var days = hours / 24;
+  if (days < 365.25) return "about " + Math.round(days) + (Math.round(days) === 1 ? " day" : " days");
+  var years = days / 365.25;
+  if (years < 1000000) return "about " + Math.round(years).toLocaleString("en-US") + (Math.round(years) === 1 ? " year" : " years");
+  var exp = years.toExponential(1).replace("e+", "×10^");
+  return "about " + exp + " years";
+}
+
+function generateSaltHex(byteCount) {
+  var n = byteCount === undefined ? 16 : byteCount;
+  if (typeof n !== "number" || !Number.isInteger(n) || n < 8 || n > 64) return null;
+  var cryptoObj = (typeof globalThis !== "undefined" && globalThis.crypto) || null;
+  if (!cryptoObj || typeof cryptoObj.getRandomValues !== "function") return null;
+  var bytes = new Uint8Array(n);
+  cryptoObj.getRandomValues(bytes);
+  return Array.prototype.map.call(bytes, function (b) {
+    return b.toString(16).padStart(2, "0");
+  }).join("");
+}
+
+/* The combined string to commit in tool 8: the secret, a separator,
+   and the salt — revealed together later so anyone can recompute. */
+function saltedSecret(secret, saltHex) {
+  if (typeof secret !== "string" || secret.trim() === "") return null;
+  var salt = typeof saltHex === "string" ? saltHex.trim().toLowerCase() : "";
+  if (!/^[0-9a-f]{16,128}$/.test(salt) || salt.length % 2 !== 0) return null;
+  return secret + "|" + salt;
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -489,7 +578,9 @@ if (typeof module !== "undefined" && module.exports) {
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
-                     getViewingView, VIEWING_CATALOG };
+                     getViewingView, VIEWING_CATALOG,
+                     analyzeSecret, estimateCrackSeconds, formatApproxDuration,
+                     generateSaltHex, saltedSecret, GUESSES_PER_SECOND };
 }
 
 if (typeof document !== "undefined") {
@@ -804,6 +895,53 @@ if (typeof document !== "undefined") {
       var foot = document.createElement("p");
       foot.textContent = "Teaching model of scoped disclosure, run locally — no key was entered, generated or connected, and nothing left this page. Rule that survives every scope: viewing is read-only, but a disclosure once seen cannot be un-seen — grant the narrowest scope that answers the question.";
       host.appendChild(foot);
+    });
+
+    /* --- make it unguessable — strength + salt --- */
+    document.getElementById("strength-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var secret = document.getElementById("strength-secret").value;
+      var a = analyzeSecret(secret);
+      var host = document.getElementById("strength-result");
+      host.textContent = "";
+      if (!a) {
+        host.textContent = "Type the secret you plan to commit first — anything from one character up.";
+        return;
+      }
+      var used = [];
+      if (a.classes.lower) used.push("lowercase");
+      if (a.classes.upper) used.push("capitals");
+      if (a.classes.digit) used.push("digits");
+      if (a.classes.symbol) used.push("symbols / spaces");
+      var p = document.createElement("p");
+      var strong = document.createElement("strong");
+      strong.textContent = "Verdict: " + a.verdict + " — about " + a.entropyBits + " bits in the best case. ";
+      p.appendChild(strong);
+      p.appendChild(document.createTextNode(a.length + " characters drawn from " + used.join(", ") +
+        " (a pool of about " + a.pool + "). At an assumed 10 billion guesses a second, an offline attacker " +
+        "who had your commitment hash would need " + formatApproxDuration(estimateCrackSeconds(secret)) +
+        " on average — IF every character had been picked uniformly at random. Human-chosen secrets are far " +
+        "more predictable than that: words, names, dates and patterns fall to dictionary guessing much sooner, " +
+        "so read this as a ceiling on safety, not a promise. Length is the lever you control most: every extra " +
+        "random character multiplies the work, and a random salt from the generator below multiplies it far more."));
+      host.appendChild(p);
+    });
+    document.getElementById("salt-make").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("salt-out");
+      var status = document.getElementById("salt-result");
+      var salt = generateSaltHex(16);
+      if (salt === null) {
+        out.value = "";
+        status.textContent = "Random generation is unavailable in this browser — open the page over HTTPS in a current browser.";
+        return;
+      }
+      out.value = salt;
+      status.textContent = "Salt generated locally on this device — nothing was sent anywhere. To use it with tool 8: " +
+        "commit the combined text your-secret|" + salt + " (your secret, a | character, then this salt), keep BOTH the secret " +
+        "and the salt private, and reveal both together later so anyone can recompute the hash. While the salt stays " +
+        "secret, a guesser must find it too — 128 extra random bits. If you publish the salt alongside the commitment " +
+        "instead, it still defeats precomputed rainbow tables, but a weak secret can still be dictionary-guessed on its own.";
     });
 
     /* --- copy donation address --- */

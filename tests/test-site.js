@@ -27,8 +27,8 @@ check("Midnight team X tag in README", readme.includes("@MidnightNtwrk"));
 /* document structure */
 check("exactly one <h1>", (html.match(/<h1[ >]/g) || []).length === 1);
 check("has <main> landmark", /<main[\s>]/.test(html));
-check("all main form controls labelled", ["q", "redact-in", "night", "claim", "secret", "threshold", "snippet-select", "life-night", "life-spend", "life-txs", "commit-secret", "commit-out", "check-commitment", "check-secret", "observer-select", "viewing-select"].every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=3") && html.includes("app.js?v=8"));
+check("all main form controls labelled", ["q", "redact-in", "night", "claim", "secret", "threshold", "snippet-select", "life-night", "life-spend", "life-txs", "commit-secret", "commit-out", "check-commitment", "check-secret", "observer-select", "viewing-select", "strength-secret", "salt-out"].every(id => html.includes(`for="${id}"`)));
+check("cache keys present", html.includes("styles.css?v=3") && html.includes("app.js?v=9"));
 check("dApp permission tool present", html.includes('id="dapp-see"') && html.includes('id="dapp-result"'));
 check("ZK claim simulator present", html.includes('id="zk-prover"') && html.includes('id="zk-result"'));
 check("ZK simulator honestly labelled a simulation", html.includes("teaching simulation, not a cryptographic proof"));
@@ -168,6 +168,31 @@ check("full history sees the complete picture", app.getViewingView("full-history
 check("viewing never grants spending at any scope", Object.values(app.VIEWING_CATALOG).every(s => (s.sees.join(" ") + s.cannot.join(" ")).toLowerCase().includes("spend")));
 check("every scope warns a disclosure cannot be un-seen or can be kept", Object.values(app.VIEWING_CATALOG).every(s => s.risks.join(" ").includes("keep") || s.risks.join(" ").includes("un-seen")));
 check("getViewingView returns copies, not the catalog itself", (() => { const v = app.getViewingView("single-transaction"); v.sees.push("tampered"); return app.getViewingView("single-transaction").sees.length === 2; })());
+
+check("strength tool present", html.includes('id="secret-strength"') && html.includes('id="strength-result"') && html.includes('id="salt-out"'));
+check("strength tool honestly labelled a rough teaching estimate", html.includes("rough teaching estimate, not a security audit") && html.includes("human-chosen secrets are far more predictable"));
+check("strength tool labels its guessing rate an assumption", html.includes("labelled assumption"));
+
+/* secret strength + salt — best-case entropy model, real local randomness */
+check("strength of 'abc' is pool 26, 14.1 bits", app.analyzeSecret("abc").pool === 26 && app.analyzeSecret("abc").entropyBits === 14.1 && app.analyzeSecret("abc").verdict === "very weak");
+check("strength detects all four classes", (() => { const a = app.analyzeSecret("aA1!"); return a.pool === 95 && a.classes.lower && a.classes.upper && a.classes.digit && a.classes.symbol; })());
+check("digits-only pool is 10", app.analyzeSecret("1234").pool === 10 && app.analyzeSecret("1234").entropyBits === 13.3);
+check("long passphrase reaches excellent on the model", app.analyzeSecret("correct horse battery staple").entropyBits === 164.7 && app.analyzeSecret("correct horse battery staple").verdict === "excellent");
+check("strength rejects empty and non-string", app.analyzeSecret("") === null && app.analyzeSecret(null) === null && app.analyzeSecret(42) === null);
+check("guessing rate constant is the labelled 10 billion", app.GUESSES_PER_SECOND === 10000000000);
+check("crack seconds use half the search space", Math.abs(app.estimateCrackSeconds("ab") - Math.pow(2, 8.4) / 10000000000) < 1e-9);
+check("crack seconds reject junk", app.estimateCrackSeconds("") === null && app.estimateCrackSeconds(null) === null);
+check("duration under a second", app.formatApproxDuration(0.2) === "less than a second");
+check("duration seconds and minutes", app.formatApproxDuration(45) === "about 45 seconds" && app.formatApproxDuration(90) === "about 2 minutes");
+check("duration hours, days and years", app.formatApproxDuration(5400) === "about 2 hours" && app.formatApproxDuration(86400 * 3) === "about 3 days" && app.formatApproxDuration(86400 * 365.25 * 5) === "about 5 years");
+check("duration huge years go scientific", app.formatApproxDuration(86400 * 365.25 * 3.17e12).includes("×10^") && app.formatApproxDuration(86400 * 365.25 * 3.17e12).includes("years"));
+check("duration infinite and invalid", app.formatApproxDuration(Infinity).includes("age of the universe") && app.formatApproxDuration(-1) === null && app.formatApproxDuration("x") === null);
+check("salt is 32 lowercase hex chars by default", /^[0-9a-f]{32}$/.test(app.generateSaltHex()));
+check("salt honours byte count", app.generateSaltHex(8).length === 16 && app.generateSaltHex(64).length === 128);
+check("two salts differ", app.generateSaltHex() !== app.generateSaltHex());
+check("salt rejects bad byte counts", app.generateSaltHex(0) === null && app.generateSaltHex(7) === null && app.generateSaltHex(65) === null && app.generateSaltHex(2.5) === null && app.generateSaltHex("16") === null);
+check("salted secret joins with a pipe and lowercases the salt", app.saltedSecret("my bid is 250", "AB12CD34EF56AB78CD90EF12AB34CD56") === "my bid is 250|ab12cd34ef56ab78cd90ef12ab34cd56");
+check("salted secret rejects bad salt and empty secret", app.saltedSecret("x", "xyz") === null && app.saltedSecret("x", "abc") === null && app.saltedSecret("", "ab12cd34ef56ab78") === null && app.saltedSecret(null, null) === null);
 
 /* hash commitments — real SHA-256 via Web Crypto (async) */
 check("commitment message is versioned and exact", app.commitmentMessage("my bid is 250") === app.COMMIT_PREFIX + "\nmy bid is 250");
