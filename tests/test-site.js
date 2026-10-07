@@ -27,8 +27,8 @@ check("Midnight team X tag in README", readme.includes("@MidnightNtwrk"));
 /* document structure */
 check("exactly one <h1>", (html.match(/<h1[ >]/g) || []).length === 1);
 check("has <main> landmark", /<main[\s>]/.test(html));
-check("all main form controls labelled", ["q", "redact-in", "night", "claim", "secret", "threshold", "snippet-select", "life-night", "life-spend", "life-txs", "commit-secret", "commit-out", "check-commitment", "check-secret", "observer-select", "viewing-select", "strength-secret", "salt-out"].every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=3") && html.includes("app.js?v=9"));
+check("all main form controls labelled", ["q", "redact-in", "night", "claim", "secret", "threshold", "snippet-select", "life-night", "life-spend", "life-txs", "commit-secret", "commit-out", "check-commitment", "check-secret", "observer-select", "viewing-select", "strength-secret", "salt-out", "merkle-entries", "merkle-entry"].every(id => html.includes(`for="${id}"`)));
+check("cache keys present", html.includes("styles.css?v=3") && html.includes("app.js?v=10"));
 check("dApp permission tool present", html.includes('id="dapp-see"') && html.includes('id="dapp-result"'));
 check("ZK claim simulator present", html.includes('id="zk-prover"') && html.includes('id="zk-result"'));
 check("ZK simulator honestly labelled a simulation", html.includes("teaching simulation, not a cryptographic proof"));
@@ -194,6 +194,18 @@ check("salt rejects bad byte counts", app.generateSaltHex(0) === null && app.gen
 check("salted secret joins with a pipe and lowercases the salt", app.saltedSecret("my bid is 250", "AB12CD34EF56AB78CD90EF12AB34CD56") === "my bid is 250|ab12cd34ef56ab78cd90ef12ab34cd56");
 check("salted secret rejects bad salt and empty secret", app.saltedSecret("x", "xyz") === null && app.saltedSecret("x", "abc") === null && app.saltedSecret("", "ab12cd34ef56ab78") === null && app.saltedSecret(null, null) === null);
 
+check("merkle tool present", html.includes('id="merkle"') && html.includes('id="merkle-result"') && html.includes('id="merkle-entries"') && html.includes('id="merkle-entry"'));
+check("merkle tool honestly labelled not zero-knowledge", html.includes("a Merkle proof is <em>not</em> zero-knowledge") && html.includes("teaching format, not a specific chain's tree format"));
+check("merkle tool states duplicates are rejected", html.includes("duplicates rejected"));
+
+/* Merkle entry parsing — sync validation before any hashing */
+check("merkle parse splits, trims and skips blank lines", JSON.stringify(app.parseMerkleEntries(" alice \n\nbob\r\ncarol ")) === JSON.stringify(["alice", "bob", "carol"]));
+check("merkle parse rejects duplicates", app.parseMerkleEntries("alice\nalice") === null && app.parseMerkleEntries("alice\n alice ") === null);
+check("merkle parse rejects empty and non-string", app.parseMerkleEntries("") === null && app.parseMerkleEntries("  \n \n") === null && app.parseMerkleEntries(null) === null && app.parseMerkleEntries(42) === null);
+check("merkle parse rejects over the entry cap", app.parseMerkleEntries(Array.from({ length: app.MERKLE_MAX_ENTRIES + 1 }, (_, i) => "e" + i).join("\n")) === null);
+check("merkle parse accepts exactly the cap", app.parseMerkleEntries(Array.from({ length: app.MERKLE_MAX_ENTRIES }, (_, i) => "e" + i).join("\n")).length === app.MERKLE_MAX_ENTRIES);
+check("merkle normalize rejects non-string entries", app.normalizeMerkleEntries(["alice", 42]) === null && app.normalizeMerkleEntries("alice") === null && app.normalizeMerkleEntries([]) === null);
+
 /* hash commitments — real SHA-256 via Web Crypto (async) */
 check("commitment message is versioned and exact", app.commitmentMessage("my bid is 250") === app.COMMIT_PREFIX + "\nmy bid is 250");
 check("commitment message keeps the secret exactly (no trim)", app.commitmentMessage(" pad ") === app.COMMIT_PREFIX + "\n pad ");
@@ -216,6 +228,53 @@ check("commitment message rejects empty, blank and non-string", app.commitmentMe
   check("near-miss secret (trailing space) does not verify", await app.verifyCommitment(c1, "the bridge opens on Friday ") === false);
   check("malformed commitment is null, not false", await app.verifyCommitment("xyz", "the bridge opens on Friday") === null && await app.verifyCommitment(c1.slice(0, 63), "the bridge opens on Friday") === null && await app.verifyCommitment(null, "x") === null);
   check("empty secret against a real commitment is null", await app.verifyCommitment(c1, "") === null);
+
+  /* Merkle trees — real SHA-256 inclusion proofs (async) */
+  const solo = await app.buildMerkleTree(["alice"]);
+  check("single-entry root is its leaf hash", solo.root === await app.merkleLeafHash("alice") && solo.size === 1);
+  check("leaf hash is domain-separated from a bare hash of the entry", solo.root !== await app.sha256Hex("alice"));
+  const soloProof = await app.getMerkleProof(["alice"], "alice");
+  check("single-entry proof is empty and verifies", soloProof.proof.length === 0 && await app.verifyMerkleProof("alice", soloProof.proof, soloProof.root) === true);
+  const pair = await app.buildMerkleTree(["alice", "bob"]);
+  const pairSwapped = await app.buildMerkleTree(["bob", "alice"]);
+  check("entry order changes the root", pair.root !== pairSwapped.root);
+  check("root is deterministic", (await app.buildMerkleTree(["alice", "bob"])).root === pair.root);
+  const four = ["alice", "bob", "carol", "dave"];
+  const fourTree = await app.buildMerkleTree(four);
+  let allFour = true;
+  for (const name of four) {
+    const p = await app.getMerkleProof(four, name);
+    if (!p || p.root !== fourTree.root || p.proof.length !== 2 ||
+        await app.verifyMerkleProof(name, p.proof, p.root) !== true) allFour = false;
+  }
+  check("every member of a 4-list proves with a 2-step proof that verifies", allFour);
+  const three = ["alice", "bob", "carol"];
+  const carolProof = await app.getMerkleProof(three, "carol");
+  check("odd leaf is promoted: 3-list last-entry proof has 1 step and verifies", carolProof.proof.length === 1 && await app.verifyMerkleProof("carol", carolProof.proof, carolProof.root) === true);
+  const five = ["a1", "b2", "c3", "d4", "e5"];
+  let allFive = true;
+  for (const name of five) {
+    const p = await app.getMerkleProof(five, name);
+    if (!p || await app.verifyMerkleProof(name, p.proof, p.root) !== true) allFive = false;
+  }
+  check("every member of a 5-list (two promotions deep) verifies", allFive);
+  const eightProof = await app.getMerkleProof(["a", "b", "c", "d", "e", "f", "g", "h"], "g");
+  check("proof length is log2 of list size for 8 entries", eightProof.proof.length === 3);
+  check("non-member gets no proof", await app.getMerkleProof(four, "mallory") === null);
+  const bobProof = await app.getMerkleProof(four, "bob");
+  check("non-member does not verify against a member's proof", await app.verifyMerkleProof("mallory", bobProof.proof, bobProof.root) === false);
+  check("a member's proof does not verify for a different member", await app.verifyMerkleProof("alice", bobProof.proof, bobProof.root) === false);
+  const tampered = bobProof.proof.map(s => ({ hash: s.hash, side: s.side }));
+  tampered[0] = { hash: await app.merkleLeafHash("mallory"), side: tampered[0].side };
+  check("tampered sibling does not verify", await app.verifyMerkleProof("bob", tampered, bobProof.root) === false);
+  check("proof against the wrong root does not verify", await app.verifyMerkleProof("bob", bobProof.proof, pair.root) === false);
+  check("verify tolerates uppercase and padded root", await app.verifyMerkleProof("bob", bobProof.proof, "  " + bobProof.root.toUpperCase() + " ") === true);
+  check("malformed root is null, not false", await app.verifyMerkleProof("bob", bobProof.proof, "xyz") === null && await app.verifyMerkleProof("bob", bobProof.proof, null) === null);
+  check("malformed proof steps are null, not false", await app.verifyMerkleProof("bob", [{ hash: "xyz", side: "left" }], bobProof.root) === null && await app.verifyMerkleProof("bob", [{ hash: bobProof.proof[0].hash, side: "up" }], bobProof.root) === null && await app.verifyMerkleProof("bob", "nope", bobProof.root) === null);
+  check("empty entry against a real root is null", await app.verifyMerkleProof("", [], bobProof.root) === null);
+  check("build rejects duplicates, empty and junk lists", await app.buildMerkleTree(["alice", "alice"]) === null && await app.buildMerkleTree([]) === null && await app.buildMerkleTree(null) === null && await app.buildMerkleTree(["alice", 42]) === null);
+  check("leaf hash rejects blank and non-string", await app.merkleLeafHash("") === null && await app.merkleLeafHash("  ") === null && await app.merkleLeafHash(null) === null);
+  check("proof never contains another entry in plain text", !JSON.stringify(bobProof).includes("carol") && !JSON.stringify(bobProof).includes("dave"));
 
   console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
   process.exit(failures === 0 ? 0 : 1);

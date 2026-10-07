@@ -318,6 +318,17 @@
           <p id="salt-result" role="status" aria-live="polite"></p>
         </form>
       </div>
+
+      <form class="tool" id="merkle">
+        <h3>12 · Prove you're on the list — without showing the list</h3>
+        <p>An allowlist, a voter roll, a set of eligible wallets: publish one short hash — the <em>root</em> — and the whole list is committed. Later, any one member can prove they're on it with a handful of sibling hashes, and a verifier who knows the root can check that proof without ever seeing the rest of the list. That structure is a Merkle tree, and the real SHA-256 for it runs locally here. Honestly labelled limits: a Merkle proof is <em>not</em> zero-knowledge — it reveals the entry itself, its position, the sibling hashes and (from the proof's length) the rough size of the list. The other entries stay behind their hashes, but a guessable entry can be checked by hashing a guess (tool 11's lesson), so real lists salt low-entropy entries. An odd entry at the end of a level is promoted unchanged, never duplicated. This page's hashed-message format is its own teaching format, not a specific chain's tree format — and nothing here connects to a chain or a wallet.</p>
+        <label for="merkle-entries">The list — one entry per line (up to 128, duplicates rejected)</label>
+        <textarea id="merkle-entries" rows="6" spellcheck="false" placeholder="alice-wallet&#10;bob-wallet&#10;carol-wallet"></textarea>
+        <label for="merkle-entry">Entry to prove</label>
+        <input id="merkle-entry" autocomplete="off" spellcheck="false" placeholder="e.g. bob-wallet">
+        <button type="submit" class="btn primary">Build &amp; verify my proof</button>
+        <div id="merkle-result" role="status" aria-live="polite"></div>
+      </form>
     </div>
   </section>
 
@@ -348,6 +359,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=9"></script>
+<script src="app.js?v=10"></script>
 </body>
 </html>

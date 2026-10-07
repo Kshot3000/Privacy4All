@@ -122,6 +122,20 @@ renewable resource that pays for shielded transactions.
   random characters, and human-chosen secrets are far more
   predictable — so its numbers are a ceiling on safety, never a
   guarantee. Everything runs locally; nothing is sent anywhere.
+- **Prove you're on the list — Merkle inclusion proofs** — paste a
+  list (an allowlist, a voter roll, a set of eligible wallets), get
+  its Merkle root, and build a real inclusion proof for any one
+  entry: the sibling hashes along its path, replayed and re-verified
+  against the root on the same page, so a verifier can confirm
+  membership without ever seeing the rest of the list. Real SHA-256
+  via Web Crypto, leaves domain-separated from internal nodes, odd
+  nodes promoted unchanged rather than duplicated, duplicates
+  rejected as proof-ambiguous. Honestly labelled: a Merkle proof is
+  not zero-knowledge — it reveals the entry, its position and the
+  rough size of the list, and guessable entries can be
+  dictionary-checked against their leaf hashes (tool 11's lesson).
+  The hashed-message format is a teaching format, not a specific
+  chain's tree format; nothing connects to a chain or a wallet.
 
 ## Guides
 

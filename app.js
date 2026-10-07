@@ -570,6 +570,146 @@ function saltedSecret(secret, saltHex) {
   return secret + "|" + salt;
 }
 
+/* ---------- 12. Prove you're on the list (Merkle inclusion proofs) ---------- */
+/* A real SHA-256 Merkle tree, built locally. Every entry is hashed into
+   a leaf (domain-separated from internal nodes by its prefix, so a leaf
+   can never be mistaken for a node), pairs of hashes are hashed into
+   parents level by level, and the single remaining hash — the root —
+   commits to the whole list. Publish just the root. Later, one entry
+   can be proved a member with only the sibling hashes along its path:
+   a verifier replays those hashes up to the root and checks it matches,
+   without ever seeing the other entries themselves.
+   An odd node at the end of a level is promoted to the next level
+   unchanged, never duplicated — duplicating the last leaf is a classic
+   Merkle pitfall (it lets one entry prove as if it were two slots).
+   Honest limits: a Merkle proof is NOT zero-knowledge. It reveals the
+   entry itself, its position, the sibling hashes, and (from the proof
+   length) the rough size of the list. The other entries stay behind
+   their hashes — but a guessable entry can be dictionary-checked by
+   hashing guesses, the tool-11 lesson, so real lists salt low-entropy
+   entries. This page's hashed-message format is its own teaching
+   format, not any specific chain's tree format. */
+var MERKLE_LEAF_PREFIX = "privacy4all-merkle-leaf-v1:";
+var MERKLE_NODE_PREFIX = "privacy4all-merkle-node-v1:";
+var MERKLE_MAX_ENTRIES = 128;
+
+function parseMerkleEntries(text) {
+  if (typeof text !== "string") return null;
+  return normalizeMerkleEntries(text.split(/\r?\n/));
+}
+
+function normalizeMerkleEntries(entries) {
+  if (!Array.isArray(entries)) return null;
+  var out = [];
+  var seen = {};
+  for (var i = 0; i < entries.length; i++) {
+    if (typeof entries[i] !== "string") return null;
+    var e = entries[i].trim();
+    if (e === "") continue;
+    if (seen[e]) return null; /* duplicates make a proof ambiguous */
+    seen[e] = true;
+    out.push(e);
+  }
+  if (out.length === 0 || out.length > MERKLE_MAX_ENTRIES) return null;
+  return out;
+}
+
+function merkleLeafHash(entry) {
+  if (typeof entry !== "string" || entry.trim() === "") return Promise.resolve(null);
+  return sha256Hex(MERKLE_LEAF_PREFIX + "\n" + entry.trim());
+}
+
+function merkleNodeHash(leftHex, rightHex) {
+  if (!/^[0-9a-f]{64}$/.test(leftHex || "") || !/^[0-9a-f]{64}$/.test(rightHex || "")) {
+    return Promise.resolve(null);
+  }
+  return sha256Hex(MERKLE_NODE_PREFIX + "\n" + leftHex + rightHex);
+}
+
+function buildMerkleTree(entries) {
+  var cleaned = normalizeMerkleEntries(entries);
+  if (!cleaned) return Promise.resolve(null);
+  return Promise.all(cleaned.map(function (e) { return merkleLeafHash(e); })).then(function (leafHashes) {
+    if (leafHashes.indexOf(null) >= 0) return null;
+    var levels = [leafHashes];
+    function step() {
+      var current = levels[levels.length - 1];
+      if (current.length <= 1) {
+        return { entries: cleaned.slice(), leafHashes: leafHashes.slice(),
+                 levels: levels, root: current[0], size: cleaned.length };
+      }
+      var next = [];
+      var jobs = [];
+      for (var i = 0; i < current.length; i += 2) {
+        if (i + 1 < current.length) {
+          (function (slot, left, right) {
+            jobs.push(merkleNodeHash(left, right).then(function (h) { next[slot] = h; }));
+          })(i / 2, current[i], current[i + 1]);
+        } else {
+          next[i / 2] = current[i]; /* odd node promoted unchanged */
+        }
+      }
+      return Promise.all(jobs).then(function () {
+        if (next.indexOf(null) >= 0) return null;
+        levels.push(next);
+        return step();
+      });
+    }
+    return step();
+  });
+}
+
+function getMerkleProof(entries, entry) {
+  var target = typeof entry === "string" ? entry.trim() : "";
+  if (target === "") return Promise.resolve(null);
+  return buildMerkleTree(entries).then(function (tree) {
+    if (!tree) return null;
+    var index = tree.entries.indexOf(target);
+    if (index < 0) return null;
+    var proof = [];
+    var cur = index;
+    for (var level = 0; level < tree.levels.length - 1; level++) {
+      var nodes = tree.levels[level];
+      if (cur % 2 === 1) proof.push({ hash: nodes[cur - 1], side: "left" });
+      else if (cur + 1 < nodes.length) proof.push({ hash: nodes[cur + 1], side: "right" });
+      /* else: this node was promoted — no sibling at this level */
+      cur = Math.floor(cur / 2);
+    }
+    return { entry: target, index: index, root: tree.root, size: tree.size,
+             leafHash: tree.leafHashes[index], proof: proof };
+  });
+}
+
+function verifyMerkleProof(entry, proof, rootHex) {
+  var root = typeof rootHex === "string" ? rootHex.trim().toLowerCase() : "";
+  if (!/^[0-9a-f]{64}$/.test(root)) return Promise.resolve(null);
+  if (!Array.isArray(proof)) return Promise.resolve(null);
+  var steps = [];
+  for (var i = 0; i < proof.length; i++) {
+    var s = proof[i];
+    if (!s || typeof s.hash !== "string") return Promise.resolve(null);
+    var h = s.hash.trim().toLowerCase();
+    if (!/^[0-9a-f]{64}$/.test(h) || (s.side !== "left" && s.side !== "right")) {
+      return Promise.resolve(null);
+    }
+    steps.push({ hash: h, side: s.side });
+  }
+  return merkleLeafHash(entry).then(function (leaf) {
+    if (leaf === null) return null;
+    var chain = Promise.resolve(leaf);
+    steps.forEach(function (s) {
+      chain = chain.then(function (cur) {
+        if (cur === null) return null;
+        return s.side === "left" ? merkleNodeHash(s.hash, cur) : merkleNodeHash(cur, s.hash);
+      });
+    });
+    return chain.then(function (finalHash) {
+      if (finalHash === null) return null;
+      return finalHash === root;
+    });
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -580,7 +720,10 @@ if (typeof module !== "undefined" && module.exports) {
                      getObserverView, OBSERVER_CATALOG,
                      getViewingView, VIEWING_CATALOG,
                      analyzeSecret, estimateCrackSeconds, formatApproxDuration,
-                     generateSaltHex, saltedSecret, GUESSES_PER_SECOND };
+                     generateSaltHex, saltedSecret, GUESSES_PER_SECOND,
+                     MERKLE_LEAF_PREFIX, MERKLE_NODE_PREFIX, MERKLE_MAX_ENTRIES,
+                     parseMerkleEntries, normalizeMerkleEntries, merkleLeafHash,
+                     buildMerkleTree, getMerkleProof, verifyMerkleProof };
 }
 
 if (typeof document !== "undefined") {
@@ -942,6 +1085,88 @@ if (typeof document !== "undefined") {
         "and the salt private, and reveal both together later so anyone can recompute the hash. While the salt stays " +
         "secret, a guesser must find it too — 128 extra random bits. If you publish the salt alongside the commitment " +
         "instead, it still defeats precomputed rainbow tables, but a weak secret can still be dictionary-guessed on its own.";
+    });
+
+    /* --- prove you're on the list — Merkle inclusion proofs --- */
+    document.getElementById("merkle").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var host = document.getElementById("merkle-result");
+      host.textContent = "";
+      var entries = parseMerkleEntries(document.getElementById("merkle-entries").value);
+      if (!entries) {
+        host.textContent = "Give me a clean list first: one entry per line, between 1 and " +
+          MERKLE_MAX_ENTRIES + " entries, with no duplicates — a duplicated entry makes its " +
+          "proof ambiguous (which copy is proved?), so duplicates are rejected, not merged.";
+        return;
+      }
+      var entry = document.getElementById("merkle-entry").value.trim();
+      if (!entry) {
+        host.textContent = "Type the entry you want to prove is on the list.";
+        return;
+      }
+      getMerkleProof(entries, entry).then(function (p) {
+        if (!p) {
+          host.textContent = "That entry is not on this list — entries must match exactly, " +
+            "character for character. No proof exists for a non-member, and that is the point: " +
+            "nobody can talk a verifier who knows the root into accepting one.";
+          return;
+        }
+        var intro = document.createElement("p");
+        var strong = document.createElement("strong");
+        strong.textContent = "Member — position " + (p.index + 1) + " of " + p.size + ". ";
+        intro.appendChild(strong);
+        intro.appendChild(document.createTextNode("Hand a verifier just three things — the entry " +
+          "itself, the proof below, and the published root — and they can confirm membership " +
+          "without ever seeing the rest of the list."));
+        host.appendChild(intro);
+        var rootP = document.createElement("p");
+        rootP.appendChild(document.createTextNode("List root (the one short value you publish): "));
+        var rootCode = document.createElement("code");
+        rootCode.textContent = p.root;
+        rootP.appendChild(rootCode);
+        host.appendChild(rootP);
+        var leafP = document.createElement("p");
+        leafP.appendChild(document.createTextNode("Your leaf hash: "));
+        var leafCode = document.createElement("code");
+        leafCode.textContent = p.leafHash;
+        leafP.appendChild(leafCode);
+        host.appendChild(leafP);
+        if (p.proof.length === 0) {
+          var solo = document.createElement("p");
+          solo.textContent = "Single-entry list: the root IS your leaf hash, so the proof is " +
+            "empty — anyone can hash the entry and compare it with the root directly.";
+          host.appendChild(solo);
+        } else {
+          var stepsP = document.createElement("p");
+          stepsP.textContent = "Proof — " + p.proof.length + " sibling hash" +
+            (p.proof.length === 1 ? "" : "es") + ", bottom level up. The verifier hashes your " +
+            "leaf together with each sibling, on the side named, level by level, and checks " +
+            "the final hash equals the root:";
+          host.appendChild(stepsP);
+          var ol = document.createElement("ol");
+          p.proof.forEach(function (s) {
+            var li = document.createElement("li");
+            li.appendChild(document.createTextNode("Sibling on the " + s.side + ": "));
+            var c = document.createElement("code");
+            c.textContent = s.hash;
+            li.appendChild(c);
+            ol.appendChild(li);
+          });
+          host.appendChild(ol);
+        }
+        return verifyMerkleProof(p.entry, p.proof, p.root).then(function (ok) {
+          var foot = document.createElement("p");
+          foot.textContent = (ok === true
+            ? "This page just re-verified it: replaying the proof lands exactly on the root. "
+            : "Verification did not come back clean — that should not happen for a proof this " +
+              "page just built, so treat the list above as suspect. ") +
+            "What the verifier learned: the entry itself, its position, the sibling hashes and " +
+            "(from the proof length) the rough size of the list. Every other entry stayed " +
+            "behind its hash — a Merkle proof hides a list's contents, it does not hide the " +
+            "membership it proves. Teaching format, run locally — nothing left this page.";
+          host.appendChild(foot);
+        });
+      });
     });
 
     /* --- copy donation address --- */
