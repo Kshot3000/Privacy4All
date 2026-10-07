@@ -63,6 +63,12 @@ renewable resource that pays for shielded transactions.
   (balance, history, viewing key, blind signing…) and get a plain-language
   exposure rating for each, with the Midnight alternative: prove it
   instead of showing it. Never connects a wallet or signs anything.
+- **Prove it, don't show it — ZK claim simulator** — pick a claim (age,
+  balance, income, membership length), enter a private value and a
+  threshold, and see exactly what a verifier learns from a zero-knowledge
+  proof (the claim, and whether it holds) and what stays hidden. Honestly
+  labelled a teaching simulation, not a cryptographic proof: the exact
+  BigInt comparison runs locally in your browser.
 
 ## Guides
 

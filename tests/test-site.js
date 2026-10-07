@@ -27,9 +27,11 @@ check("Midnight team X tag in README", readme.includes("@MidnightNtwrk"));
 /* document structure */
 check("exactly one <h1>", (html.match(/<h1[ >]/g) || []).length === 1);
 check("has <main> landmark", /<main[\s>]/.test(html));
-check("all main form controls labelled", ["q", "redact-in", "night"].every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=2"));
+check("all main form controls labelled", ["q", "redact-in", "night", "claim", "secret", "threshold"].every(id => html.includes(`for="${id}"`)));
+check("cache keys present", html.includes("styles.css?v=2") && html.includes("app.js?v=3"));
 check("dApp permission tool present", html.includes('id="dapp-see"') && html.includes('id="dapp-result"'));
+check("ZK claim simulator present", html.includes('id="zk-prover"') && html.includes('id="zk-result"'));
+check("ZK simulator honestly labelled a simulation", html.includes("teaching simulation, not a cryptographic proof"));
 
 /* flagship links */
 for (const url of ["https://kshot3000.github.io/Night-Messenger-/", "https://kshot3000.github.io/PlutusShield/",
@@ -84,6 +86,21 @@ check("every permission has a plain-language note", Object.values(app.PERMISSION
 check("every HTML permission value exists in catalog", ["viewAddress", "viewBalance", "viewTxHistory", "viewContacts", "signTransaction", "signArbitrary", "viewingKey", "offchainData"].every(v => html.includes(`value="${v}"`) && app.PERMISSION_CATALOG[v]));
 check("dApp checker counts unknown, not crashes", app.assessDappPermissions(["nope"]).tally.unknown === 1);
 check("dApp checker empty is none", app.assessDappPermissions([]).overall === "none" && app.assessDappPermissions(null).overall === "none");
+
+/* ZK claim simulator — exact comparison, statement reveals no secret */
+const proof = app.evaluateProof("age", "34", "18");
+check("age 34 proves 18+", proof.proved === true && proof.statement === "Age is at least 18");
+check("statement and revealed facts hide the secret value", !proof.statement.includes("34") && !proof.revealed.join(" ").includes("34"));
+check("exact threshold meets the claim", app.evaluateProof("age", "18", "18").proved === true);
+check("below threshold does not prove", app.evaluateProof("balance", "99.5", "100").proved === false);
+check("fractional comparison is exact", app.evaluateProof("balance", "0.000001", "0.000001").proved === true && app.evaluateProof("balance", "100.000001", "100").proved === true);
+check("threshold is normalised in the statement", app.evaluateProof("income", "5000", "4000.500000").statement === "Income is at least 4000.5");
+check("membership statement names months", app.evaluateProof("membership", "14", "12").statement === "Membership length is at least 12 months");
+check("every claim explains what stays hidden", Object.values(app.CLAIM_CATALOG).every(c => c.hidden.length > 30 && c.label.length > 2));
+check("every HTML claim value exists in catalog", ["age", "balance", "income", "membership"].every(v => html.includes(`value="${v}"`) && app.CLAIM_CATALOG[v]));
+check("proof rejects junk, negatives and 7 decimals", app.evaluateProof("age", "abc", "18") === null && app.evaluateProof("age", "-1", "18") === null && app.evaluateProof("age", "18", "0.0000001") === null && app.evaluateProof("age", "", "18") === null);
+check("proof rejects unknown claim and null input", app.evaluateProof("nope", "1", "1") === null && app.evaluateProof("age", null, null) === null);
+check("failed proof still hides the secret", !app.evaluateProof("balance", "12345", "99999").revealed.join(" ").includes("12345"));
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

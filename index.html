@@ -10,7 +10,7 @@
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://kshot3000.github.io/Privacy4All/">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23120724'/%3E%3Cpath d='M21 7a11 11 0 1 0 4 15A13 13 0 0 1 21 7z' fill='%23a78bfa'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="styles.css?v=1">
+<link rel="stylesheet" href="styles.css?v=2">
 </head>
 <body>
 <a class="skip" href="#main">Skip to main content</a>
@@ -206,6 +206,24 @@
         <button type="submit" class="btn primary">Check what it sees</button>
         <div id="dapp-result" role="status" aria-live="polite"></div>
       </form>
+
+      <form class="tool" id="zk-prover">
+        <h3>5 · Prove it, don’t show it — ZK claim simulator</h3>
+        <p>Pick a claim, type the private value only you should know, and set the threshold. The simulator shows exactly what a verifier learns from a Midnight zero-knowledge proof — the claim, and whether it holds — and what stays hidden. It is a teaching simulation, not a cryptographic proof: the comparison runs locally on this device and your value never leaves this page.</p>
+        <label for="claim">Claim to prove</label>
+        <select id="claim">
+          <option value="age">I am old enough</option>
+          <option value="balance">My balance covers it</option>
+          <option value="income">My income qualifies</option>
+          <option value="membership">I have been a member long enough</option>
+        </select>
+        <label for="secret">Your private value (stays on this page)</label>
+        <input id="secret" inputmode="decimal" placeholder="e.g. 34" autocomplete="off">
+        <label for="threshold">Threshold to prove against</label>
+        <input id="threshold" inputmode="decimal" placeholder="e.g. 18" autocomplete="off">
+        <button type="submit" class="btn primary">Prove the claim</button>
+        <div id="zk-result" role="status" aria-live="polite"></div>
+      </form>
     </div>
   </section>
 
@@ -236,6 +254,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=2"></script>
+<script src="app.js?v=3"></script>
 </body>
 </html>

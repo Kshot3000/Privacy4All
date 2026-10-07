@@ -41,7 +41,7 @@ h3{margin:.2rem 0 .5rem}
   border-radius:var(--radius);padding:1rem 1.2rem;color:var(--muted)}
 .concept-list strong{color:var(--ink)}
 .filter-row{display:grid;gap:.7rem;margin:1rem 0}
-.filter-row input,.tool input,.tool textarea{background:var(--panel);border:1px solid var(--line);
+.filter-row input,.tool input,.tool textarea,.tool select{background:var(--panel);border:1px solid var(--line);
   border-radius:10px;color:var(--ink);padding:.6rem .8rem;font:inherit;width:100%}
 .chips{display:flex;gap:.5rem;flex-wrap:wrap}
 .chip{padding:.35rem .9rem;border-radius:999px;border:1px solid var(--line);background:var(--panel);

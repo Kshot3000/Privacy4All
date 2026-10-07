@@ -125,9 +125,60 @@ function assessDappPermissions(keys) {
   return { items: items, tally: tally, overall: overall };
 }
 
+/* ---------- 5. Prove it, don't show it — ZK claim simulator ---------- */
+/* A teaching simulation, NOT a cryptographic proof: the comparison happens
+   locally in this page, exactly so the visitor can see what a real Midnight
+   ZK proof reveals (the claim and whether it holds) and what it hides (the
+   underlying value). Amounts are compared as exact BigInt micro-units. */
+var CLAIM_CATALOG = {
+  age:        { label: "I am old enough",
+                statement: function (t) { return "Age is at least " + t; },
+                hidden: "Your exact age and your date of birth stay private — the verifier learns only whether the age threshold is met, never the date itself." },
+  balance:    { label: "My balance covers it",
+                statement: function (t) { return "Wallet balance is at least " + t; },
+                hidden: "Your exact balance, wallet address and transaction history stay private — the verifier learns only whether the amount is covered." },
+  income:     { label: "My income qualifies",
+                statement: function (t) { return "Income is at least " + t; },
+                hidden: "Your exact income, employer and payslips stay private — the verifier learns only whether the income threshold is met." },
+  membership: { label: "I have been a member long enough",
+                statement: function (t) { return "Membership length is at least " + t + " months"; },
+                hidden: "Your join date and account history stay private — the verifier learns only whether you have been a member for the required period." }
+};
+
+function parseMicro(str) {
+  var s = (str == null ? "" : String(str)).trim();
+  if (!/^\d+(\.\d{1,6})?$/.test(s)) return null;
+  var parts = s.split(".");
+  return BigInt(parts[0]) * 1000000n + BigInt(((parts[1] || "") + "000000").slice(0, 6));
+}
+
+function formatMicro(micro) {
+  var whole = micro / 1000000n;
+  var frac = (micro % 1000000n).toString().padStart(6, "0").replace(/0+$/, "");
+  return frac ? whole.toString() + "." + frac : whole.toString();
+}
+
+function evaluateProof(claimKey, secretStr, thresholdStr) {
+  var claim = CLAIM_CATALOG[claimKey];
+  if (!claim) return null;
+  var secret = parseMicro(secretStr);
+  var threshold = parseMicro(thresholdStr);
+  if (secret === null || threshold === null) return null;
+  var statement = claim.statement(formatMicro(threshold));
+  var proved = secret >= threshold;
+  return {
+    claim: claimKey,
+    proved: proved,
+    statement: statement,
+    revealed: [statement, proved ? "The claim is true" : "The claim is not true"],
+    hidden: claim.hidden
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
-                     assessDappPermissions, PERMISSION_CATALOG };
+                     assessDappPermissions, PERMISSION_CATALOG,
+                     evaluateProof, CLAIM_CATALOG };
 }
 
 if (typeof document !== "undefined") {
@@ -245,6 +296,35 @@ if (typeof document !== "undefined") {
         none: "" }[result.overall];
       summary.textContent = "Overall: " + verdict + " Assessment done locally — nothing about your wallet left this page. This tool never connects a wallet or signs anything.";
       host.appendChild(summary);
+    });
+
+    /* --- prove it, don't show it — ZK claim simulator --- */
+    document.getElementById("zk-prover").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var result = evaluateProof(document.getElementById("claim").value,
+        document.getElementById("secret").value, document.getElementById("threshold").value);
+      var host = document.getElementById("zk-result");
+      host.textContent = "";
+      if (!result) {
+        host.textContent = "Enter your private value and the threshold as numbers (a whole number, or up to 6 decimal places).";
+        return;
+      }
+      var sees = document.createElement("p");
+      var strongSees = document.createElement("strong");
+      strongSees.textContent = result.proved ? "Proved — without showing the value. " : "Not proved. ";
+      sees.appendChild(strongSees);
+      sees.appendChild(document.createTextNode("A verifier sees only this: “" + result.statement +
+        "” — and whether it is true (" + (result.proved ? "yes" : "no") + ")."));
+      host.appendChild(sees);
+      var hides = document.createElement("p");
+      var strongHides = document.createElement("strong");
+      strongHides.textContent = "What stays hidden: ";
+      hides.appendChild(strongHides);
+      hides.appendChild(document.createTextNode(result.hidden));
+      host.appendChild(hides);
+      var note = document.createElement("p");
+      note.textContent = "This is a local simulation of the pattern, not a cryptographic proof: your value was compared on this device only and never left this page. On Midnight, a real zero-knowledge proof gives the verifier the same two facts — the claim, and that it holds — with the value itself staying in your private state.";
+      host.appendChild(note);
     });
 
     /* --- copy donation address --- */
