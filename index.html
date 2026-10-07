@@ -399,6 +399,31 @@
           <p id="shamir-join-result" role="status" aria-live="polite"></p>
         </form>
       </div>
+
+      <div class="tool" id="sealed-message">
+        <h3>16 · Seal it so only they can read it — password-encrypted messages</h3>
+        <p>A hash (tools 8, 12, 14) is one-way — nobody can un-hash it. Encryption is the opposite tool: reversible, but only for whoever holds the key. Seal a message here and it is encrypted for real, locally on this device, with AES-GCM: your password is stretched by PBKDF2 (210,000 rounds, a fresh random salt per seal) into the key, and the sealed text — safe to publish on its own — carries only the salt, the IV and the ciphertext. AES-GCM is authenticated, so a wrong password or one changed character fails to open instead of returning gibberish. Honestly labelled limits: this is a teaching implementation, not an audited encryption product, and its safety is exactly your password's safety — PBKDF2 slows offline guessing but cannot save a weak password (tool 11 measures that), and the sealed text's length reveals the message's approximate length. Send the password by a different channel from the sealed text: anyone with both can read it. Never paste a real seed phrase or production secret into any web page, including this one — practise with throwaway messages.</p>
+        <form id="seal-make">
+          <label for="seal-message">Throwaway message to seal (stays on this page)</label>
+          <textarea id="seal-message" rows="3" spellcheck="false" placeholder="e.g. the meeting moves to the blue room at nine"></textarea>
+          <label for="seal-password">Password to seal it with</label>
+          <input id="seal-password" type="password" autocomplete="off" spellcheck="false" placeholder="A long, unique passphrase">
+          <button type="submit" class="btn primary">Seal it locally</button>
+          <label for="seal-out">Your sealed message — safe to share on its own</label>
+          <textarea id="seal-out" rows="3" readonly spellcheck="false"></textarea>
+          <p id="seal-result" role="status" aria-live="polite"></p>
+        </form>
+        <form id="seal-open">
+          <label for="open-sealed">Sealed message to open (one p4a-sealed-v1 line)</label>
+          <textarea id="open-sealed" rows="3" spellcheck="false" placeholder="p4a-sealed-v1:…"></textarea>
+          <label for="open-password">Its password</label>
+          <input id="open-password" type="password" autocomplete="off" spellcheck="false" placeholder="Typed exactly as it was sealed">
+          <button type="submit" class="btn primary">Open it locally</button>
+          <label for="open-out">The opened message</label>
+          <textarea id="open-out" rows="3" readonly spellcheck="false"></textarea>
+          <p id="open-result" role="status" aria-live="polite"></p>
+        </form>
+      </div>
     </div>
   </section>
 
@@ -429,6 +454,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=13"></script>
+<script src="app.js?v=14"></script>
 </body>
 </html>

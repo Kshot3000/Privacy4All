@@ -27,8 +27,8 @@ check("Midnight team X tag in README", readme.includes("@MidnightNtwrk"));
 /* document structure */
 check("exactly one <h1>", (html.match(/<h1[ >]/g) || []).length === 1);
 check("has <main> landmark", /<main[\s>]/.test(html));
-check("all main form controls labelled", ["q", "redact-in", "night", "claim", "secret", "threshold", "snippet-select", "life-night", "life-spend", "life-txs", "commit-secret", "commit-out", "check-commitment", "check-secret", "observer-select", "viewing-select", "strength-secret", "salt-out", "merkle-entries", "merkle-entry", "split-secret", "split-count", "split-out", "join-in", "join-out", "note-secret", "note-commit-out", "spend-secret", "spend-nullifier-out", "shamir-secret", "shamir-threshold", "shamir-count", "shamir-out", "shamir-join-in", "shamir-join-out"].every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=3") && html.includes("app.js?v=13"));
+check("all main form controls labelled", ["q", "redact-in", "night", "claim", "secret", "threshold", "snippet-select", "life-night", "life-spend", "life-txs", "commit-secret", "commit-out", "check-commitment", "check-secret", "observer-select", "viewing-select", "strength-secret", "salt-out", "merkle-entries", "merkle-entry", "split-secret", "split-count", "split-out", "join-in", "join-out", "note-secret", "note-commit-out", "spend-secret", "spend-nullifier-out", "shamir-secret", "shamir-threshold", "shamir-count", "shamir-out", "shamir-join-in", "shamir-join-out", "seal-message", "seal-password", "seal-out", "open-sealed", "open-password", "open-out"].every(id => html.includes(`for="${id}"`)));
+check("cache keys present", html.includes("styles.css?v=3") && html.includes("app.js?v=14"));
 check("dApp permission tool present", html.includes('id="dapp-see"') && html.includes('id="dapp-result"'));
 check("ZK claim simulator present", html.includes('id="zk-prover"') && html.includes('id="zk-result"'));
 check("ZK simulator honestly labelled a simulation", html.includes("teaching simulation, not a cryptographic proof"));
@@ -212,6 +212,12 @@ check("shamir tool honestly states there is no checksum, so a wrong share rebuil
 check("shamir tool states fewer than k shares reveal nothing", html.includes("k−1 shares are consistent with every possible secret"));
 check("shamir tool states a share's length leaks the secret's length", html.includes("a share's length leaks the secret's length"));
 check("tool 13 now points at tool 15 for Shamir", html.includes("not implemented by this tool (tool 15 below implements it)"));
+check("sealed-message tool present", html.includes('id="sealed-message"') && html.includes('id="seal-make"') && html.includes('id="seal-open"') && html.includes('id="seal-out"') && html.includes('id="open-out"'));
+check("sealed-message tool honestly labelled a teaching implementation, not audited", html.includes("teaching implementation, not an audited encryption product") && html.includes("encrypted for real, locally"));
+check("sealed-message tool honestly states password is its safety and length leaks", html.includes("its safety is exactly your password's safety") && html.includes("length reveals the message's approximate length"));
+check("sealed-message tool states GCM authentication fails rather than gibberish", html.includes("fails to open instead of returning gibberish"));
+check("sealed-message tool states PBKDF2 parameters plainly", html.includes("PBKDF2 (210,000 rounds, a fresh random salt per seal)"));
+check("sealed constants are the labelled values", app.SEAL_FORMAT === "p4a-sealed-v1" && app.SEAL_ITERATIONS === 210000 && app.SEAL_MAX_MESSAGE_CHARS === 2000);
 
 /* XOR secret sharing — real local sharing, complete sets only */
 const split3 = app.splitSecret("the cake is in the blue locker", 3);
@@ -377,6 +383,29 @@ check("commitment message rejects empty, blank and non-string", app.commitmentMe
   check("attemptSpend tolerates uppercase ledger entries", (await app.attemptSpend([noteA.toUpperCase()], [], "locker note number seven")).status === "spent");
   check("attemptSpend rejects malformed ledgers and empty secrets as null, not a verdict", await app.attemptSpend(["xyz"], [], "locker note number seven") === null && await app.attemptSpend(ledger, ["xyz"], "locker note number seven") === null && await app.attemptSpend(ledger, [], "") === null && await app.attemptSpend(null, null, null) === null);
   check("a near-miss secret (trailing space) is a different, unknown note", (await app.attemptSpend(ledger, [], "locker note number seven ")).status === "unknown-note");
+
+  /* sealed messages — real AES-GCM via Web Crypto, PBKDF2 key (async) */
+  const sealed1 = await app.sealMessage("the meeting moves to the blue room at nine", "correct horse battery staple");
+  check("sealed text carries the versioned format with 16-byte salt and 12-byte IV", /^p4a-sealed-v1:[0-9a-f]{32}:[0-9a-f]{24}:[0-9a-f]+$/.test(sealed1));
+  check("sealed text never contains the message or the password", !sealed1.includes("blue room") && !sealed1.includes("correct horse"));
+  check("ciphertext hex length is plaintext bytes plus the 16-byte GCM tag", sealed1.split(":")[3].length === 2 * ("the meeting moves to the blue room at nine".length + 16));
+  check("the right password opens the exact message", await app.unsealMessage(sealed1, "correct horse battery staple") === "the meeting moves to the blue room at nine");
+  check("unseal tolerates uppercase and padded sealed text", await app.unsealMessage("  " + sealed1.toUpperCase() + " ", "correct horse battery staple") === "the meeting moves to the blue room at nine");
+  check("exact message is preserved by sealing, spaces and unicode included", await app.unsealMessage(await app.sealMessage(" sécret — code 42 ", "pw-nine-nine"), "pw-nine-nine") === " sécret — code 42 ");
+  const sealed2 = await app.sealMessage("the meeting moves to the blue room at nine", "correct horse battery staple");
+  check("two seals of the same message under one password differ (fresh salt and IV)", sealed2 !== sealed1 && await app.unsealMessage(sealed2, "correct horse battery staple") === "the meeting moves to the blue room at nine");
+  check("a wrong password opens nothing", await app.unsealMessage(sealed1, "correct horse battery staple!") === null && await app.unsealMessage(sealed1, "wrong") === null);
+  check("a near-miss password (trailing space) opens nothing — passwords are exact", await app.unsealMessage(sealed1, "correct horse battery staple ") === null);
+  const tamperedSealed = (() => { const p = sealed1.split(":"); p[3] = (p[3][0] === "0" ? "1" : "0") + p[3].slice(1); return p.join(":"); })();
+  check("one changed ciphertext character opens nothing (GCM authentication)", await app.unsealMessage(tamperedSealed, "correct horse battery staple") === null);
+  check("a truncated-but-parseable seal opens nothing (GCM catches what parsing cannot)", await app.unsealMessage(sealed1.slice(0, sealed1.length - 40), "correct horse battery staple") === null);
+  const swappedSalt = (() => { const a = sealed1.split(":"); const b = sealed2.split(":"); return [a[0], b[1], a[2], a[3]].join(":"); })();
+  check("a swapped salt opens nothing", await app.unsealMessage(swappedSalt, "correct horse battery staple") === null);
+  check("parseSealed reads a valid seal", (() => { const p = app.parseSealed(sealed1); return p !== null && p.salt.length === 16 && p.iv.length === 12 && p.cipher.length === "the meeting moves to the blue room at nine".length + 16; })());
+  check("parseSealed rejects junk, wrong sizes and short ciphertext", app.parseSealed("hello") === null && app.parseSealed(null) === null && app.parseSealed("p4a-sealed-v1:abcd:abcd:abcd") === null && app.parseSealed("p4a-sealed-v1:" + "ab".repeat(16) + ":" + "cd".repeat(12) + ":" + "ef".repeat(10)) === null && app.parseSealed(sealed1.slice(0, 20)) === null);
+  check("unseal rejects malformed text and blank passwords as null", await app.unsealMessage("p4a-sealed-v1:xyz", "pw") === null && await app.unsealMessage(sealed1, "") === null && await app.unsealMessage(sealed1, "   ") === null && await app.unsealMessage(null, null) === null);
+  check("seal rejects empty, blank, non-string and over-long messages", await app.sealMessage("", "pw") === null && await app.sealMessage("   ", "pw") === null && await app.sealMessage(null, "pw") === null && await app.sealMessage("x".repeat(app.SEAL_MAX_MESSAGE_CHARS + 1), "pw") === null);
+  check("seal rejects blank and non-string passwords", await app.sealMessage("hello", "") === null && await app.sealMessage("hello", "   ") === null && await app.sealMessage("hello", null) === null && await app.sealMessage("hello", 42) === null);
 
   console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
   process.exit(failures === 0 ? 0 : 1);

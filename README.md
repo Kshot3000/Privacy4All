@@ -177,6 +177,22 @@ renewable resource that pays for shielded transactions.
   rebuilds a wrong secret silently, and a share's length leaks the
   secret's length. Never paste a real seed phrase into any web page,
   including this one.
+- **Seal it so only they can read it — password-encrypted messages** —
+  the reversible counterpart to the hash tools: seal a throwaway
+  message with a password and it is encrypted for real, locally,
+  with AES-GCM — the password stretched by PBKDF2-HMAC-SHA-256
+  (210,000 rounds, fresh random 16-byte salt and 12-byte IV per
+  seal) into a 256-bit key, in a versioned `p4a-sealed-v1` format.
+  The sealed text is safe to share on its own; only the password
+  opens it, and because GCM is authenticated, a wrong password or
+  one changed character fails outright instead of returning
+  gibberish. Honestly labelled a teaching implementation, not an
+  audited encryption product: its safety is exactly the password's
+  safety (PBKDF2 slows offline guessing but cannot save a weak
+  password), the sealed length reveals the message's approximate
+  length, and anyone with both the sealed text and the password
+  can read it — so share them by different channels. Never paste a
+  real seed phrase into any web page, including this one.
 
 ## Guides
 

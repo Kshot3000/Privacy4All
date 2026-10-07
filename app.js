@@ -4,8 +4,9 @@
    a "what does this dApp see?" permission explainer, a ZK claim
    simulator, a Compact snippet library, a DUST lifecycle explainer,
    a SHA-256 hash commitment maker/checker, a public-vs-shielded
-   ledger observer explainer, a viewing-key scope simulator, and a
-   commitment secret-strength checker with a random salt generator.
+   ledger observer explainer, a viewing-key scope simulator, a
+   commitment secret-strength checker with a random salt generator,
+   and a password-sealed (AES-GCM) message tool.
    Everything runs locally. Pure functions are exported for tests. */
 
 /* ---------- 1. Redactor ---------- */
@@ -1068,6 +1069,114 @@ function combineThresholdShares(input) {
   return secret;
 }
 
+/* ---------- 16. Seal it so only they can read it ---------- */
+/* Hashing (tools 8, 12, 14) is one-way: nobody can un-hash a
+   commitment. ENCRYPTION is the opposite tool: reversible, but only
+   for whoever holds the key. This tool seals a message with a
+   password: PBKDF2-HMAC-SHA-256 (SEAL_ITERATIONS rounds, a fresh
+   random 16-byte salt per seal) stretches the password into a
+   256-bit key, and AES-GCM encrypts the message under a fresh
+   random 12-byte IV. The sealed text carries salt, IV and
+   ciphertext — all safe to publish — in one versioned line:
+   p4a-sealed-v1:<saltHex>:<ivHex>:<cipherHex>. GCM is
+   authenticated: a wrong password or a single changed character
+   makes opening FAIL outright, instead of returning gibberish —
+   the integrity check tools 13/15 honestly lack.
+   Honest limits: this is a teaching implementation, not an audited
+   encryption product. Its safety is exactly the password's safety:
+   PBKDF2 slows an offline guessing attack but cannot save a weak
+   or reused password (tool 11 measures that), and the ciphertext
+   length reveals the message's approximate length. Anyone who gets
+   BOTH the sealed text and the password can read the message —
+   share them by different channels. Never paste a real seed phrase
+   or production secret into any web page, including this one —
+   practise with throwaway messages. */
+var SEAL_FORMAT = "p4a-sealed-v1";
+var SEAL_ITERATIONS = 210000;
+var SEAL_MAX_MESSAGE_CHARS = 2000;
+var SEAL_SALT_BYTES = 16;
+var SEAL_IV_BYTES = 12;
+
+function hexToBytes(hex) {
+  if (typeof hex !== "string" || hex.length === 0 || hex.length % 2 !== 0 ||
+      !/^[0-9a-f]+$/.test(hex)) return null;
+  var bytes = new Uint8Array(hex.length / 2);
+  for (var i = 0; i < bytes.length; i++) {
+    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
+  return bytes;
+}
+
+function parseSealed(text) {
+  if (typeof text !== "string") return null;
+  var m = text.trim().toLowerCase().match(/^p4a-sealed-v1:([0-9a-f]+):([0-9a-f]+):([0-9a-f]+)$/);
+  if (!m) return null;
+  var salt = hexToBytes(m[1]);
+  var iv = hexToBytes(m[2]);
+  var cipher = hexToBytes(m[3]);
+  if (!salt || !iv || !cipher) return null;
+  if (salt.length !== SEAL_SALT_BYTES || iv.length !== SEAL_IV_BYTES) return null;
+  /* GCM tag is 16 bytes, so ciphertext is at least 1 byte + tag. */
+  if (cipher.length < 17) return null;
+  return { salt: salt, iv: iv, cipher: cipher };
+}
+
+function validSealInputs(message, password) {
+  return typeof message === "string" && message.trim() !== "" &&
+    message.length <= SEAL_MAX_MESSAGE_CHARS &&
+    typeof password === "string" && password.trim() !== "";
+}
+
+function deriveSealKey(password, salt) {
+  var subtle = (typeof globalThis !== "undefined" && globalThis.crypto && globalThis.crypto.subtle) || null;
+  if (!subtle || typeof subtle.importKey !== "function") return Promise.resolve(null);
+  return subtle.importKey("raw", secretToBytes(password), "PBKDF2", false, ["deriveKey"])
+    .then(function (base) {
+      return subtle.deriveKey(
+        { name: "PBKDF2", salt: salt, iterations: SEAL_ITERATIONS, hash: "SHA-256" },
+        base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+    }, function () { return null; })
+    .then(function (key) { return key || null; }, function () { return null; });
+}
+
+function sealMessage(message, password) {
+  if (!validSealInputs(message, password)) return Promise.resolve(null);
+  var cryptoObj = (typeof globalThis !== "undefined" && globalThis.crypto) || null;
+  if (!cryptoObj || typeof cryptoObj.getRandomValues !== "function" || !cryptoObj.subtle) {
+    return Promise.resolve(null);
+  }
+  var salt = new Uint8Array(SEAL_SALT_BYTES);
+  cryptoObj.getRandomValues(salt);
+  var iv = new Uint8Array(SEAL_IV_BYTES);
+  cryptoObj.getRandomValues(iv);
+  return deriveSealKey(password, salt).then(function (key) {
+    if (!key) return null;
+    return cryptoObj.subtle.encrypt({ name: "AES-GCM", iv: iv }, key, secretToBytes(message))
+      .then(function (buf) {
+        return SEAL_FORMAT + ":" + shareBytesToHex(salt) + ":" + shareBytesToHex(iv) +
+          ":" + shareBytesToHex(new Uint8Array(buf));
+      }, function () { return null; });
+  });
+}
+
+function unsealMessage(sealed, password) {
+  var parsed = parseSealed(sealed);
+  if (!parsed) return Promise.resolve(null);
+  if (typeof password !== "string" || password.trim() === "") return Promise.resolve(null);
+  var cryptoObj = (typeof globalThis !== "undefined" && globalThis.crypto) || null;
+  if (!cryptoObj || !cryptoObj.subtle) return Promise.resolve(null);
+  return deriveSealKey(password, parsed.salt).then(function (key) {
+    if (!key) return null;
+    return cryptoObj.subtle.decrypt({ name: "AES-GCM", iv: parsed.iv }, key, parsed.cipher)
+      .then(function (buf) {
+        var msg = bytesToSecret(new Uint8Array(buf));
+        if (msg === null || msg.trim() === "") return null;
+        if (msg.length > SEAL_MAX_MESSAGE_CHARS) return null;
+        return msg;
+      }, function () { return null; /* wrong password or tampered — GCM refuses */ });
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -1087,7 +1196,9 @@ if (typeof module !== "undefined" && module.exports) {
                      NOTE_COMMIT_PREFIX, NOTE_NULLIFIER_PREFIX,
                      noteCommitment, noteNullifier, normalizeHexList, attemptSpend,
                      SHAMIR_FORMAT, SHAMIR_MIN_THRESHOLD, SHAMIR_MAX_COUNT,
-                     gfMul, gfDiv, splitThresholdSecret, parseShamirShare, combineThresholdShares };
+                     gfMul, gfDiv, splitThresholdSecret, parseShamirShare, combineThresholdShares,
+                     SEAL_FORMAT, SEAL_ITERATIONS, SEAL_MAX_MESSAGE_CHARS,
+                     parseSealed, sealMessage, unsealMessage };
 }
 
 if (typeof document !== "undefined") {
@@ -1677,6 +1788,49 @@ if (typeof document !== "undefined") {
         "secret, character for character. Nothing left this page. Read it carefully before trusting " +
         "it: this scheme has no checksum, so if one share was wrong the rebuilt text would be wrong " +
         "too, with no error shown.";
+    });
+
+    /* --- seal it so only they can read it — AES-GCM --- */
+    document.getElementById("seal-make").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("seal-out");
+      var status = document.getElementById("seal-result");
+      status.textContent = "Sealing locally…";
+      sealMessage(document.getElementById("seal-message").value,
+        document.getElementById("seal-password").value).then(function (sealed) {
+        if (!sealed) {
+          out.value = "";
+          status.textContent = "Enter a throwaway message (up to " + SEAL_MAX_MESSAGE_CHARS +
+            " characters) and a password that is not blank. Never a real seed phrase — see the warning above.";
+          return;
+        }
+        out.value = sealed;
+        status.textContent = "Sealed locally — your message and password never left this page. " +
+          "The sealed text is safe to share on its own: it can only be opened with the password, " +
+          "so send the password by a different channel. Anyone with both can read it, a weak " +
+          "password can still be guessed offline (tool 11 measures that), and the sealed text's " +
+          "length hints at the message's length.";
+      });
+    });
+    document.getElementById("seal-open").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("open-out");
+      var status = document.getElementById("open-result");
+      status.textContent = "Opening locally…";
+      unsealMessage(document.getElementById("open-sealed").value,
+        document.getElementById("open-password").value).then(function (msg) {
+        if (msg === null) {
+          out.value = "";
+          status.textContent = "That does not open: the password is wrong, or the sealed text " +
+            "was changed or pasted incompletely. AES-GCM checks integrity as it decrypts, so a " +
+            "wrong password and a tampered message fail the same way — it never returns gibberish " +
+            "for you to guess at. Check the password and paste the whole sealed line.";
+          return;
+        }
+        out.value = msg;
+        status.textContent = "Opened locally — exactly the message that was sealed, character " +
+          "for character. Nothing left this page.";
+      });
     });
 
     /* --- copy donation address --- */
