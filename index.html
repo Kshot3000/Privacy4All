@@ -287,6 +287,20 @@
         <button type="submit" class="btn primary">Show me the observer's view</button>
         <div id="observer-result" role="status" aria-live="polite"></div>
       </form>
+
+      <form class="tool" id="viewing-key">
+        <h3>10 · Share a view, not your wallet — viewing-key scope simulator</h3>
+        <p>Sometimes someone legitimately needs to check your shielded activity — an accountant, an auditor, a counterparty. The Midnight pattern is to disclose the <em>narrowest scope</em> that answers their question. Pick a scope and see what a viewer gets, what stays yours, and what to weigh first. This is a simplified teaching model of scoped disclosure in principle: exact viewing-key and disclosure capabilities depend on your wallet and the contract involved, so check the current Midnight docs before granting a real one. No key is entered, generated or connected here — never paste a real viewing key into a web page.</p>
+        <label for="viewing-select">Disclosure scope</label>
+        <select id="viewing-select">
+          <option value="single-transaction">A single transaction — one payment, one claim</option>
+          <option value="single-counterparty">One counterparty — one employer, client or merchant</option>
+          <option value="time-window">One time window — a tax year, a quarter, a statement period</option>
+          <option value="full-history">Full history — the master view</option>
+        </select>
+        <button type="submit" class="btn primary">Show me this scope</button>
+        <div id="viewing-result" role="status" aria-live="polite"></div>
+      </form>
     </div>
   </section>
 
@@ -317,6 +331,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=7"></script>
+<script src="app.js?v=8"></script>
 </body>
 </html>

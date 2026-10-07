@@ -99,6 +99,17 @@ renewable resource that pays for shielded transactions.
   model of ledger visibility only — it does not model network-level
   metadata (timing, IP addresses) as solved, and every scenario names
   its residual leaks.
+- **Share a view, not your wallet — viewing-key scope simulator** —
+  pick a disclosure scope (a single transaction, one counterparty, one
+  time window, or full history) for when an accountant, auditor or
+  counterparty legitimately needs to check shielded activity, and see
+  what a viewer at that scope can see, cannot see, and the risks to
+  weigh — including the two rules that hold at every scope: viewing is
+  read-only (it never grants spending or signing), and a disclosure
+  once seen cannot be un-seen. Honestly labelled a simplified teaching
+  model of scoped disclosure in principle — exact capabilities depend
+  on the wallet and contract, so check the current docs before
+  granting a real one. No key is entered or generated on the page.
 
 ## Guides
 

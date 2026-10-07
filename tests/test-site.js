@@ -27,8 +27,8 @@ check("Midnight team X tag in README", readme.includes("@MidnightNtwrk"));
 /* document structure */
 check("exactly one <h1>", (html.match(/<h1[ >]/g) || []).length === 1);
 check("has <main> landmark", /<main[\s>]/.test(html));
-check("all main form controls labelled", ["q", "redact-in", "night", "claim", "secret", "threshold", "snippet-select", "life-night", "life-spend", "life-txs", "commit-secret", "commit-out", "check-commitment", "check-secret", "observer-select"].every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=3") && html.includes("app.js?v=7"));
+check("all main form controls labelled", ["q", "redact-in", "night", "claim", "secret", "threshold", "snippet-select", "life-night", "life-spend", "life-txs", "commit-secret", "commit-out", "check-commitment", "check-secret", "observer-select", "viewing-select"].every(id => html.includes(`for="${id}"`)));
+check("cache keys present", html.includes("styles.css?v=3") && html.includes("app.js?v=8"));
 check("dApp permission tool present", html.includes('id="dapp-see"') && html.includes('id="dapp-result"'));
 check("ZK claim simulator present", html.includes('id="zk-prover"') && html.includes('id="zk-result"'));
 check("ZK simulator honestly labelled a simulation", html.includes("teaching simulation, not a cryptographic proof"));
@@ -41,6 +41,9 @@ check("commitment tool honestly states its limits", html.includes("brute-forced 
 check("commitment tool honestly states real local hashing", html.includes("real SHA-256 hash computed locally"));
 check("observer tool present", html.includes('id="observer"') && html.includes('id="observer-result"'));
 check("observer tool honestly scoped to ledger visibility", html.includes("simplified teaching model of ledger visibility only") && html.includes("does not model network-level metadata"));
+check("viewing-key tool present", html.includes('id="viewing-key"') && html.includes('id="viewing-result"'));
+check("viewing-key tool honestly labelled a teaching model of scoped disclosure", html.includes("simplified teaching model of scoped disclosure in principle") && html.includes("depend on your wallet and the contract involved"));
+check("viewing-key tool warns never to paste a real key", html.includes("never paste a real viewing key into a web page"));
 
 /* flagship links */
 for (const url of ["https://kshot3000.github.io/Night-Messenger-/", "https://kshot3000.github.io/PlutusShield/",
@@ -151,6 +154,20 @@ check("disclosed claim reveals the claim but not the birth date", app.getObserve
 check("shielded contract keeps witness values off the ledger view", app.getObserverView("shielded-contract").cannot.join(" ").includes("witness"));
 check("every scenario names at least one residual leak", Object.values(app.OBSERVER_CATALOG).every(s => s.leaks.every(l => l.length > 20)));
 check("getObserverView returns copies, not the catalog itself", (() => { const v = app.getObserverView("shielded-transfer"); v.sees.push("tampered"); return app.getObserverView("shielded-transfer").sees.length === 2; })());
+
+/* viewing-key scope simulator — scoped disclosure, read-only at every scope */
+check("viewing catalog has 4 scopes", Object.keys(app.VIEWING_CATALOG).length === 4);
+check("every HTML viewing value exists in catalog", ["single-transaction", "single-counterparty", "time-window", "full-history"].every(v => html.includes(`value="${v}"`) && app.VIEWING_CATALOG[v]));
+check("unknown viewing scope is null, not a crash", app.getViewingView("nope") === null && app.getViewingView(null) === null);
+check("every scope has a note and all three lists", Object.values(app.VIEWING_CATALOG).every(s => s.note.length > 30 && s.sees.length >= 2 && s.cannot.length >= 2 && s.risks.length >= 1));
+check("every scope names at least one substantive risk", Object.values(app.VIEWING_CATALOG).every(s => s.risks.every(r => r.length > 20)));
+check("single transaction does NOT expose other transactions", app.getViewingView("single-transaction").cannot.join(" ").includes("Your other transactions") && !app.getViewingView("single-transaction").sees.join(" ").includes("full"));
+check("time window excludes transactions outside the window", app.getViewingView("time-window").cannot.join(" ").includes("before or after the window"));
+check("single counterparty excludes other counterparties", app.getViewingView("single-counterparty").cannot.join(" ").includes("any other counterparty"));
+check("full history sees the complete picture", app.getViewingView("full-history").sees.join(" ").includes("complete financial picture"));
+check("viewing never grants spending at any scope", Object.values(app.VIEWING_CATALOG).every(s => (s.sees.join(" ") + s.cannot.join(" ")).toLowerCase().includes("spend")));
+check("every scope warns a disclosure cannot be un-seen or can be kept", Object.values(app.VIEWING_CATALOG).every(s => s.risks.join(" ").includes("keep") || s.risks.join(" ").includes("un-seen")));
+check("getViewingView returns copies, not the catalog itself", (() => { const v = app.getViewingView("single-transaction"); v.sees.push("tampered"); return app.getViewingView("single-transaction").sees.length === 2; })());
 
 /* hash commitments — real SHA-256 via Web Crypto (async) */
 check("commitment message is versioned and exact", app.commitmentMessage("my bid is 250") === app.COMMIT_PREFIX + "\nmy bid is 250");

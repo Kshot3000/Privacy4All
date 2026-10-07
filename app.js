@@ -3,8 +3,8 @@
    a selective-disclosure planner, a NIGHT -> DUST capacity estimator,
    a "what does this dApp see?" permission explainer, a ZK claim
    simulator, a Compact snippet library, a DUST lifecycle explainer,
-   a SHA-256 hash commitment maker/checker, and a public-vs-shielded
-   ledger observer explainer.
+   a SHA-256 hash commitment maker/checker, a public-vs-shielded
+   ledger observer explainer, and a viewing-key scope simulator.
    Everything runs locally. Pure functions are exported for tests. */
 
 /* ---------- 1. Redactor ---------- */
@@ -432,6 +432,55 @@ function getObserverView(id) {
            sees: s.sees.slice(), cannot: s.cannot.slice(), leaks: s.leaks.slice() };
 }
 
+/* ---------- 10. Share a view, not your wallet ---------- */
+/* A simplified TEACHING model of scoped disclosure in principle: when
+   someone legitimately needs to check your shielded activity — an
+   accountant, an auditor, a counterparty — the Midnight pattern is to
+   disclose the narrowest scope that answers their question, never the
+   whole wallet by default. Exact viewing-key and disclosure
+   capabilities depend on the wallet and the contract involved, so this
+   models what a viewer SHOULD and should NOT get at each scope, not a
+   specific implementation's guarantees. Two rules hold at every scope:
+   viewing is read-only (it never grants spending or signing), and a
+   disclosure once seen cannot be un-seen — the viewer can keep copies. */
+var VIEWING_CATALOG = {
+  "single-transaction": {
+    title: "A single transaction — one payment, one claim",
+    note: "The narrowest useful scope, and the right default for most checks: the other side needs to confirm one specific payment or claim, not your finances in general.",
+    sees: ["That one transaction: its amount, asset and time", "Whether that transaction's proof or claim verified"],
+    cannot: ["Your other transactions — nothing before, after, or in between", "Your balances, other counterparties, or any private state that transaction does not touch", "Your funds themselves — a view is read-only and cannot spend or sign anything"],
+    risks: ["A disclosure cannot be un-seen: the viewer can keep copies or screenshots of that one transaction forever", "That one transaction may still identify you to its counterparty — scope limits breadth, not what the disclosed item itself says"]
+  },
+  "single-counterparty": {
+    title: "One counterparty — one employer, client or merchant",
+    note: "For an ongoing relationship — proving a year of payments to one employer, or a purchase history with one merchant — without opening your dealings with everyone else.",
+    sees: ["Your transaction history with that one counterparty, inside the scope", "Totals and timing for that relationship — enough to reconcile an account"],
+    cannot: ["Your transactions with any other counterparty", "Your balances or private state outside that relationship", "Your funds themselves — a view is read-only and cannot spend or sign anything"],
+    risks: ["One relationship's full history is still a biography of that relationship — amounts, timing and gaps included", "The viewer can keep what they saw after the relationship ends — grant for a question, not forever, where the tooling allows"]
+  },
+  "time-window": {
+    title: "One time window — a tax year, a quarter, a statement period",
+    note: "The accountant's scope: everything inside a defined period, nothing outside it. Useful for tax, audit and reporting, where the period — not the person — is what is being checked.",
+    sees: ["Transactions that fall inside the window, with their amounts and times", "Period totals a report can be built from — income in, spending out, for that window only"],
+    cannot: ["Transactions before or after the window", "Private state or notes that no transaction in the window touches", "Your funds themselves — a view is read-only and cannot spend or sign anything"],
+    risks: ["A full period still reveals patterns — income rhythm, spending habits, quiet months — not just the totals a form asks for", "Window edges leak context: a balance carried into the period can hint at what came before it", "The viewer can keep copies of the period's records after the engagement ends — a disclosure cannot be un-seen, so agree retention limits up front"]
+  },
+  "full-history": {
+    title: "Full history — the master view",
+    note: "Everything, ongoing: the scope a master viewing key implies. Almost no routine check needs this. Treat it the way you would treat handing someone your complete bank archive — because that is the closest everyday equivalent.",
+    sees: ["Your full shielded transaction history in scope — amounts, times and counterparties", "Your balances and how they changed over time — the complete financial picture"],
+    cannot: ["Your private keys — viewing never includes the ability to spend or sign", "Data that was never in the wallet's records — off-device notes and other wallets stay outside it"],
+    risks: ["Anyone holding this view can keep watching and keep copies — a breach or a forwarded key exposes everything at once", "This is the one scope that cannot be meaningfully narrowed later: once a full history has been seen, it has been seen"]
+  }
+};
+
+function getViewingView(id) {
+  var s = VIEWING_CATALOG[id];
+  if (!s) return null;
+  return { id: id, title: s.title, note: s.note,
+           sees: s.sees.slice(), cannot: s.cannot.slice(), risks: s.risks.slice() };
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -439,7 +488,8 @@ if (typeof module !== "undefined" && module.exports) {
                      getSnippet, searchSnippets, SNIPPET_CATALOG,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
-                     getObserverView, OBSERVER_CATALOG };
+                     getObserverView, OBSERVER_CATALOG,
+                     getViewingView, VIEWING_CATALOG };
 }
 
 if (typeof document !== "undefined") {
@@ -718,6 +768,41 @@ if (typeof document !== "undefined") {
       });
       var foot = document.createElement("p");
       foot.textContent = "Teaching model of ledger visibility only, run locally — nothing left this page, no wallet connected. Network-level privacy (timing, IP addresses) needs separate protection on top of any ledger.";
+      host.appendChild(foot);
+    });
+
+    /* --- share a view, not your wallet — viewing-key scope simulator --- */
+    document.getElementById("viewing-key").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var view = getViewingView(document.getElementById("viewing-select").value);
+      var host = document.getElementById("viewing-result");
+      host.textContent = "";
+      if (!view) {
+        host.textContent = "Pick a scope from the list.";
+        return;
+      }
+      var note = document.createElement("p");
+      note.textContent = view.note;
+      host.appendChild(note);
+      [["A viewer at this scope CAN see", view.sees],
+       ["A viewer at this scope CANNOT see", view.cannot],
+       ["Risks to weigh before granting it", view.risks]].forEach(function (pair) {
+        var p = document.createElement("p");
+        var strong = document.createElement("strong");
+        strong.textContent = pair[0] + ":";
+        p.appendChild(strong);
+        host.appendChild(p);
+        var ul = document.createElement("ul");
+        ul.className = "plan-list";
+        pair[1].forEach(function (item) {
+          var li = document.createElement("li");
+          li.textContent = item;
+          ul.appendChild(li);
+        });
+        host.appendChild(ul);
+      });
+      var foot = document.createElement("p");
+      foot.textContent = "Teaching model of scoped disclosure, run locally — no key was entered, generated or connected, and nothing left this page. Rule that survives every scope: viewing is read-only, but a disclosure once seen cannot be un-seen — grant the narrowest scope that answers the question.";
       host.appendChild(foot);
     });
 
