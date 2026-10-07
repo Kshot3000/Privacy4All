@@ -75,6 +75,13 @@ renewable resource that pays for shielded transactions.
   what is deliberately disclosed with `disclose()`. Honestly labelled
   simplified teaching patterns, not production contracts — Compact is
   still evolving, so check the current docs and compile before real use.
+- **How DUST works — lifecycle explainer** — step through hold →
+  generate → spend → regenerate with your own numbers, on the same exact
+  BigInt 5× ceiling model: how many shielded transactions a capacity
+  covers, what is left, and what regenerates while you keep holding.
+  Honestly labelled a teaching model of amounts and order only — it
+  states no generation rate or time, because the real rate depends on
+  Midnight network parameters.
 
 ## Guides
 

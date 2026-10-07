@@ -239,6 +239,19 @@
         <button type="submit" class="btn primary">Show the pattern</button>
         <div id="snippet-result" role="status" aria-live="polite"></div>
       </form>
+
+      <form class="tool" id="dust-life">
+        <h3>7 · How DUST works — the lifecycle, step by step</h3>
+        <p>DUST confuses everyone the first time: you do not buy it like a normal fee token. Holding NIGHT generates DUST up to a capacity ceiling, shielded transactions spend it, and holding the same NIGHT generates it back. Step through it with your own numbers. This is a teaching model of amounts and order only — it states no generation rate or time, because the real rate depends on Midnight network parameters.</p>
+        <label for="life-night">NIGHT you hold</label>
+        <input id="life-night" inputmode="decimal" placeholder="e.g. 100" autocomplete="off">
+        <label for="life-spend">DUST cost per shielded transaction</label>
+        <input id="life-spend" inputmode="decimal" placeholder="e.g. 1" autocomplete="off">
+        <label for="life-txs">Transactions you plan to make</label>
+        <input id="life-txs" inputmode="numeric" placeholder="e.g. 10" autocomplete="off">
+        <button type="submit" class="btn primary">Walk the lifecycle</button>
+        <div id="dust-life-result" role="status" aria-live="polite"></div>
+      </form>
     </div>
   </section>
 
@@ -269,6 +282,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=4"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>

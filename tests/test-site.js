@@ -27,13 +27,15 @@ check("Midnight team X tag in README", readme.includes("@MidnightNtwrk"));
 /* document structure */
 check("exactly one <h1>", (html.match(/<h1[ >]/g) || []).length === 1);
 check("has <main> landmark", /<main[\s>]/.test(html));
-check("all main form controls labelled", ["q", "redact-in", "night", "claim", "secret", "threshold", "snippet-select"].every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=3") && html.includes("app.js?v=4"));
+check("all main form controls labelled", ["q", "redact-in", "night", "claim", "secret", "threshold", "snippet-select", "life-night", "life-spend", "life-txs"].every(id => html.includes(`for="${id}"`)));
+check("cache keys present", html.includes("styles.css?v=3") && html.includes("app.js?v=5"));
 check("dApp permission tool present", html.includes('id="dapp-see"') && html.includes('id="dapp-result"'));
 check("ZK claim simulator present", html.includes('id="zk-prover"') && html.includes('id="zk-result"'));
 check("ZK simulator honestly labelled a simulation", html.includes("teaching simulation, not a cryptographic proof"));
 check("snippet library present", html.includes('id="snippets"') && html.includes('id="snippet-result"'));
 check("snippet library honestly labelled not production", html.includes("not production contracts"));
+check("DUST lifecycle tool present", html.includes('id="dust-life"') && html.includes('id="dust-life-result"'));
+check("DUST lifecycle honestly states no generation rate", html.includes("states no generation rate or time"));
 
 /* flagship links */
 for (const url of ["https://kshot3000.github.io/Night-Messenger-/", "https://kshot3000.github.io/PlutusShield/",
@@ -117,6 +119,21 @@ check("search finds the vote pattern case-insensitively", app.searchSnippets("VO
 check("search finds commitment by its disclosed hash", app.searchSnippets("hash").includes("commit-secret"));
 check("search with no match is empty, not a crash", app.searchSnippets("zzz-no-such-pattern").length === 0);
 check("getSnippet returns copies, not the catalog itself", (() => { const c = app.getSnippet("public-counter"); c.priv.push("tampered"); return app.getSnippet("public-counter").priv.length === 1; })());
+
+/* DUST lifecycle explainer — exact maths on the same 5x ceiling */
+const life = app.simulateDustLifecycle("100", "1", "10");
+check("lifecycle capacity is the 5x ceiling", life.capacity === "500" && life.spendPerTx === "1");
+check("lifecycle covers all planned txs", life.affordableTxs === 10 && life.uncoveredTxs === 0 && life.txCount === 10);
+check("lifecycle spend and remainder are exact", life.totalSpent === "10" && life.remaining === "490" && life.toRegenerate === "10");
+const over = app.simulateDustLifecycle("10", "20", "5");
+check("lifecycle caps spending at capacity", over.capacity === "50" && over.affordableTxs === 2 && over.uncoveredTxs === 3 && over.totalSpent === "40" && over.remaining === "10");
+check("lifecycle can spend the ceiling exactly", app.simulateDustLifecycle("10", "25", "2").remaining === "0");
+check("lifecycle zero-cost txs are all covered", app.simulateDustLifecycle("100", "0", "5").affordableTxs === 5 && app.simulateDustLifecycle("100", "0", "5").totalSpent === "0");
+check("lifecycle zero NIGHT covers nothing", app.simulateDustLifecycle("0", "1", "3").affordableTxs === 0 && app.simulateDustLifecycle("0", "1", "3").uncoveredTxs === 3);
+check("lifecycle fractional amounts are exact", app.simulateDustLifecycle("2.5", "0.5", "3").totalSpent === "1.5" && app.simulateDustLifecycle("2.5", "0.5", "3").remaining === "11");
+check("lifecycle rejects junk amounts", app.simulateDustLifecycle("abc", "1", "1") === null && app.simulateDustLifecycle("100", "-1", "1") === null && app.simulateDustLifecycle("100", "0.0000001", "1") === null);
+check("lifecycle rejects non-whole or zero tx counts", app.simulateDustLifecycle("100", "1", "2.5") === null && app.simulateDustLifecycle("100", "1", "0") === null && app.simulateDustLifecycle("100", "1", "") === null);
+check("lifecycle rejects null input", app.simulateDustLifecycle(null, null, null) === null);
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
