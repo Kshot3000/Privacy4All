@@ -59,6 +59,10 @@ renewable resource that pays for shielded transactions.
 - **NIGHT → DUST capacity estimator** — exact BigInt maths on the
   5 DUST-per-NIGHT capacity model used by the NightDream Midnight desk.
   A ceiling estimate, not a generation promise.
+- **What does this dApp see?** — tick the permissions a dApp asks for
+  (balance, history, viewing key, blind signing…) and get a plain-language
+  exposure rating for each, with the Midnight alternative: prove it
+  instead of showing it. Never connects a wallet or signs anything.
 
 ## Guides
 

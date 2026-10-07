@@ -28,7 +28,8 @@ check("Midnight team X tag in README", readme.includes("@MidnightNtwrk"));
 check("exactly one <h1>", (html.match(/<h1[ >]/g) || []).length === 1);
 check("has <main> landmark", /<main[\s>]/.test(html));
 check("all main form controls labelled", ["q", "redact-in", "night"].every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=1"));
+check("cache keys present", html.includes("styles.css?v=1") && html.includes("app.js?v=2"));
+check("dApp permission tool present", html.includes('id="dapp-see"') && html.includes('id="dapp-result"'));
 
 /* flagship links */
 for (const url of ["https://kshot3000.github.io/Night-Messenger-/", "https://kshot3000.github.io/PlutusShield/",
@@ -68,6 +69,21 @@ check("smallest unit exact", app.dustCapacity("0.000001") === "0.000005");
 check("7 decimals rejected", app.dustCapacity("0.0000001") === null);
 check("junk rejected", app.dustCapacity("abc") === null && app.dustCapacity("") === null && app.dustCapacity("-5") === null);
 check("capacity constant is 5", app.DUST_PER_NIGHT_MAX === 5);
+
+/* dApp permission explainer */
+const assess = app.assessDappPermissions(["viewAddress", "viewBalance", "viewTxHistory"]);
+check("dApp checker has 3 items", assess.items.length === 3);
+check("dApp checker tallies levels", assess.tally.low === 1 && assess.tally.caution === 1 && assess.tally.high === 1);
+check("dApp checker overall is high when any high present", assess.overall === "high");
+check("viewing an address is low", app.assessDappPermissions(["viewAddress"]).overall === "low");
+check("balance view alone is caution overall", app.assessDappPermissions(["viewBalance"]).overall === "caution");
+check("full tx history is high", app.assessDappPermissions(["viewTxHistory"]).items[0].level === "high");
+check("blind signing is high", app.assessDappPermissions(["signArbitrary"]).items[0].level === "high");
+check("viewing key is high", app.assessDappPermissions(["viewingKey"]).items[0].level === "high");
+check("every permission has a plain-language note", Object.values(app.PERMISSION_CATALOG).every(p => p.note.length > 30 && p.label.length > 2));
+check("every HTML permission value exists in catalog", ["viewAddress", "viewBalance", "viewTxHistory", "viewContacts", "signTransaction", "signArbitrary", "viewingKey", "offchainData"].every(v => html.includes(`value="${v}"`) && app.PERMISSION_CATALOG[v]));
+check("dApp checker counts unknown, not crashes", app.assessDappPermissions(["nope"]).tally.unknown === 1);
+check("dApp checker empty is none", app.assessDappPermissions([]).overall === "none" && app.assessDappPermissions(null).overall === "none");
 
 console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

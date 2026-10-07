@@ -188,6 +188,24 @@
         <button type="submit" class="btn primary">Estimate DUST capacity</button>
         <p id="dust-result" role="status" aria-live="polite"></p>
       </form>
+
+      <form class="tool" id="dapp-see">
+        <h3>4 · What does this dApp see?</h3>
+        <p>Before you connect, tick what a dApp is asking to see or do. I sort each permission by exposure and explain what it really gives away, plus the Midnight alternative — a proof instead of the raw data. This checker never connects a wallet or signs anything.</p>
+        <fieldset>
+          <legend>What is the dApp asking for?</legend>
+          <label class="check"><input type="checkbox" name="perm" value="viewAddress"> See your receiving / shielded address</label>
+          <label class="check"><input type="checkbox" name="perm" value="viewBalance"> See your wallet balance</label>
+          <label class="check"><input type="checkbox" name="perm" value="viewTxHistory"> See your full transaction history</label>
+          <label class="check"><input type="checkbox" name="perm" value="viewContacts"> See your contacts / saved addresses</label>
+          <label class="check"><input type="checkbox" name="perm" value="signTransaction"> Sign a specific transaction shown to you</label>
+          <label class="check"><input type="checkbox" name="perm" value="signArbitrary"> Sign arbitrary messages or data (blind signing)</label>
+          <label class="check"><input type="checkbox" name="perm" value="viewingKey"> Share a viewing / disclosure key</label>
+          <label class="check"><input type="checkbox" name="perm" value="offchainData"> Read data stored off-chain on your device</label>
+        </fieldset>
+        <button type="submit" class="btn primary">Check what it sees</button>
+        <div id="dapp-result" role="status" aria-live="polite"></div>
+      </form>
     </div>
   </section>
 
@@ -218,6 +236,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=1"></script>
+<script src="app.js?v=2"></script>
 </body>
 </html>

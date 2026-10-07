@@ -1,6 +1,7 @@
 "use strict";
 /* Privacy4All hub logic: project filtering, a local text redactor,
-   a selective-disclosure planner, and a NIGHT -> DUST capacity estimator.
+   a selective-disclosure planner, a NIGHT -> DUST capacity estimator,
+   and a "what does this dApp see?" permission explainer.
    Everything runs locally. Pure functions are exported for tests. */
 
 /* ---------- 1. Redactor ---------- */
@@ -88,8 +89,45 @@ function dustCapacity(nightStr) {
   return frac ? whole.toString() + "." + frac : whole.toString();
 }
 
+/* ---------- 4. What does this dApp see? ---------- */
+/* level: "low" = usually needed to connect, "caution" = ask why and limit
+   it before granting, "high" = do not grant blindly for a routine visit. */
+var PERMISSION_CATALOG = {
+  viewAddress:   { label: "See your receiving / shielded address", level: "low",
+                   note: "Normal for connecting and receiving. An address is still an identifier — reuse links your activity, so prefer a fresh address where your wallet offers one." },
+  viewBalance:   { label: "See your wallet balance", level: "caution",
+                   note: "A balance is financial data. A well-built Midnight dApp should ask for a proof — “balance at least X” — instead of the exact figure. Ask why it needs the number itself." },
+  viewTxHistory: { label: "See your full transaction history", level: "high",
+                   note: "History reveals counterparties, amounts and habits — a biography, not a login. Disclose the single relevant transaction with a proof, never the whole history." },
+  viewContacts:  { label: "See your contacts / saved addresses", level: "caution",
+                   note: "Contacts link your wallet to real people and other wallets you use. Grant per purpose, if at all — a dApp rarely needs your whole address book to do one job." },
+  signTransaction: { label: "Sign a specific transaction shown to you", level: "caution",
+                     note: "Only sign when the amount, recipient and contract on the confirmation screen match exactly what you reviewed. Signing is authorisation, and a signed transaction cannot be unsent." },
+  signArbitrary: { label: "Sign arbitrary messages or data (blind signing)", level: "high",
+                   note: "A blind signature can authorise actions you never saw. Refuse it for routine logins — a dApp should present the exact statement being signed, in plain language." },
+  viewingKey:    { label: "Share a viewing / disclosure key", level: "high",
+                   note: "A viewing key grants ongoing visibility, not a one-off check: anyone holding it can keep watching. Share only scoped disclosure where Midnight supports it, never a master key." },
+  offchainData:  { label: "Read data stored off-chain on your device", level: "caution",
+                   note: "Midnight keeps the private half of state with you, often on your own device. Grant access per item and per purpose — off-chain does not mean unimportant, it is where the private data lives." }
+};
+
+function assessDappPermissions(keys) {
+  var list = Array.isArray(keys) ? keys : [];
+  var items = [];
+  var tally = { low: 0, caution: 0, high: 0, unknown: 0 };
+  list.forEach(function (key) {
+    var perm = PERMISSION_CATALOG[key];
+    if (!perm) { tally.unknown++; return; }
+    items.push({ key: key, label: perm.label, level: perm.level, note: perm.note });
+    tally[perm.level]++;
+  });
+  var overall = items.length === 0 ? "none" : tally.high > 0 ? "high" : tally.caution > 0 ? "caution" : "low";
+  return { items: items, tally: tally, overall: overall };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX };
+  module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
+                     assessDappPermissions, PERMISSION_CATALOG };
 }
 
 if (typeof document !== "undefined") {
@@ -174,6 +212,39 @@ if (typeof document !== "undefined") {
       document.getElementById("dust-result").textContent = cap === null
         ? "Enter a NIGHT amount (a whole number, or up to 6 decimal places)."
         : input.trim() + " NIGHT can sustain up to ~" + cap + " DUST capacity (5 × NIGHT model). Actual generation depends on holdings and Midnight network parameters — this is a ceiling, not a promise.";
+    });
+
+    /* --- what does this dApp see? --- */
+    document.getElementById("dapp-see").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var keys = Array.prototype.slice.call(document.querySelectorAll('input[name="perm"]:checked'))
+        .map(function (box) { return box.value; });
+      var host = document.getElementById("dapp-result");
+      host.textContent = "";
+      if (!keys.length) {
+        host.textContent = "Tick at least one permission the dApp is asking for.";
+        return;
+      }
+      var result = assessDappPermissions(keys);
+      var levelLabel = { low: "Usually OK", caution: "Ask why first", high: "Don't grant blindly" };
+      var ul = document.createElement("ul");
+      ul.className = "plan-list";
+      result.items.forEach(function (item) {
+        var li = document.createElement("li");
+        var strong = document.createElement("strong");
+        strong.textContent = item.label + " — " + levelLabel[item.level] + ". ";
+        li.appendChild(strong);
+        li.appendChild(document.createTextNode(item.note));
+        ul.appendChild(li);
+      });
+      host.appendChild(ul);
+      var summary = document.createElement("p");
+      var verdict = { low: "Low exposure: nothing here goes beyond connecting.",
+        caution: "Review carefully: ask why each caution item is needed, and limit it where you can.",
+        high: "High exposure: at least one request would let this dApp see or authorise far more than a routine visit needs. Do not grant those blindly.",
+        none: "" }[result.overall];
+      summary.textContent = "Overall: " + verdict + " Assessment done locally — nothing about your wallet left this page. This tool never connects a wallet or signs anything.";
+      host.appendChild(summary);
     });
 
     /* --- copy donation address --- */
