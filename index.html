@@ -500,6 +500,43 @@
           <p id="agree-check-result" role="status" aria-live="polite"></p>
         </form>
       </div>
+
+      <div class="tool" id="key-derivation">
+        <h3>19 · Stretch one secret into proper keys — key derivation (HKDF)</h3>
+        <p>Tool 18 ends on a warning: real systems never use the raw shared secret directly as a key. This is the step that warning points at. Key derivation takes one secret and stretches it into separate, independent keys — one secret, many keys — but never the secret itself as a key. It runs locally for real here with HKDF (RFC 5869) over SHA-256: the purpose you pick is mixed into the derivation, so a different purpose means a different key — the messaging key, the storage key and the backup key from one secret share nothing usable, and leaking one reveals nothing about the others or the secret. An optional salt (tool 11's generator makes them) separates sessions: same secret, same purpose, different salt, different key. The salt is not a secret — both sides must pick the same purpose and the same salt, and they may exchange the salt openly. Honestly labelled limits: this is a teaching implementation, not an audited key-management product, and derivation does not strengthen a weak input — a guessable secret derives guessable keys, because anyone can run the same public derivation; HKDF assumes its input is already high-entropy key material, like tool 18's output, which is why there is deliberately no password stretching here. Never paste a real seed phrase or production secret into any web page, including this one — practise with throwaway secrets.</p>
+        <form id="derive-do">
+          <label for="derive-secret">Shared secret, as hex (16–64 bytes — tool 18's output is 32; stays on this page)</label>
+          <textarea id="derive-secret" rows="2" spellcheck="false" placeholder="Paste the shared secret hex here"></textarea>
+          <label for="derive-purpose">Purpose — each purpose derives its own unrelated key</label>
+          <select id="derive-purpose">
+            <option value="messaging">Messaging — encrypt the conversation</option>
+            <option value="storage">Local storage — encrypt data at rest</option>
+            <option value="backup">Backup — encrypt an exported backup</option>
+          </select>
+          <label for="derive-salt">Salt (optional — 16 bytes of hex, e.g. from tool 11; not a secret, but both sides must use the same one)</label>
+          <input id="derive-salt" autocomplete="off" spellcheck="false" placeholder="Leave blank for no salt">
+          <button type="submit" class="btn primary">Derive the key locally</button>
+          <label for="derive-out">Your derived key — 32 bytes, for this purpose only</label>
+          <textarea id="derive-out" rows="2" readonly spellcheck="false"></textarea>
+          <p id="derive-result" role="status" aria-live="polite"></p>
+        </form>
+        <form id="derive-check">
+          <label for="derive-check-secret">The shared secret, as hex</label>
+          <textarea id="derive-check-secret" rows="2" spellcheck="false" placeholder="Paste the shared secret hex here"></textarea>
+          <label for="derive-check-purpose">The purpose it was derived for</label>
+          <select id="derive-check-purpose">
+            <option value="messaging">Messaging — encrypt the conversation</option>
+            <option value="storage">Local storage — encrypt data at rest</option>
+            <option value="backup">Backup — encrypt an exported backup</option>
+          </select>
+          <label for="derive-check-salt">The salt it was derived with (blank if none)</label>
+          <input id="derive-check-salt" autocomplete="off" spellcheck="false" placeholder="Leave blank for no salt">
+          <label for="derive-check-key">The derived key to check (32 bytes of hex)</label>
+          <textarea id="derive-check-key" rows="2" spellcheck="false" placeholder="Paste the derived key hex here"></textarea>
+          <button type="submit" class="btn primary">Check the key locally</button>
+          <p id="derive-check-result" role="status" aria-live="polite"></p>
+        </form>
+      </div>
     </div>
   </section>
 
@@ -530,6 +567,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=16"></script>
+<script src="app.js?v=17"></script>
 </body>
 </html>

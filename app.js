@@ -1393,6 +1393,117 @@ function sharedSecretFingerprint(secretHex) {
   return sha256Hex(AGREE_FINGERPRINT_PREFIX + "\n" + hex);
 }
 
+/* ---------- 19. Stretch one secret into proper keys — HKDF ---------- */
+/* Tool 18 ends on a warning: the raw ECDH shared secret is never
+   a key to use directly. This is the step that warning points
+   at — KEY DERIVATION. HKDF (RFC 5869) over SHA-256 takes one
+   input secret and stretches it into separate, independent
+   32-byte keys, one per purpose: the purpose label is mixed in
+   as HKDF's info string, so the messaging key, the storage key
+   and the backup key from the same secret share nothing usable —
+   leaking one reveals nothing about the others or the secret.
+   An optional 16-byte salt (tool 11's generator makes them) is
+   mixed in as HKDF's salt: same secret and purpose with a
+   different salt is a different key again, which is how separate
+   sessions stay separate. The salt is NOT a secret — both sides
+   must simply agree on the same purpose and the same salt, and
+   they may exchange the salt openly. Keys are plain 32-byte hex.
+   Honest limits: derivation does not strengthen a weak input —
+   a guessable secret derives guessable keys, because an attacker
+   can run the same public derivation (tool 11 measures input
+   strength; there is no password stretching here, by design —
+   HKDF assumes its input is already high-entropy key material,
+   like tool 18's output). Knowing a derived key does not let
+   anyone work backwards to the secret or sideways to another
+   purpose's key. Teaching implementation, not an audited
+   key-management product. Never paste a real seed phrase or
+   production secret into any web page, including this one —
+   practise with throwaway secrets. */
+var DERIVE_KEY_BYTES = 32;
+var DERIVE_SALT_BYTES = 16;
+var DERIVE_SECRET_MIN_BYTES = 16;
+var DERIVE_SECRET_MAX_BYTES = 64;
+var DERIVE_PURPOSE_CATALOG = {
+  "messaging": { label: "Messaging — encrypt the conversation",
+                 info: "privacy4all-hkdf-v1 messaging",
+                 note: "Use this key for the conversation, and nothing else. The storage and backup keys derived from the same secret are unrelated keys, so leaking this one exposes neither them nor the secret." },
+  "storage": { label: "Local storage — encrypt data at rest",
+               info: "privacy4all-hkdf-v1 storage",
+               note: "Use this key for data stored on the device, and nothing else. It is not the messaging key: a copy of stored data plus this key still does not open the conversation." },
+  "backup": { label: "Backup — encrypt an exported backup",
+              info: "privacy4all-hkdf-v1 backup",
+              note: "Use this key for one exported backup, and nothing else. Rotate the salt for the next backup and it gets a fresh, unrelated key from the same secret." }
+};
+
+function getDerivePurpose(id) {
+  if (typeof id !== "string") return null;
+  return Object.prototype.hasOwnProperty.call(DERIVE_PURPOSE_CATALOG, id)
+    ? DERIVE_PURPOSE_CATALOG[id] : null;
+}
+
+function parseDeriveSecret(text) {
+  if (typeof text !== "string") return null;
+  var hex = text.trim().toLowerCase();
+  var bytes = hexToBytes(hex);
+  if (!bytes || bytes.length < DERIVE_SECRET_MIN_BYTES ||
+      bytes.length > DERIVE_SECRET_MAX_BYTES) return null;
+  return hex;
+}
+
+/* Blank salt is valid and means "no salt" (HKDF then uses zeros,
+   per RFC 5869). A given salt must be exactly 16 bytes of hex —
+   the size tool 11's generator makes. Anything else is null. */
+function parseDeriveSalt(text) {
+  if (typeof text !== "string") return null;
+  var hex = text.trim().toLowerCase();
+  if (hex === "") return new Uint8Array(0);
+  var bytes = hexToBytes(hex);
+  if (!bytes || bytes.length !== DERIVE_SALT_BYTES) return null;
+  return bytes;
+}
+
+function parseDerivedKey(text) {
+  if (typeof text !== "string") return null;
+  var hex = text.trim().toLowerCase();
+  var bytes = hexToBytes(hex);
+  if (!bytes || bytes.length !== DERIVE_KEY_BYTES) return null;
+  return hex;
+}
+
+function deriveSessionKey(secretHex, purposeId, saltText) {
+  var hex = parseDeriveSecret(secretHex);
+  var purpose = getDerivePurpose(purposeId);
+  var salt = parseDeriveSalt(saltText === undefined || saltText === null ? "" : saltText);
+  if (hex === null || !purpose || salt === null) return Promise.resolve(null);
+  var cryptoObj = agreeCrypto();
+  if (!cryptoObj) return Promise.resolve(null);
+  return cryptoObj.subtle.importKey("raw", hexToBytes(hex), "HKDF", false, ["deriveBits"])
+    .then(function (base) {
+      return cryptoObj.subtle.deriveBits(
+        { name: "HKDF", hash: "SHA-256", salt: salt,
+          info: secretToBytes(purpose.info) },
+        base, DERIVE_KEY_BYTES * 8)
+        .then(function (bits) {
+          var bytes = new Uint8Array(bits);
+          if (bytes.length !== DERIVE_KEY_BYTES) return null;
+          return shareBytesToHex(bytes);
+        }, function () { return null; });
+    }, function () { return null; });
+}
+
+/* true = this key is exactly what those inputs derive.
+   false = well-formed inputs, but a different key. null =
+   malformed input — distinct from a failed check. */
+function checkDerivedKey(secretHex, purposeId, saltText, keyText) {
+  var expected = parseDerivedKey(keyText);
+  if (expected === null) return Promise.resolve(null);
+  return deriveSessionKey(secretHex, purposeId, saltText)
+    .then(function (derived) {
+      if (derived === null) return null;
+      return derived === expected;
+    });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -1420,7 +1531,12 @@ if (typeof module !== "undefined" && module.exports) {
                      parseSignature, generateSigningKeyPair, signMessage, verifySignature,
                      AGREE_PUBLIC_KEY_BYTES, AGREE_PRIVATE_KEY_BYTES, AGREE_SHARED_SECRET_BYTES,
                      AGREE_FINGERPRINT_PREFIX, generateAgreementKeyPair,
-                     deriveSharedSecret, parseSharedSecret, sharedSecretFingerprint };
+                     deriveSharedSecret, parseSharedSecret, sharedSecretFingerprint,
+                     DERIVE_KEY_BYTES, DERIVE_SALT_BYTES,
+                     DERIVE_SECRET_MIN_BYTES, DERIVE_SECRET_MAX_BYTES,
+                     DERIVE_PURPOSE_CATALOG, getDerivePurpose,
+                     parseDeriveSecret, parseDeriveSalt, parseDerivedKey,
+                     deriveSessionKey, checkDerivedKey };
 }
 
 if (typeof document !== "undefined") {
@@ -2215,6 +2331,54 @@ if (typeof document !== "undefined") {
             "out from those public keys. That is the handshake under private messaging."
           : "The other side's secret is in the box — run your agreement above and compare: the two " +
             "boxes must match exactly. If they do not, one of the four keys is from a different pair.";
+      });
+    });
+
+    /* --- stretch one secret into proper keys (HKDF) --- */
+    document.getElementById("derive-do").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("derive-out");
+      var status = document.getElementById("derive-result");
+      var purposeId = document.getElementById("derive-purpose").value;
+      status.textContent = "Deriving locally…";
+      deriveSessionKey(document.getElementById("derive-secret").value, purposeId,
+        document.getElementById("derive-salt").value).then(function (key) {
+        if (!key) {
+          out.value = "";
+          status.textContent = "That cannot derive: paste a whole shared secret as hex " +
+            "(" + DERIVE_SECRET_MIN_BYTES + "–" + DERIVE_SECRET_MAX_BYTES + " bytes — tool 18's " +
+            "output is 32), pick a purpose, and give either no salt or a whole " +
+            DERIVE_SALT_BYTES + "-byte hex salt, the kind tool 11 generates.";
+          return;
+        }
+        out.value = key;
+        var purpose = getDerivePurpose(purposeId);
+        status.textContent = "Derived locally — your secret never left this page, and the key " +
+          "cannot be run backwards into it. " + (purpose ? purpose.note + " " : "") +
+          "The other side derives the matching key from the same secret, the same purpose " +
+          "and the same salt; change any one of the three and the key is unrelated.";
+      });
+    });
+    document.getElementById("derive-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("derive-check-result");
+      status.textContent = "Checking locally…";
+      checkDerivedKey(document.getElementById("derive-check-secret").value,
+        document.getElementById("derive-check-purpose").value,
+        document.getElementById("derive-check-salt").value,
+        document.getElementById("derive-check-key").value).then(function (ok) {
+        if (ok === null) {
+          status.textContent = "That cannot be checked: paste the whole secret, the same " +
+            "purpose and salt used to derive, and a whole 32-byte derived key as hex. " +
+            "Malformed input is different from a failed check.";
+          return;
+        }
+        status.textContent = ok
+          ? "✓ Match — this key is exactly what that secret, purpose and salt derive. " +
+            "Anyone holding the same three inputs derives the same key, and nobody else can."
+          : "✗ No match — well-formed inputs, but they derive a different key. Check the " +
+            "purpose and salt first: either one being different gives an unrelated key, " +
+            "which is the separation working as designed, not an error to override.";
       });
     });
 

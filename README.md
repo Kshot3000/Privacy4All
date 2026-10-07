@@ -231,6 +231,27 @@ renewable resource that pays for shielded transactions.
   comparison), and the secret is displayed here for practice
   only — a real app never shows it. Never paste a real wallet's
   private key into any web page, including this one.
+- **Stretch one secret into proper keys — key derivation (HKDF)** —
+  the step the key-agreement tool's warning points at: the raw
+  shared secret is never a key to use directly, so this derives
+  separate 32-byte keys from it, locally and for real, with HKDF
+  (RFC 5869) over SHA-256. The purpose label is mixed in as
+  HKDF's info string (messaging / storage / backup), so each
+  purpose gets an unrelated key — leaking one reveals nothing
+  about the others or the secret — and an optional 16-byte salt
+  separates sessions the same way. The salt is not a secret:
+  both sides must simply pick the same purpose and the same
+  salt, and may exchange the salt openly. A check form re-derives
+  and compares, keeping the site's strict distinction: an exact
+  match is true, a well-formed mismatch is false, malformed
+  input is null; the test suite cross-checks the derivation
+  against Node's independent `hkdfSync`. Honestly labelled a
+  teaching implementation, not an audited key-management
+  product: derivation does not strengthen a weak input — a
+  guessable secret derives guessable keys — because HKDF
+  assumes high-entropy input, which is why there is deliberately
+  no password stretching here. Never paste a real seed phrase
+  or production secret into any web page, including this one.
 
 ## Guides
 
