@@ -149,6 +149,20 @@ renewable resource that pays for shielded transactions.
   answer, not implemented here — and a share's length leaks the
   secret's length. Never paste a real seed phrase into any web page,
   including this one.
+- **Spend it once, stay private — notes & nullifiers** — create a
+  shielded note and only its commitment hash is published; spend it
+  and a second, domain-separated hash — its nullifier — is published
+  instead. A pretend in-page ledger enforces the one mechanical rule
+  (a nullifier may appear only once, ever), so a second spend of the
+  same note is blocked as a double-spend and a never-created note is
+  rejected as unknown — while the two hashes alone cannot be linked
+  without the secret. Real SHA-256 via Web Crypto, pure local logic,
+  inputs never mutated. Honestly labelled a simplified teaching
+  model, not how a real Midnight note is constructed: real notes use
+  random secrets nobody can guess plus a zero-knowledge existence /
+  ownership proof, a human-chosen secret here can be
+  dictionary-checked against both hashes, and a leaked secret links
+  its commitment and nullifier after the fact.
 
 ## Guides
 

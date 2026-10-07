@@ -352,6 +352,28 @@
           <p id="join-result" role="status" aria-live="polite"></p>
         </form>
       </div>
+
+      <div class="tool" id="note-nullifier">
+        <h3>14 · Spend it once, stay private — notes &amp; nullifiers</h3>
+        <p>How does a shielded ledger stop you spending the same private coin twice, if it cannot see the coin? With two hashes of the note's secret, made for two different jobs. Creating a note publishes only its <em>commitment</em> hash. Spending it publishes a different hash — its <em>nullifier</em> — and the ledger's one mechanical rule is that a nullifier may appear only once, ever. Try it: create a note, spend it, then try to spend it again. This is a simplified teaching model of the note-and-nullifier idea, built from this page's own SHA-256 formats — it is not how a real Midnight note is constructed: real notes use random secrets and keys nobody can guess, plus a zero-knowledge proof that the note exists and the spender owns it. A human-chosen secret here can be dictionary-checked against both hashes (tool 11's lesson), and if it ever leaks, its commitment and nullifier become linkable after the fact. Never paste a real seed phrase or production secret into any web page, including this one — practise with throwaway secrets.</p>
+        <form id="note-create">
+          <label for="note-secret">Throwaway note secret (stays on this page)</label>
+          <input id="note-secret" type="password" autocomplete="off" spellcheck="false" placeholder="e.g. locker note number seven">
+          <button type="submit" class="btn primary">Create the note</button>
+          <label for="note-commit-out">The note's commitment — the only part published at creation</label>
+          <textarea id="note-commit-out" rows="2" readonly spellcheck="false"></textarea>
+          <p id="note-create-result" role="status" aria-live="polite"></p>
+        </form>
+        <form id="note-spend">
+          <label for="spend-secret">Secret of the note to spend (typed exactly as created)</label>
+          <input id="spend-secret" type="password" autocomplete="off" spellcheck="false" placeholder="e.g. locker note number seven">
+          <button type="submit" class="btn primary">Spend the note</button>
+          <label for="spend-nullifier-out">The nullifier — published at spending, usable only once</label>
+          <textarea id="spend-nullifier-out" rows="2" readonly spellcheck="false"></textarea>
+          <p id="note-spend-result" role="status" aria-live="polite"></p>
+        </form>
+        <p id="note-ledger-status" role="status" aria-live="polite"></p>
+      </div>
     </div>
   </section>
 
@@ -382,6 +404,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=11"></script>
+<script src="app.js?v=12"></script>
 </body>
 </html>

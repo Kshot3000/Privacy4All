@@ -27,8 +27,8 @@ check("Midnight team X tag in README", readme.includes("@MidnightNtwrk"));
 /* document structure */
 check("exactly one <h1>", (html.match(/<h1[ >]/g) || []).length === 1);
 check("has <main> landmark", /<main[\s>]/.test(html));
-check("all main form controls labelled", ["q", "redact-in", "night", "claim", "secret", "threshold", "snippet-select", "life-night", "life-spend", "life-txs", "commit-secret", "commit-out", "check-commitment", "check-secret", "observer-select", "viewing-select", "strength-secret", "salt-out", "merkle-entries", "merkle-entry", "split-secret", "split-count", "split-out", "join-in", "join-out"].every(id => html.includes(`for="${id}"`)));
-check("cache keys present", html.includes("styles.css?v=3") && html.includes("app.js?v=11"));
+check("all main form controls labelled", ["q", "redact-in", "night", "claim", "secret", "threshold", "snippet-select", "life-night", "life-spend", "life-txs", "commit-secret", "commit-out", "check-commitment", "check-secret", "observer-select", "viewing-select", "strength-secret", "salt-out", "merkle-entries", "merkle-entry", "split-secret", "split-count", "split-out", "join-in", "join-out", "note-secret", "note-commit-out", "spend-secret", "spend-nullifier-out"].every(id => html.includes(`for="${id}"`)));
+check("cache keys present", html.includes("styles.css?v=3") && html.includes("app.js?v=12"));
 check("dApp permission tool present", html.includes('id="dapp-see"') && html.includes('id="dapp-result"'));
 check("ZK claim simulator present", html.includes('id="zk-prover"') && html.includes('id="zk-result"'));
 check("ZK simulator honestly labelled a simulation", html.includes("teaching simulation, not a cryptographic proof"));
@@ -202,6 +202,10 @@ check("secret-split tool present", html.includes('id="secret-split"') && html.in
 check("secret-split tool honestly labelled all-of-n, not Shamir", html.includes("losing one share loses the secret forever") && html.includes("threshold (k-of-n) sharing such as Shamir's") && html.includes("not implemented by this tool"));
 check("secret-split tool honestly states length leaks", html.includes("a share's length leaks the secret's length"));
 check("secret-split tool warns never to paste a real seed phrase", html.includes("never paste a real seed phrase"));
+check("note-nullifier tool present", html.includes('id="note-nullifier"') && html.includes('id="note-create"') && html.includes('id="note-spend"') && html.includes('id="note-commit-out"') && html.includes('id="spend-nullifier-out"') && html.includes('id="note-ledger-status"'));
+check("note-nullifier tool honestly labelled a simplified teaching model, not a real note", html.includes("simplified teaching model of the note-and-nullifier idea") && html.includes("not how a real Midnight note is constructed"));
+check("note-nullifier tool honestly states the dictionary-check and retroactive-link limits", html.includes("dictionary-checked against both hashes") && html.includes("become linkable after the fact"));
+check("note-nullifier tool honestly states a spend event still leaks", html.includes("a nullifier may appear only once, ever"));
 
 /* XOR secret sharing — real local sharing, complete sets only */
 const split3 = app.splitSecret("the cake is in the blue locker", 3);
@@ -307,6 +311,33 @@ check("commitment message rejects empty, blank and non-string", app.commitmentMe
   check("build rejects duplicates, empty and junk lists", await app.buildMerkleTree(["alice", "alice"]) === null && await app.buildMerkleTree([]) === null && await app.buildMerkleTree(null) === null && await app.buildMerkleTree(["alice", 42]) === null);
   check("leaf hash rejects blank and non-string", await app.merkleLeafHash("") === null && await app.merkleLeafHash("  ") === null && await app.merkleLeafHash(null) === null);
   check("proof never contains another entry in plain text", !JSON.stringify(bobProof).includes("carol") && !JSON.stringify(bobProof).includes("dave"));
+
+  /* notes & nullifiers — domain-separated SHA-256, spend-once ledger (async) */
+  const noteA = await app.noteCommitment("locker note number seven");
+  const nullA = await app.noteNullifier("locker note number seven");
+  check("note commitment and nullifier are 64 lowercase hex", /^[0-9a-f]{64}$/.test(noteA) && /^[0-9a-f]{64}$/.test(nullA));
+  check("note commitment and nullifier differ for the same secret (domain separation)", noteA !== nullA);
+  check("note hashes differ from tool 8's commitment for the same secret", noteA !== await app.makeCommitment("locker note number seven") && nullA !== await app.makeCommitment("locker note number seven"));
+  check("note hashes are deterministic and secret-sensitive", await app.noteCommitment("locker note number seven") === noteA && await app.noteNullifier("locker note number eight") !== nullA);
+  check("note hashes never contain the secret", !noteA.includes("locker") && !nullA.includes("locker"));
+  check("note hashes reject empty, blank and non-string secrets", await app.noteCommitment("") === null && await app.noteCommitment("  ") === null && await app.noteNullifier(null) === null && await app.noteCommitment(42) === null);
+  check("note prefixes are distinct and versioned", app.NOTE_COMMIT_PREFIX !== app.NOTE_NULLIFIER_PREFIX && app.NOTE_COMMIT_PREFIX.includes("v1") && app.NOTE_NULLIFIER_PREFIX.includes("v1"));
+  check("hex list normalises case and padding", JSON.stringify(app.normalizeHexList(["  " + noteA.toUpperCase() + " "])) === JSON.stringify([noteA]));
+  check("hex list rejects malformed, duplicated and non-array input", app.normalizeHexList(["xyz"]) === null && app.normalizeHexList([noteA, noteA]) === null && app.normalizeHexList("nope") === null && app.normalizeHexList(null) === null && app.normalizeHexList([42]) === null);
+  const noteB = await app.noteCommitment("a second note secret");
+  const ledger = [noteA, noteB];
+  const firstSpend = await app.attemptSpend(ledger, [], "locker note number seven");
+  check("first spend of a created note succeeds and records exactly its nullifier", firstSpend.status === "spent" && firstSpend.commitment === noteA && firstSpend.nullifier === nullA && JSON.stringify(firstSpend.seen) === JSON.stringify([nullA]));
+  const doubleSpend = await app.attemptSpend(ledger, firstSpend.seen, "locker note number seven");
+  check("second spend of the same note is a double-spend and adds nothing", doubleSpend.status === "double-spend" && doubleSpend.seen.length === 1);
+  const unknownSpend = await app.attemptSpend(ledger, firstSpend.seen, "never created this secret");
+  check("spending a never-created note is unknown-note and adds nothing", unknownSpend.status === "unknown-note" && unknownSpend.seen.length === 1);
+  const secondNoteSpend = await app.attemptSpend(ledger, firstSpend.seen, "a second note secret");
+  check("a different created note still spends after the first", secondNoteSpend.status === "spent" && secondNoteSpend.seen.length === 2 && secondNoteSpend.nullifier !== nullA);
+  check("attemptSpend never mutates its input lists", ledger.length === 2 && firstSpend.seen.length === 1);
+  check("attemptSpend tolerates uppercase ledger entries", (await app.attemptSpend([noteA.toUpperCase()], [], "locker note number seven")).status === "spent");
+  check("attemptSpend rejects malformed ledgers and empty secrets as null, not a verdict", await app.attemptSpend(["xyz"], [], "locker note number seven") === null && await app.attemptSpend(ledger, ["xyz"], "locker note number seven") === null && await app.attemptSpend(ledger, [], "") === null && await app.attemptSpend(null, null, null) === null);
+  check("a near-miss secret (trailing space) is a different, unknown note", (await app.attemptSpend(ledger, [], "locker note number seven ")).status === "unknown-note");
 
   console.log(failures === 0 ? "\nALL TESTS PASS" : `\n${failures} FAILURE(S)`);
   process.exit(failures === 0 ? 0 : 1);

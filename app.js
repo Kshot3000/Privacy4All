@@ -844,6 +844,79 @@ function combineShares(input) {
   return secret;
 }
 
+/* ---------- 14. Spend it once, stay private (notes & nullifiers) ---------- */
+/* How a shielded system stops double-spending without knowing who spent
+   what. A shielded note is represented on the public ledger only by a
+   COMMITMENT — a hash of the note's secret. To spend the note, the owner
+   publishes a NULLIFIER — a second hash of the same secret, made with a
+   different versioned prefix (domain separation). The ledger's rule is
+   then purely mechanical: a nullifier may appear only once, ever, so a
+   second spend of the same note is rejected — yet from the two hashes
+   alone nobody can tell which commitment a nullifier belongs to, because
+   linking them means finding the secret behind either hash.
+   Honest limits: this is a simplified TEACHING model of the idea, built
+   from this page's own SHA-256 formats — it is NOT how a real Midnight
+   note is constructed. Real shielded systems use random note secrets and
+   keys nobody can guess, plus a zero-knowledge proof that the note
+   exists and the spender owns it; a human-chosen secret here can be
+   dictionary-checked against BOTH hashes (tool 11's lesson), and if the
+   secret ever leaks, its commitment and nullifier become linkable
+   retroactively. Publishing a nullifier also reveals that A note was
+   spent at that moment — timing still leaks (tool 9's lesson). */
+var NOTE_COMMIT_PREFIX = "privacy4all-note-commitment-v1:";
+var NOTE_NULLIFIER_PREFIX = "privacy4all-note-nullifier-v1:";
+
+function noteHash(prefix, secret) {
+  if (typeof secret !== "string" || secret.trim() === "") return Promise.resolve(null);
+  return sha256Hex(prefix + "\n" + secret);
+}
+
+function noteCommitment(secret) { return noteHash(NOTE_COMMIT_PREFIX, secret); }
+function noteNullifier(secret) { return noteHash(NOTE_NULLIFIER_PREFIX, secret); }
+
+/* A ledger list (commitments or spent nullifiers) must be an array of
+   64-char hex strings. Input is normalised (trimmed, lowercased);
+   anything malformed — or duplicated, which a real ledger set cannot
+   contain — makes the whole list invalid (null), never a best guess. */
+function normalizeHexList(list) {
+  if (!Array.isArray(list)) return null;
+  var out = [];
+  var seen = {};
+  for (var i = 0; i < list.length; i++) {
+    if (typeof list[i] !== "string") return null;
+    var v = list[i].trim().toLowerCase();
+    if (!/^[0-9a-f]{64}$/.test(v)) return null;
+    if (seen[v]) return null;
+    seen[v] = true;
+    out.push(v);
+  }
+  return out;
+}
+
+/* Attempt to spend a note against a ledger state. Pure: the inputs are
+   never mutated; a successful spend returns the NEW spent list.
+   Outcomes: "spent" (first spend of a created note), "double-spend"
+   (this note's nullifier is already on the ledger), "unknown-note"
+   (no commitment for this secret was ever created — a real system
+   rejects this with its existence proof, here with the list itself).
+   Malformed inputs or an empty secret resolve to null, not a verdict. */
+function attemptSpend(commitments, spentNullifiers, secret) {
+  var commits = normalizeHexList(commitments);
+  var spent = normalizeHexList(spentNullifiers);
+  if (commits === null || spent === null) return Promise.resolve(null);
+  return Promise.all([noteCommitment(secret), noteNullifier(secret)]).then(function (pair) {
+    var commitment = pair[0], nullifier = pair[1];
+    if (commitment === null || nullifier === null) return null;
+    if (commits.indexOf(commitment) === -1) {
+      return { status: "unknown-note", commitment: commitment, nullifier: nullifier, seen: spent.slice() };
+    }
+    if (spent.indexOf(nullifier) !== -1) {
+      return { status: "double-spend", commitment: commitment, nullifier: nullifier, seen: spent.slice() };
+    }
+    return { status: "spent", commitment: commitment, nullifier: nullifier, seen: spent.concat([nullifier]) };
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -859,7 +932,9 @@ if (typeof module !== "undefined" && module.exports) {
                      parseMerkleEntries, normalizeMerkleEntries, merkleLeafHash,
                      buildMerkleTree, getMerkleProof, verifyMerkleProof,
                      SHARE_FORMAT, SHARE_MIN_COUNT, SHARE_MAX_COUNT, SHARE_MAX_SECRET_CHARS,
-                     splitSecret, parseShare, combineShares };
+                     splitSecret, parseShare, combineShares,
+                     NOTE_COMMIT_PREFIX, NOTE_NULLIFIER_PREFIX,
+                     noteCommitment, noteNullifier, normalizeHexList, attemptSpend };
 }
 
 if (typeof document !== "undefined") {
@@ -1346,6 +1421,63 @@ if (typeof document !== "undefined") {
         "character for character. Nothing left this page. Anyone who collected all the " +
         "shares could do the same, so once a secret has been rebuilt for use, treat the " +
         "shares as spent: split fresh shares if you need to store it again.";
+    });
+
+    /* --- notes & nullifiers — spend it once, stay private --- */
+    var noteCommitments = [];
+    var noteSpent = [];
+    function noteLedgerStatus() {
+      document.getElementById("note-ledger-status").textContent =
+        "This page's pretend ledger, this session only: " + noteCommitments.length +
+        " note" + (noteCommitments.length === 1 ? "" : "s") + " created, " + noteSpent.length +
+        " spent. Refreshing the page wipes it — nothing here is a real chain.";
+    }
+    noteLedgerStatus();
+    document.getElementById("note-create").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("note-commit-out");
+      var status = document.getElementById("note-create-result");
+      noteCommitment(document.getElementById("note-secret").value).then(function (c) {
+        if (c === null) {
+          out.value = "";
+          status.textContent = "Type a throwaway note secret first — never a real seed phrase or a secret protecting anything real.";
+          return;
+        }
+        if (noteCommitments.indexOf(c) !== -1) {
+          status.textContent = "That exact secret is already a note on this page's ledger — the same secret always makes the same commitment, which is exactly why real note secrets are random and never reused.";
+          return;
+        }
+        noteCommitments.push(c);
+        out.value = c;
+        noteLedgerStatus();
+        status.textContent = "Note created. The commitment above is the only thing that goes on the public ledger: a hash, not your secret, and not the note's value. Keep the secret itself private — whoever holds it can spend this note, and nobody else can.";
+      });
+    });
+    document.getElementById("note-spend").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("spend-nullifier-out");
+      var status = document.getElementById("note-spend-result");
+      attemptSpend(noteCommitments, noteSpent, document.getElementById("spend-secret").value).then(function (res) {
+        if (res === null) {
+          out.value = "";
+          status.textContent = "Type the exact secret of a note you created above — character for character, spaces included.";
+          return;
+        }
+        if (res.status === "unknown-note") {
+          out.value = "";
+          status.textContent = "Rejected — no note with that secret was created on this page's ledger. A shielded ledger only spends notes it can prove exist; a secret that was never committed spends nothing.";
+          return;
+        }
+        if (res.status === "double-spend") {
+          out.value = res.nullifier;
+          status.textContent = "Double-spend blocked. That nullifier is already on the ledger, so this note has already been spent — the ledger does not need to know which note it was, who spent it, or what it bought to know it cannot be spent twice.";
+          return;
+        }
+        noteSpent = res.seen;
+        out.value = res.nullifier;
+        noteLedgerStatus();
+        status.textContent = "Spent. The nullifier above is now public and can never be used again — that is what stops the double-spend. An observer sees this nullifier and, from creation, the note's commitment, but cannot link the two from the hashes alone: linking them means finding the secret behind either hash. What does leak: that a note was spent, and when.";
+      });
     });
 
     /* --- copy donation address --- */
