@@ -1504,6 +1504,103 @@ function checkDerivedKey(secretHex, purposeId, saltText, keyText) {
     });
 }
 
+/* ---------- 20. Use the key — lock a message with a derived key ---------- */
+/* Tools 18 and 19 end with a key nobody has used yet. This is
+   where it gets used: the 32-byte key tool 19 derived (the
+   "messaging" purpose is the one meant for this) imports
+   directly as an AES-GCM key — no password, no stretching and
+   no salt, because the key is already high-entropy key
+   material, which is exactly what HKDF was for. Encryption is
+   real AES-GCM locally via Web Crypto with a fresh random
+   12-byte IV per message, in one versioned line:
+   p4a-keysealed-v1:<ivHex>:<cipherHex>. The GCM tag rides at
+   the end of the ciphertext, so a wrong key, a tampered byte
+   or a truncated seal fails outright, never gibberish — and
+   there is deliberately no password fallback: holding the key
+   is the whole credential, so whoever the key leaks to reads
+   everything sealed with it, and sealed length still leaks
+   the message's approximate length. Contrast tool 16: that
+   one starts from a human password and must stretch it
+   (PBKDF2, salt in the seal) before it is key material; this
+   one starts from tool 19's output and must not re-stretch
+   what is already a key. Honest limits: teaching
+   implementation, not an audited messaging app — real
+   messengers add ratcheting, message numbering and key
+   erasure on top of this shape. Keys exist only in this page:
+   nothing is stored or sent. Never paste a real wallet key
+   or a production session key into any web page, including
+   this one — practise with throwaway keys from tools 18–19. */
+var KEYSEAL_FORMAT = "p4a-keysealed-v1";
+var KEYSEAL_KEY_BYTES = 32;
+var KEYSEAL_IV_BYTES = 12;
+var KEYSEAL_MAX_MESSAGE_CHARS = 2000;
+
+function parseKeySealed(text) {
+  if (typeof text !== "string") return null;
+  var m = text.trim().toLowerCase().match(/^p4a-keysealed-v1:([0-9a-f]+):([0-9a-f]+)$/);
+  if (!m) return null;
+  var iv = hexToBytes(m[1]);
+  var cipher = hexToBytes(m[2]);
+  if (!iv || !cipher) return null;
+  if (iv.length !== KEYSEAL_IV_BYTES) return null;
+  /* GCM tag is 16 bytes, so ciphertext is at least 1 byte + tag. */
+  if (cipher.length < 17) return null;
+  return { iv: iv, cipher: cipher };
+}
+
+function importSessionKey(keyText) {
+  var hex = parseDerivedKey(keyText);
+  if (hex === null) return Promise.resolve(null);
+  /* A derived key is exactly KEYSEAL_KEY_BYTES long by
+     construction (tool 19); keep the two constants pinned. */
+  if (hexToBytes(hex).length !== KEYSEAL_KEY_BYTES) return Promise.resolve(null);
+  var cryptoObj = agreeCrypto();
+  if (!cryptoObj) return Promise.resolve(null);
+  return cryptoObj.subtle.importKey("raw", hexToBytes(hex),
+    { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"])
+    .then(function (key) { return key; }, function () { return null; });
+}
+
+function validKeySealMessage(message) {
+  return typeof message === "string" && message.trim() !== "" &&
+    message.length <= KEYSEAL_MAX_MESSAGE_CHARS;
+}
+
+function sealWithSessionKey(message, keyText) {
+  if (!validKeySealMessage(message)) return Promise.resolve(null);
+  var cryptoObj = (typeof globalThis !== "undefined" && globalThis.crypto) || null;
+  if (!cryptoObj || typeof cryptoObj.getRandomValues !== "function" || !cryptoObj.subtle) {
+    return Promise.resolve(null);
+  }
+  var iv = new Uint8Array(KEYSEAL_IV_BYTES);
+  cryptoObj.getRandomValues(iv);
+  return importSessionKey(keyText).then(function (key) {
+    if (!key) return null;
+    return cryptoObj.subtle.encrypt({ name: "AES-GCM", iv: iv }, key, secretToBytes(message))
+      .then(function (buf) {
+        return KEYSEAL_FORMAT + ":" + shareBytesToHex(iv) +
+          ":" + shareBytesToHex(new Uint8Array(buf));
+      }, function () { return null; });
+  });
+}
+
+function openWithSessionKey(sealed, keyText) {
+  var parsed = parseKeySealed(sealed);
+  if (!parsed) return Promise.resolve(null);
+  var cryptoObj = (typeof globalThis !== "undefined" && globalThis.crypto) || null;
+  if (!cryptoObj || !cryptoObj.subtle) return Promise.resolve(null);
+  return importSessionKey(keyText).then(function (key) {
+    if (!key) return null;
+    return cryptoObj.subtle.decrypt({ name: "AES-GCM", iv: parsed.iv }, key, parsed.cipher)
+      .then(function (buf) {
+        var msg = bytesToSecret(new Uint8Array(buf));
+        if (msg === null || msg.trim() === "") return null;
+        if (msg.length > KEYSEAL_MAX_MESSAGE_CHARS) return null;
+        return msg;
+      }, function () { return null; /* wrong key or tampered — GCM refuses */ });
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -1536,7 +1633,10 @@ if (typeof module !== "undefined" && module.exports) {
                      DERIVE_SECRET_MIN_BYTES, DERIVE_SECRET_MAX_BYTES,
                      DERIVE_PURPOSE_CATALOG, getDerivePurpose,
                      parseDeriveSecret, parseDeriveSalt, parseDerivedKey,
-                     deriveSessionKey, checkDerivedKey };
+                     deriveSessionKey, checkDerivedKey,
+                     KEYSEAL_FORMAT, KEYSEAL_KEY_BYTES, KEYSEAL_IV_BYTES,
+                     KEYSEAL_MAX_MESSAGE_CHARS, parseKeySealed,
+                     sealWithSessionKey, openWithSessionKey };
 }
 
 if (typeof document !== "undefined") {
@@ -2379,6 +2479,51 @@ if (typeof document !== "undefined") {
           : "✗ No match — well-formed inputs, but they derive a different key. Check the " +
             "purpose and salt first: either one being different gives an unrelated key, " +
             "which is the separation working as designed, not an error to override.";
+      });
+    });
+
+    /* --- use the key: lock a message with a derived key --- */
+    document.getElementById("keyseal-make").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("keyseal-out");
+      var status = document.getElementById("keyseal-result");
+      status.textContent = "Locking locally…";
+      sealWithSessionKey(document.getElementById("keyseal-message").value,
+        document.getElementById("keyseal-key").value).then(function (sealed) {
+        if (!sealed) {
+          out.value = "";
+          status.textContent = "That cannot lock: write a message and paste a whole " +
+            "32-byte derived key as hex — the kind tool 19 derives (use its messaging " +
+            "purpose for messages). A password is not a key here.";
+          return;
+        }
+        out.value = sealed;
+        status.textContent = "Locked locally with that exact key — no password was " +
+          "involved and nothing left this page. Only the same derived key opens it: " +
+          "the other side derives it from the same secret, purpose and salt (tools " +
+          "18–19). Send the locked text anywhere; send the key nowhere — whoever " +
+          "holds it reads everything locked with it.";
+      });
+    });
+    document.getElementById("keyseal-open").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("keyopen-out");
+      var status = document.getElementById("keyopen-result");
+      status.textContent = "Opening locally…";
+      openWithSessionKey(document.getElementById("keyopen-sealed").value,
+        document.getElementById("keyopen-key").value).then(function (msg) {
+        if (msg === null) {
+          out.value = "";
+          status.textContent = "That does not open: either the key is not a whole " +
+            "32-byte derived key, or it is not the key this was locked with, or the " +
+            "locked text was changed or cut short. AES-GCM fails outright rather " +
+            "than guess — a wrong key and a tampered message look the same from here.";
+          return;
+        }
+        out.value = msg;
+        status.textContent = "✓ Opened locally — that is exactly the message that was " +
+          "locked with this key, unchanged: the GCM tag checked out, which no other " +
+          "key and no altered byte can produce.";
       });
     });
 

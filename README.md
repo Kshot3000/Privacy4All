@@ -252,6 +252,25 @@ renewable resource that pays for shielded transactions.
   assumes high-entropy input, which is why there is deliberately
   no password stretching here. Never paste a real seed phrase
   or production secret into any web page, including this one.
+- **Use the key — lock a message with the key you both derived** —
+  where the chain lands: the 32-byte key the HKDF tool derives
+  imports directly as a real AES-GCM key and locks a message
+  locally, in a versioned `p4a-keysealed-v1` line carrying only
+  a fresh random IV and the ciphertext. No password, no
+  stretching and no salt — the derived key is already
+  high-entropy key material, which is the contrast with the
+  password-sealing tool, whose sealed text has to carry a salt
+  because it starts from a human password. The GCM tag means a
+  wrong key fails outright, exactly like a tampered or
+  truncated message; there is no fallback. Honestly labelled a
+  teaching implementation, not an audited messaging app: real
+  messengers add ratcheting, message numbering and key erasure,
+  the key itself is the whole secret (whoever it leaks to reads
+  everything locked with it), and locked length leaks the
+  message's approximate length. Never paste a real wallet key
+  or a production session key into any web page, including
+  this one — practise with throwaway keys from the agreement
+  and derivation tools.
 
 ## Guides
 

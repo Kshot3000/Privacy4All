@@ -537,6 +537,31 @@
           <p id="derive-check-result" role="status" aria-live="polite"></p>
         </form>
       </div>
+
+      <div class="tool" id="key-sealed-message">
+        <h3>20 · Use the key — lock a message with the key you both derived</h3>
+        <p>Tools 18 and 19 end with a key nobody has used yet — this is where it gets used. This tool uses the derived key directly as a real AES-GCM key: no password, no stretching and no salt, because tool 19's output is already high-entropy key material, which is exactly what the derivation was for. (Tool 16 is the contrast: it starts from a human password, so it must stretch it first, and its sealed text carries a salt. Here the sealed text carries only a fresh random IV per message.) Locking and opening run locally for real, and the authentication tag means a wrong key fails outright, exactly like a tampered or truncated message — there is no password fallback and no best guess. Honestly labelled limits: this is a teaching implementation, not an audited messaging app — real messengers add ratcheting, message numbering and key erasure on top of this shape. The key itself is the whole secret: whoever it leaks to reads everything locked with it, past and future, until both sides derive a fresh one, and the locked text still leaks the message's approximate length. Keys exist only in this page — nothing is stored or sent. Never paste a real wallet key or a production session key into any web page, including this one — practise with throwaway keys from tools 18–19.</p>
+        <form id="keyseal-make">
+          <label for="keyseal-message">Message to lock</label>
+          <textarea id="keyseal-message" rows="3" spellcheck="false" placeholder="e.g. the blue locker, Friday, nine — bring the spare key"></textarea>
+          <label for="keyseal-key">Derived key, as hex (exactly 32 bytes — tool 19's output; use its messaging purpose for messages)</label>
+          <textarea id="keyseal-key" rows="2" spellcheck="false" placeholder="Paste the derived key hex here"></textarea>
+          <button type="submit" class="btn primary">Lock it with this key locally</button>
+          <label for="keyseal-out">Your locked message — an IV and the ciphertext, nothing else; the key is not in it</label>
+          <textarea id="keyseal-out" rows="3" readonly spellcheck="false"></textarea>
+          <p id="keyseal-result" role="status" aria-live="polite"></p>
+        </form>
+        <form id="keyseal-open">
+          <label for="keyopen-sealed">Locked message to open</label>
+          <textarea id="keyopen-sealed" rows="3" spellcheck="false" placeholder="p4a-keysealed-v1:…"></textarea>
+          <label for="keyopen-key">The derived key it was locked with, as hex (exactly 32 bytes)</label>
+          <textarea id="keyopen-key" rows="2" spellcheck="false" placeholder="Paste the derived key hex here"></textarea>
+          <button type="submit" class="btn primary">Open it with this key locally</button>
+          <label for="keyopen-out">The opened message — exactly as it was locked, or nothing at all</label>
+          <textarea id="keyopen-out" rows="3" readonly spellcheck="false"></textarea>
+          <p id="keyopen-result" role="status" aria-live="polite"></p>
+        </form>
+      </div>
     </div>
   </section>
 
@@ -567,6 +592,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=17"></script>
+<script src="app.js?v=18"></script>
 </body>
 </html>
