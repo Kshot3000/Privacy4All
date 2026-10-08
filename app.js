@@ -1705,6 +1705,143 @@ function openAuthenticatedMessage(sealed, keyText, senderPublicKeyHex) {
   });
 }
 
+/* ---------- 22. One key per message — the ratchet ---------- */
+/* Tool 20 ends with a warning worth acting on: its one session
+   key locks every message, so whoever the key leaks to reads
+   everything locked with it, past and future. Real messengers
+   answer that with a ratchet: the key moves after every single
+   message, and this tool builds the simple symmetric version.
+   A chain state (p4a-chain-v1:<index>:<chainKeyHex>) holds a
+   position counter and one 32-byte chain key — at position 0
+   the chain key IS the tool-19 session key. Each step runs
+   HKDF-SHA-256 twice over the chain key with two different
+   info strings: one output is this message's own key (used
+   once, through tool 20's exact seal), the other is the next
+   chain key. HKDF is one-way, so the step cannot be run
+   backwards: from a later chain state there is no way to
+   recompute an earlier message key, which is the whole point —
+   overwrite an old state and the messages it opened are gone
+   for good, even to someone who later gets the current state.
+   That is forward secrecy for the past. The honest limits are
+   just as much the lesson: the chain is symmetric, so it
+   protects the past only — a leaked current state opens every
+   message after it until both sides run tools 18–19 again and
+   start a fresh chain; messages open strictly in order (this
+   simple chain has no store for skipped message keys, which
+   real messengers add); each direction needs its own chain
+   (start the reply chain from a different tool-19 purpose or
+   salt, or the two directions' keys collide); and a chain is
+   capped at RATCHET_MAX_INDEX messages and then refuses,
+   rather than run unbounded. A failed open advances nothing:
+   the caller's state is untouched, so an out-of-order message
+   can simply be retried once the missing one arrives. Honest
+   label: teaching implementation, not an audited messaging
+   app. States and keys exist only in this page; never paste a
+   real wallet key or a production session key into any web
+   page, including this one — practise with throwaway keys
+   from tools 18–19. */
+var RATCHET_STATE_FORMAT = "p4a-chain-v1";
+var RATCHET_MSG_INFO = "privacy4all-ratchet-v1 message";
+var RATCHET_NEXT_INFO = "privacy4all-ratchet-v1 next";
+var RATCHET_MAX_INDEX = 1000000;
+
+function ratchetHkdf(chainKeyHex, info) {
+  var cryptoObj = agreeCrypto();
+  if (!cryptoObj) return Promise.resolve(null);
+  return cryptoObj.subtle.importKey("raw", hexToBytes(chainKeyHex), "HKDF", false, ["deriveBits"])
+    .then(function (base) {
+      return cryptoObj.subtle.deriveBits(
+        { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(0),
+          info: secretToBytes(info) },
+        base, DERIVE_KEY_BYTES * 8)
+        .then(function (bits) {
+          var bytes = new Uint8Array(bits);
+          if (bytes.length !== DERIVE_KEY_BYTES) return null;
+          return shareBytesToHex(bytes);
+        }, function () { return null; });
+    }, function () { return null; });
+}
+
+/* One ratchet step: this message's own key, and the next chain
+   key. Deterministic — both sides step identically from the
+   same state — and domain-separated, so a message key is never
+   also a chain key. Malformed chain key is null. */
+function ratchetStep(chainKeyText) {
+  var hex = parseDerivedKey(chainKeyText);
+  if (hex === null) return Promise.resolve(null);
+  return ratchetHkdf(hex, RATCHET_MSG_INFO).then(function (messageKey) {
+    if (messageKey === null) return null;
+    return ratchetHkdf(hex, RATCHET_NEXT_INFO).then(function (nextChainKey) {
+      if (nextChainKey === null) return null;
+      return { messageKey: messageKey, nextChainKey: nextChainKey };
+    });
+  });
+}
+
+function formatChainState(index, chainKeyText) {
+  var hex = parseDerivedKey(chainKeyText);
+  if (hex === null) return null;
+  if (typeof index !== "number" || !isFinite(index) ||
+      Math.floor(index) !== index || index < 0 || index > RATCHET_MAX_INDEX) return null;
+  return RATCHET_STATE_FORMAT + ":" + index + ":" + hex;
+}
+
+function parseChainState(text) {
+  if (typeof text !== "string") return null;
+  var m = text.trim().toLowerCase().match(/^p4a-chain-v1:([0-9]+):([0-9a-f]+)$/);
+  if (!m) return null;
+  var index = Number(m[1]);
+  if (!isFinite(index) || index > RATCHET_MAX_INDEX) return null;
+  /* One spelling per state: "007" is not position 7. */
+  if (String(index) !== m[1]) return null;
+  var hex = parseDerivedKey(m[2]);
+  if (hex === null) return null;
+  return { index: index, chainKey: hex };
+}
+
+/* A chain starts at position 0 with the session key itself as
+   the first chain key — which is why the key must be fresh per
+   conversation (tools 18–19), never reused across chains. */
+function startChainState(sessionKeyText) {
+  return formatChainState(0, sessionKeyText);
+}
+
+/* Returns { sealed, state }: the message sealed under this
+   position's own key (exactly tool 20's line), and the next
+   state to keep. The state that was passed in is spent. */
+function sealRatchetMessage(stateText, message) {
+  var state = parseChainState(stateText);
+  if (state === null || !validKeySealMessage(message)) return Promise.resolve(null);
+  return ratchetStep(state.chainKey).then(function (step) {
+    if (step === null) return null;
+    var next = formatChainState(state.index + 1, step.nextChainKey);
+    if (next === null) return null;
+    return sealWithSessionKey(message, step.messageKey).then(function (sealed) {
+      if (sealed === null) return null;
+      return { sealed: sealed, state: next };
+    });
+  });
+}
+
+/* Returns { message, state } on success. Anything else — a
+   message from a later position, a replay of an earlier one, a
+   tampered seal, the wrong chain — is null, and the caller's
+   state has NOT advanced, so the message can be retried when
+   its turn comes. */
+function openRatchetMessage(stateText, sealed) {
+  var state = parseChainState(stateText);
+  if (state === null || parseKeySealed(sealed) === null) return Promise.resolve(null);
+  return ratchetStep(state.chainKey).then(function (step) {
+    if (step === null) return null;
+    var next = formatChainState(state.index + 1, step.nextChainKey);
+    if (next === null) return null;
+    return openWithSessionKey(sealed, step.messageKey).then(function (message) {
+      if (message === null) return null;
+      return { message: message, state: next };
+    });
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -1744,7 +1881,12 @@ if (typeof module !== "undefined" && module.exports) {
                      AUTHSEAL_FORMAT, AUTHSEAL_ENVELOPE_FORMAT,
                      AUTHSEAL_MAX_MESSAGE_CHARS, parseAuthSealed,
                      parseSignedEnvelope, signAndSealMessage,
-                     openAuthenticatedMessage };
+                     openAuthenticatedMessage,
+                     RATCHET_STATE_FORMAT, RATCHET_MSG_INFO,
+                     RATCHET_NEXT_INFO, RATCHET_MAX_INDEX,
+                     parseChainState, formatChainState,
+                     startChainState, ratchetStep,
+                     sealRatchetMessage, openRatchetMessage };
 }
 
 if (typeof document !== "undefined") {
@@ -2689,6 +2831,82 @@ if (typeof document !== "undefined") {
             "can read them, but read them as unauthenticated: someone with the " +
             "session key sealed this, and it was not signed by the key you " +
             "checked. Private is not the same as from them.";
+      });
+    });
+
+    /* --- one key per message: the ratchet --- */
+    document.getElementById("ratchet-start").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("ratchet-start-out");
+      var status = document.getElementById("ratchet-start-result");
+      var state = startChainState(document.getElementById("ratchet-start-in").value);
+      if (state === null) {
+        out.value = "";
+        status.textContent = "That cannot start a chain: paste a whole 32-byte " +
+          "derived key from tool 19. The session key becomes the chain key at " +
+          "position 0 — used for exactly one message, then never again.";
+        return;
+      }
+      out.value = state;
+      status.textContent = "Chain started at position 0. Both sides start from " +
+        "the same session key, so both hold this same starting state. Keep your " +
+        "copy for sending; replies need their own chain, started from a " +
+        "different tool-19 purpose or salt. After your first message this state " +
+        "is spent — replace it with the next state the seal box gives you, and " +
+        "let the old one go.";
+    });
+    document.getElementById("ratchet-seal").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("ratchet-seal-out");
+      var nextOut = document.getElementById("ratchet-seal-next");
+      var status = document.getElementById("ratchet-seal-result");
+      status.textContent = "Stepping the chain and sealing locally…";
+      sealRatchetMessage(document.getElementById("ratchet-seal-state").value,
+        document.getElementById("ratchet-seal-message").value).then(function (res) {
+        if (res === null) {
+          out.value = "";
+          nextOut.value = "";
+          status.textContent = "That cannot seal: paste your current chain " +
+            "state (a whole p4a-chain-v1 line that has not hit the chain's " +
+            "labelled cap) and write a message. A blank message, a spent or " +
+            "malformed state, or a chain at its cap seals nothing.";
+          return;
+        }
+        out.value = res.sealed;
+        nextOut.value = res.state;
+        status.textContent = "Sealed with this position's own key — and the " +
+          "chain has already moved on. Replace your saved state with the NEXT " +
+          "state below. The state you pasted is spent: once you overwrite it, " +
+          "this message's key cannot be recomputed from anything you still " +
+          "hold. That is the ratchet working, not an inconvenience.";
+      });
+    });
+    document.getElementById("ratchet-open").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("ratchet-open-out");
+      var nextOut = document.getElementById("ratchet-open-next");
+      var status = document.getElementById("ratchet-open-result");
+      status.textContent = "Stepping the chain and opening locally…";
+      openRatchetMessage(document.getElementById("ratchet-open-state").value,
+        document.getElementById("ratchet-open-in").value).then(function (res) {
+        if (res === null) {
+          out.value = "";
+          nextOut.value = "";
+          status.textContent = "That does not open at this position — and your " +
+            "state has NOT advanced, nothing was consumed. The usual causes: " +
+            "this is a later message and an earlier one has not arrived yet " +
+            "(this simple chain opens strictly in order — keep the sealed text " +
+            "and retry when the missing message lands), it is a replay of a " +
+            "message you already opened, it belongs to the other direction's " +
+            "chain, or the sealed text was changed or cut short.";
+          return;
+        }
+        out.value = res.message;
+        nextOut.value = res.state;
+        status.textContent = "✓ Opened with this position's key — and the chain " +
+          "has moved on. Replace your saved state with the NEXT state below: " +
+          "the one you pasted can never open this message again, which is " +
+          "exactly what protects it if your state leaks later.";
       });
     });
 

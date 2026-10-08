@@ -591,6 +591,42 @@
           <p id="authopen-result" role="status" aria-live="polite"></p>
         </form>
       </div>
+      <div class="tool" id="ratchet-message">
+        <h3>22 · One key per message — the ratchet</h3>
+        <p>Tool 20 names the price of one key for everything: whoever it leaks to reads everything locked with it, past and future. This tool builds the fix real messengers use — a ratchet — in its simplest symmetric form: one fresh key per message, and the key moves on the moment it has been used. A chain state is one line, <code>p4a-chain-v1:&lt;position&gt;:&lt;chain key&gt;</code>, starting from a tool-19 session key at position 0. Each step runs HKDF (tool 19's machinery) twice over the chain key with two different labels: one output is this message's own key, sealing through tool 20's exact format, and the other is the next chain key. HKDF runs one way only, so there is no way to recompute an earlier message key from a later state — overwrite an old state and its messages are gone for good, even to someone who later gets your current state. That is forward secrecy for the past. The honest limits are the other half of the lesson: this chain protects the past only — a leaked current state opens every message after it, until both sides agree fresh keys with tools 18–19 and start a new chain; messages open strictly in order, because this simple chain keeps no skipped-message keys; each direction needs its own chain, started from a different tool-19 purpose or salt; and a chain stops at a labelled cap of 1,000,000 messages rather than running unbounded. A failed open advances nothing, so an early message can be retried when its turn comes. Honestly labelled: this is a teaching implementation, not an audited messaging app — real messengers add a second, asymmetric ratchet on top, which is what heals a chain after a leak. Never paste a real wallet key or a production session key into any web page, including this one — practise with throwaway keys from tools 18–19.</p>
+        <form id="ratchet-start">
+          <label for="ratchet-start-in">Session key, as hex (exactly 32 bytes — tool 19's output; both sides start from the same one)</label>
+          <textarea id="ratchet-start-in" rows="2" spellcheck="false" placeholder="Paste the derived key hex here"></textarea>
+          <button type="submit" class="btn primary">Start a chain from this key locally</button>
+          <label for="ratchet-start-out">Your starting chain state — position 0; keep it somewhere you can overwrite, because it is spent after one message</label>
+          <textarea id="ratchet-start-out" rows="2" readonly spellcheck="false"></textarea>
+          <p id="ratchet-start-result" role="status" aria-live="polite"></p>
+        </form>
+        <form id="ratchet-seal">
+          <label for="ratchet-seal-state">Your current chain state (the latest p4a-chain-v1 line — yours to send with)</label>
+          <textarea id="ratchet-seal-state" rows="2" spellcheck="false" placeholder="p4a-chain-v1:0:…"></textarea>
+          <label for="ratchet-seal-message">Message to lock with this position's key</label>
+          <textarea id="ratchet-seal-message" rows="3" spellcheck="false" placeholder="e.g. third note in the chain — this key exists for this message only"></textarea>
+          <button type="submit" class="btn primary">Step the chain and lock it locally</button>
+          <label for="ratchet-seal-out">Your locked message — a plain tool-20 seal; only this position's key opens it</label>
+          <textarea id="ratchet-seal-out" rows="3" readonly spellcheck="false"></textarea>
+          <label for="ratchet-seal-next">Your NEXT chain state — replace the one you pasted with this, and let the old one go</label>
+          <textarea id="ratchet-seal-next" rows="2" readonly spellcheck="false"></textarea>
+          <p id="ratchet-seal-result" role="status" aria-live="polite"></p>
+        </form>
+        <form id="ratchet-open">
+          <label for="ratchet-open-state">Your current chain state for this direction (the latest p4a-chain-v1 line you hold for receiving)</label>
+          <textarea id="ratchet-open-state" rows="2" spellcheck="false" placeholder="p4a-chain-v1:0:…"></textarea>
+          <label for="ratchet-open-in">Locked message to open (it must be the next one in the chain — strictly in order)</label>
+          <textarea id="ratchet-open-in" rows="3" spellcheck="false" placeholder="p4a-keysealed-v1:…"></textarea>
+          <button type="submit" class="btn primary">Step the chain and open it locally</button>
+          <label for="ratchet-open-out">The opened message — exactly as it was locked, or nothing at all</label>
+          <textarea id="ratchet-open-out" rows="3" readonly spellcheck="false"></textarea>
+          <label for="ratchet-open-next">Your NEXT chain state — replace the one you pasted with this; the old position's key is gone</label>
+          <textarea id="ratchet-open-next" rows="2" readonly spellcheck="false"></textarea>
+          <p id="ratchet-open-result" role="status" aria-live="polite"></p>
+        </form>
+      </div>
     </div>
   </section>
 
@@ -621,6 +657,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=19"></script>
+<script src="app.js?v=20"></script>
 </body>
 </html>

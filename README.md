@@ -289,6 +289,26 @@ renewable resource that pays for shielded transactions.
   key really is the sender's, which has to be established
   outside this page. Never paste a real wallet's private key
   into any web page, including this one.
+- **One key per message — the ratchet** — builds the fix
+  tool 20 names for its one-key-for-everything warning: a
+  symmetric hash-chain ratchet. A chain state
+  (`p4a-chain-v1:<position>:<chain key>`) starts from a
+  tool-19 session key at position 0; each step runs
+  HKDF-SHA-256 twice with separate info strings — one output
+  is that message's own key, sealing through tool 20's exact
+  `p4a-keysealed-v1` line, the other is the next chain key —
+  and HKDF's one-wayness means an earlier message key cannot
+  be recomputed from a later state, so overwriting an old
+  state erases its messages for good: forward secrecy for the
+  past. Honestly labelled a teaching implementation, not an
+  audited messaging app: the chain protects the past only —
+  a leaked current state opens everything after it until
+  both sides agree fresh keys — messages open strictly in
+  order, each direction needs its own chain, a chain is
+  capped at a labelled 1,000,000 messages rather than
+  running unbounded, and a failed open advances nothing.
+  Never paste a real wallet key or a production session
+  key into any web page, including this one.
 
 ## Guides
 
