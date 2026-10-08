@@ -781,6 +781,31 @@
           <p id="authbox-open-result" role="status" aria-live="polite"></p>
         </form>
       </div>
+
+      <div class="tool" id="safety-number">
+        <h3>28 · Is that really their key? — the safety number</h3>
+        <p>Every tool from 17 on ends on the same warning: a signature, a sealed box, an agreement — all of them prove the key, and the key only helps if the public key you hold is really theirs. The swap that defeats the whole suite happens before any message: a directory, a profile page or a person in the middle hands you a different public key, and from then on every check passes — against the swapper's key. This tool is the check that runs before trust: a safety number for a pair of public keys. Both keys are sorted and hashed together under a domain label, so both people compute exactly the same number from the same two published keys, in either order, without meeting and without any secret. The number is built from public keys alone, so it is safe to read aloud, print or post, and revealing it reveals nothing about any private key. Twelve groups of five digits — long enough that a swapper cannot realistically find a key that lands on the same number, short enough to compare over a phone call. One rule matters more than the maths: compare it over a channel you already trust — a voice you recognise, in person — because a number delivered over the same channel that delivered the key proves nothing; the swapper swaps both. If even one group differs, stop: one of the keys is not the key its owner published, and no message should be sent until the keys are re-checked on a trusted channel. The honest limits: the number proves the keys, not a legal name — it binds a key to whoever read the number to you, and to nothing else; it must be re-compared whenever a key changes, because a new key is a new number; this page's digit format is its own teaching format (the first 60 hex characters of a SHA-256 digest, five hex characters to a five-digit group), not any messenger's published safety-number format; and a 60-digit number is a truncated hash, so collision resistance here is a practical teaching property, not a proof. Honestly labelled: this is a teaching implementation, not an audited identity system. This tool takes public keys only — never paste a real wallet key or any private key into any web page, including this one; practise with throwaway keys from tools 17 and 18.</p>
+        <form id="safety-make">
+          <label for="safety-a">One public key, as hex (exactly 91 bytes — a tool 17 signing key or a tool 18 agreement key; a public key is safe to share, that is its job)</label>
+          <textarea id="safety-a" rows="2" spellcheck="false" placeholder="Paste the first public key hex here"></textarea>
+          <label for="safety-b">The other public key, as hex (exactly 91 bytes — order does not matter; both sides sort the pair the same way)</label>
+          <textarea id="safety-b" rows="2" spellcheck="false" placeholder="Paste the second public key hex here"></textarea>
+          <button type="submit" class="btn primary">Work out the safety number locally</button>
+          <label for="safety-out">The safety number for this pair of keys — twelve groups of five digits; safe to read aloud, print or post</label>
+          <textarea id="safety-out" rows="2" readonly spellcheck="false"></textarea>
+          <p id="safety-result" role="status" aria-live="polite"></p>
+        </form>
+        <form id="safety-check">
+          <label for="safety-check-a">One public key, as hex (exactly 91 bytes — the same pair, in either order)</label>
+          <textarea id="safety-check-a" rows="2" spellcheck="false" placeholder="Paste the first public key hex here"></textarea>
+          <label for="safety-check-b">The other public key, as hex (exactly 91 bytes)</label>
+          <textarea id="safety-check-b" rows="2" spellcheck="false" placeholder="Paste the second public key hex here"></textarea>
+          <label for="safety-check-expected">The safety number you were given over the trusted channel (sixty digits; spacing and grouping are ignored)</label>
+          <textarea id="safety-check-expected" rows="2" spellcheck="false" placeholder="e.g. 67231 38642 17800 …"></textarea>
+          <button type="submit" class="btn primary">Check the number locally</button>
+          <p id="safety-check-result" role="status" aria-live="polite"></p>
+        </form>
+      </div>
     </div>
   </section>
 
@@ -811,6 +836,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=25"></script>
+<script src="app.js?v=26"></script>
 </body>
 </html>

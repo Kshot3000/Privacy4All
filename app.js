@@ -2573,6 +2573,122 @@ function openAuthenticatedBoxMessage(privateKeyHex, sealedText, senderPublicKeyH
   });
 }
 
+/* ---------- 28. Is that really their key? — the safety number ---------- */
+/* Every tool from 17 on ends on the same warning: a
+   signature, a box, an agreement — all of them prove the
+   KEY, and the key only helps if the public key you hold
+   is really theirs. The swap that defeats the whole suite
+   happens before any message: a directory, a profile page
+   or a person in the middle hands you a different public
+   key, and from then on every check passes — against the
+   swapper's key. This tool is the check that runs BEFORE
+   trust: a SAFETY NUMBER for a pair of public keys. Each
+   key is hashed in with a domain label after sorting the
+   two, so both people compute exactly the same number from
+   the same two published keys, in either order, without
+   meeting and without any secret — the number is built
+   from public keys alone, so it is safe to read aloud,
+   print, or post, and revealing it reveals nothing about
+   any private key. Twelve groups of five digits: long
+   enough that a swapper cannot realistically find a key
+   that lands on the same number, short enough to compare
+   over a phone call. The comparison belongs on a channel
+   you already trust — a voice you recognise, in person —
+   because a number delivered over the same channel that
+   delivered the key proves nothing: the swapper swaps
+   both. Honest limits, stated plainly: the number proves
+   the keys, not a legal name — it binds a key to whoever
+   read the number to you, and to nothing else; it must
+   be re-compared whenever a key changes, because a new
+   key is a new number; this page's digit format is its
+   own teaching format (first 60 hex characters of the
+   digest, five hex characters to a five-digit group),
+   not any messenger's published safety-number format;
+   and a 60-digit number is a truncated hash — collision
+   resistance here is a practical teaching property, not
+   a proof. Teaching implementation, not an audited
+   identity system. Never paste a real wallet key into
+   any web page, including this one — public keys from
+   tools 17 and 18 are the only things this tool takes,
+   and even those should be throwaway practise keys. */
+var SAFETY_PREFIX = "privacy4all-safetynumber-v1";
+var SAFETY_GROUPS = 12;
+var SAFETY_GROUP_DIGITS = 5;
+
+function parseSafetyPublicKey(text) {
+  var bytes = parseKeyHex(text, AGREE_PUBLIC_KEY_BYTES);
+  if (!bytes) return null;
+  return shareBytesToHex(bytes);
+}
+
+/* The display half, pure and synchronous so it can be
+   checked against a plain digest: the first 60 hex
+   characters of the hash become twelve five-digit
+   groups, each group one five-hex-character chunk read
+   as a number under 100000 and zero-padded — leading
+   zeros are digits here, never dropped. Anything that
+   is not a full 64-character SHA-256 hex digest is
+   null, never a plausible-looking short number. */
+function formatSafetyNumber(hashHex) {
+  if (typeof hashHex !== "string") return null;
+  var hex = hashHex.trim().toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(hex)) return null;
+  var head = hex.slice(0, SAFETY_GROUPS * SAFETY_GROUP_DIGITS);
+  var groups = [];
+  for (var i = 0; i < head.length; i += SAFETY_GROUP_DIGITS) {
+    var chunk = parseInt(head.slice(i, i + SAFETY_GROUP_DIGITS), 16) % 100000;
+    groups.push(("00000" + chunk).slice(-SAFETY_GROUP_DIGITS));
+  }
+  return groups.join(" ");
+}
+
+function parseSafetyNumber(text) {
+  if (typeof text !== "string") return null;
+  var digits = text.replace(/[\s-]+/g, "");
+  if (!/^[0-9]{60}$/.test(digits)) return null;
+  return digits;
+}
+
+/* Both sides compute the same number: the two keys are
+   sorted before hashing, so mine-then-theirs and
+   theirs-then-mine are one number, not two. A private
+   key pasted by mistake (138 bytes, not 91), a short
+   key, or junk is null — never a number for the wrong
+   thing. Either tool-17 signing keys or tool-18
+   agreement keys work: both are the same 91-byte SPKI
+   encoding, and the number cares about the key bytes,
+   not which tool made them. */
+function safetyNumberForKeys(publicKeyA, publicKeyB) {
+  var a = parseSafetyPublicKey(publicKeyA);
+  var b = parseSafetyPublicKey(publicKeyB);
+  if (a === null || b === null) return Promise.resolve(null);
+  var lo = a < b ? a : b;
+  var hi = a < b ? b : a;
+  return sha256Hex(SAFETY_PREFIX + "\n" + lo + "\n" + hi)
+    .then(function (hash) {
+      if (hash === null) return null;
+      return formatSafetyNumber(hash);
+    });
+}
+
+/* The verdict half: true only when the number computed
+   from these two keys is exactly the number read over
+   the trusted channel. Spacing, grouping and line
+   breaks in the expected number are ignored — people
+   read numbers aloud in their own grouping — but a
+   malformed expected number (too short, too long,
+   letters) is null, never false: false means "these
+   keys, that well-formed number, no match", and the
+   two answers must never blur. */
+function checkSafetyNumber(publicKeyA, publicKeyB, expectedText) {
+  var expected = parseSafetyNumber(expectedText);
+  if (expected === null) return Promise.resolve(null);
+  return safetyNumberForKeys(publicKeyA, publicKeyB).then(function (actual) {
+    if (actual === null) return null;
+    return actual.replace(/ /g, "") === expected;
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -2634,7 +2750,10 @@ if (typeof module !== "undefined" && module.exports) {
                      sealBoxMessage, openBoxMessage,
                      AUTHBOX_FORMAT, AUTHBOX_KEY_INFO, AUTHBOX_MAX_MESSAGE_CHARS,
                      parseAuthBoxSealed, deriveAuthBoxKey,
-                     sealAuthenticatedBoxMessage, openAuthenticatedBoxMessage };
+                     sealAuthenticatedBoxMessage, openAuthenticatedBoxMessage,
+                     SAFETY_PREFIX, SAFETY_GROUPS, SAFETY_GROUP_DIGITS,
+                     parseSafetyPublicKey, formatSafetyNumber, parseSafetyNumber,
+                     safetyNumberForKeys, checkSafetyNumber };
 }
 
 if (typeof document !== "undefined") {
@@ -3927,6 +4046,59 @@ if (typeof document !== "undefined") {
             "against the sender public key you pasted. The message above is exactly what was " +
             "in the box — read it, but not as theirs: whoever closed this box does not hold " +
             "the signing key for the name you expected.";
+        }
+      });
+    });
+
+    /* --- is that really their key? the safety number --- */
+    document.getElementById("safety-make").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("safety-out");
+      var status = document.getElementById("safety-result");
+      status.textContent = "Working out the safety number locally…";
+      safetyNumberForKeys(document.getElementById("safety-a").value,
+        document.getElementById("safety-b").value).then(function (num) {
+        if (num === null) {
+          out.value = "";
+          status.textContent = "That makes no number: paste two public keys exactly as " +
+            "tools 17 or 18 made them (182 hex characters, 91 bytes each). A private key " +
+            "(276 hex characters) is never an input here — the number is built from public " +
+            "keys alone, which is exactly why it is safe to share. Nothing was computed " +
+            "from the wrong thing.";
+          return;
+        }
+        out.value = num;
+        status.textContent = "✓ Worked out locally, from the two public keys alone — " +
+          "nothing secret went into it, so the number itself is not a secret. Now compare " +
+          "it over a channel you already trust: read it aloud, group by group, and have " +
+          "them read theirs back. If even one group differs, stop — one of the keys is " +
+          "not the key its owner published, and every later check would pass against " +
+          "the wrong key.";
+      });
+    });
+    document.getElementById("safety-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("safety-check-result");
+      status.textContent = "Checking the number locally…";
+      checkSafetyNumber(document.getElementById("safety-check-a").value,
+        document.getElementById("safety-check-b").value,
+        document.getElementById("safety-check-expected").value).then(function (ok) {
+        if (ok === null) {
+          status.textContent = "That cannot be checked: paste two public keys exactly " +
+            "as tools 17 or 18 made them (182 hex characters, 91 bytes each) and a whole " +
+            "safety number — twelve groups of five digits, sixty digits in all. A " +
+            "half-typed number gets no verdict at all, rather than a wrong one.";
+          return;
+        }
+        if (ok) {
+          status.textContent = "✓ Match: the number these two keys produce is exactly " +
+            "the number you were given. That binds these keys to whoever read the number " +
+            "to you over the channel you trust — it proves the keys, not a legal name.";
+        } else {
+          status.textContent = "⚠ No match: these two keys do NOT produce that number. " +
+            "Do not proceed as if they were theirs — one of the keys is not the key its " +
+            "owner published, or the number was read from a different pair. Re-check the " +
+            "keys on a channel you already trust before sending anything private.";
         }
       });
     });

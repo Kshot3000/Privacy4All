@@ -425,6 +425,29 @@ renewable resource that pays for shielded transactions.
   proves when it was signed. Never paste a real wallet
   key or a production private key into any web page,
   including this one.
+- **Is that really their key? — the safety number** —
+  the check that runs before trust, closing the
+  warning every tool from 17 on ends with: a signature
+  or a box proves the key, and a swapped public key
+  makes every later check pass against the swapper.
+  Both public keys are sorted and hashed together
+  under the `privacy4all-safetynumber-v1` label with
+  real SHA-256, and the digest's first 60 hex
+  characters become twelve five-digit groups — the
+  same number on both sides, in either key order,
+  built from public keys alone, so it is safe to read
+  aloud. A companion checker returns `true`, `false`,
+  or `null` for a malformed number, so "no match" and
+  "cannot be checked" never blur. Honestly labelled a
+  teaching implementation, not an audited identity
+  system: the number proves the keys, not a legal
+  name; it must be re-compared whenever a key
+  changes; the digit format is this page's own
+  teaching format, not any messenger's published
+  safety-number format; and a 60-digit number is a
+  truncated hash. Public keys only — never paste a
+  real wallet key or any private key into any web
+  page, including this one.
 
 ## Guides
 
