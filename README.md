@@ -765,6 +765,37 @@ renewable resource that pays for shielded transactions.
   Never paste a real wallet key or a production
   private key into any web page, including this
   one.
+- **Many keys, one signature — aggregate
+  signatures** — the MuSig shape, built on tool
+  33's Schnorr scheme: every signer keeps their
+  own ordinary key, all of them must sign, and
+  the world sees one ordinary-looking key and one
+  ordinary `p4a-schnorr-v1` signature. The
+  aggregate key is a weighted sum,
+  `Ỹ = Σ aᵢ·Yᵢ`, where each coefficient
+  `aᵢ = SHA-256` under
+  `privacy4all-musig-keyagg-v1` of the whole key
+  list and that key — the weighting is what
+  blocks the rogue-key attack, in which the last
+  joiner crafts their key to cancel everyone
+  else's out of a plain sum and ends up holding
+  the group key alone. Each signer commits a
+  fresh nonce for their position in the list
+  (state `p4a-musigsigner-v1`), the challenge is
+  tool 33's own over the summed commitment, each
+  partial answer is tool 32's arithmetic over
+  the weighted scalar `aᵢ·xᵢ`, and the partials
+  sum into a signature tool 33's verifier judges
+  against the aggregate key. Honestly labelled:
+  everyone must sign — one missing signer is no
+  signature, where tool 37's quorum would carry
+  on; the list's order is part of the agreement;
+  production MuSig2 (BIP-327) adds rounds this
+  teaching page omits and works over secp256k1,
+  not this page's P-256. Not the signature format
+  any chain or wallet checks. Never paste a real
+  wallet key or a production private key into
+  any web page, including this one.
 
 ## Guides
 

@@ -5664,6 +5664,275 @@ function extractAdaptorSecret(adaptorText, adaptedText) {
   return p256IntToHex(secret);
 }
 
+/* ---------- 40. Many keys, one signature — aggregate signatures ----------
+
+   Tools 37 and 38 split ONE key across a quorum: any
+   t of n holders can sign, and the group key has a
+   life of its own before anyone signs. This tool is
+   the opposite shape, the MuSig idea: every signer
+   keeps their own ordinary key, ALL of them must sign,
+   and what the world sees is one ordinary-looking key
+   and one ordinary signature. The aggregate key is
+   not the plain sum of the signers' keys — that sum
+   falls to the rogue-key attack, where the last
+   signer to join picks their "key" as a target point
+   minus everyone else's keys, so the plain sum is a
+   key they alone control. Instead each key is first
+   weighted by a coefficient hashed from the WHOLE
+   list and that key together,
+   a_i = H(list, Y_i) mod n, and the aggregate key is
+   Ỹ = Σ a_i·Y_i. A coefficient is a commitment to the
+   final list: change any key and every coefficient
+   changes, so a crafted key is weighted by a number
+   its maker could not predict when they crafted it,
+   and the cancellation stops working.
+
+   Signing mirrors tool 37's committee with the
+   weights in place of Lagrange coefficients and no
+   quorum shortcut: each signer commits a fresh nonce
+   (the commitments gather into one set whose points
+   sum to the aggregate commitment R), the challenge
+   is tool 33's own over R and the message, each
+   partial answer is tool 32's response over the
+   signer's weighted scalar a_i·x_i, and the partials
+   sum into one ordinary p4a-schnorr-v1 line that tool
+   33's verifier — nothing in this tool — judges
+   against the aggregate key. One missing signer is
+   not a weaker signature; it is no signature, and a
+   partial sum offered as the whole thing fails tool
+   33's check.
+
+   The honest limits are plain. Everyone must sign:
+   that is the point of this shape and also its cost —
+   one absent signer blocks the group, where tool 37's
+   quorum would not. This page plays every signer on
+   one device with the nonce commitments exchanged as
+   text; production MuSig (MuSig2, as standardised for
+   Bitcoin in BIP-327) adds nonce-commitment rounds
+   and partial-signature checks this teaching page
+   omits — a signer who reuses one nonce across two
+   sessions, or answers two challenges over one nonce,
+   leaks their weighted scalar here exactly as in
+   tools 32 and 33, and the coefficient does not save
+   them. The key list's ORDER is part of the agreement:
+   the same keys in a different order are a different
+   list, different coefficients, a different aggregate
+   key — agree the list the way tool 28 checks a key,
+   over a channel you already trust. This is a real
+   aggregate signature computed and checked locally,
+   but it is not the signature format any chain or
+   wallet checks — published MuSig works over
+   secp256k1 with its own encodings, and this page
+   stays on the hub's P-256 teaching curve; it is the
+   maths in the open, not one of Midnight's Compact
+   circuit proofs; and like tool 30 the curve code is
+   a teaching implementation, not an audited wallet
+   and not side-channel resistant. Never paste a real
+   wallet key or a production private key into any web
+   page, including this one — practise with throwaway
+   keys from tools 17 and 18. */
+var MUSIG_KEYAGG_PREFIX = "privacy4all-musig-keyagg-v1";
+var MUSIG_SIGNER_FORMAT = "p4a-musigsigner-v1";
+var MUSIG_MIN_SIGNERS = 2;
+var MUSIG_MAX_SIGNERS = 5;
+
+/* The key list, parsed strictly: two to five whole
+   public keys, one per line, each canonicalised, no
+   key twice — a duplicated key would carry two
+   positions and two coefficients for one secret,
+   which is a different agreement than the list
+   pretends to be. The ORDER is kept exactly as
+   given: position i in this list is signer i in
+   every later step. */
+function parseMusigKeyList(text) {
+  if (typeof text !== "string") return null;
+  var lines = text.split(/\r?\n/);
+  var keys = [];
+  var seen = {};
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (line === "") continue;
+    var point = parseP256Point(line);
+    if (point === null) return null;
+    var canonical = formatP256PublicKey(point);
+    if (seen[canonical]) return null;
+    seen[canonical] = true;
+    keys.push(canonical);
+  }
+  if (keys.length < MUSIG_MIN_SIGNERS || keys.length > MUSIG_MAX_SIGNERS) {
+    return null;
+  }
+  return { keys: keys, count: keys.length };
+}
+
+/* One signer's coefficient: SHA-256 over the label,
+   the whole canonical list, and that signer's own
+   key, reduced under the order. A reduction to zero
+   is null — a zero coefficient would silently drop
+   the signer from the aggregate key while their name
+   stayed on the list. */
+function musigKeyCoefficient(keyListText, position) {
+  var list = parseMusigKeyList(keyListText);
+  if (list === null || !validThresholdIndexValue(position) ||
+      position > list.count) {
+    return Promise.resolve(null);
+  }
+  return sha256Hex(MUSIG_KEYAGG_PREFIX + "\n" + list.keys.join("\n") +
+    "\n" + list.keys[position - 1]).then(function (digest) {
+      if (digest === null) return null;
+      var value = BigInt("0x" + digest) % P256_N;
+      if (value === P256_ZERO) return null;
+      return p256IntToHex(value);
+    });
+}
+
+/* The aggregate key: Σ a_i·Y_i over the list, as one
+   ordinary 91-byte public key — the key tool 33's
+   verifier will judge the finished signature
+   against. A sum landing on the point at infinity is
+   null: it would be a key nobody and everybody
+   holds, and the list that produced it is not an
+   agreement, it is an accident. */
+function aggregateMusigKey(keyListText) {
+  var list = parseMusigKeyList(keyListText);
+  if (list === null) return Promise.resolve(null);
+  var coefficients = [];
+  var chain = Promise.resolve(null);
+  list.keys.forEach(function (_, i) {
+    chain = chain.then(function () {
+      return musigKeyCoefficient(keyListText, i + 1).then(function (c) {
+        coefficients.push(c);
+      });
+    });
+  });
+  return chain.then(function () {
+    var total = null;
+    for (var i = 0; i < list.keys.length; i++) {
+      if (coefficients[i] === null) return null;
+      var weighted = p256PointMultiply(BigInt("0x" + coefficients[i]),
+        parseP256Point(list.keys[i]));
+      if (weighted === null) return null;
+      total = total === null ? weighted : p256PointAdd(total, weighted);
+      if (total === null) return null;
+    }
+    return formatP256PublicKey(total);
+  });
+}
+
+/* The signer-only state line: tool 37's pairing
+   discipline under this tool's own tag — the signer's
+   POSITION in the agreed list, their nonce, and the
+   commitment it belongs to, so a state can never be
+   quietly re-paired with a different commitment, a
+   different position, or another tool, at answer
+   time. */
+function formatMusigSignerState(position, nonceHex, commitmentHex) {
+  var nonce = parseProofScalar(nonceHex);
+  var point = parseP256Point(commitmentHex);
+  if (!validThresholdIndexValue(position) || nonce === null || point === null) {
+    return null;
+  }
+  return MUSIG_SIGNER_FORMAT + ":" + position + ":" + nonce + ":" +
+    formatP256PublicKey(point);
+}
+
+function parseMusigSignerState(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 4 || parts[0] !== MUSIG_SIGNER_FORMAT) return null;
+  var position = parseThresholdIndexText(parts[1]);
+  var nonce = parseProofScalar(parts[2]);
+  var point = parseP256Point(parts[3]);
+  if (position === null || nonce === null || point === null) return null;
+  return { index: position, nonce: nonce, commitment: formatP256PublicKey(point) };
+}
+
+/* A signer's first move: draw a fresh nonce for their
+   position in the list, commit to it, and hand back
+   the commitment-set line to publish and the secret
+   state line to keep. No key is read here — the
+   position is a claim the answer step will check
+   against the actual key. */
+function makeMusigCommitment(position) {
+  if (!validThresholdIndexValue(position)) return null;
+  var nonce = randomProofScalar();
+  if (nonce === null) return null;
+  var commitment = proofCommitmentForNonce(nonce);
+  var state = formatMusigSignerState(position, nonce, commitment);
+  var line = formatThresholdCommitmentLine(position, commitment);
+  if (commitment === null || state === null || line === null) return null;
+  return { index: position, commitment: commitment, line: line, state: state };
+}
+
+/* The partial answer: s_i = k_i + e·a_i·x_i mod n,
+   tool 32's response arithmetic with the signer's
+   scalar first weighted by their coefficient for
+   THIS list. Every pairing is checked before any
+   arithmetic: the list holds the signer's own public
+   key at the state's position (a private key offered
+   for the wrong position, or a list that names a
+   stranger there, is null), the state's commitment
+   is its own nonce's commitment and stands in the
+   set under that position, and the set is COMPLETE —
+   one commitment per position, 1 through the list's
+   count, no gaps, no extras — because in this shape
+   everyone signs or nobody does. A weighted scalar
+   of exactly zero, or a challenge of zero, is null:
+   the answer would carry no trace of the signer. */
+function musigPartialResponse(privateKeyHex, stateText, keyListText, message, commitmentSetText) {
+  var list = parseMusigKeyList(keyListText);
+  var state = parseMusigSignerState(stateText);
+  var set = parseThresholdCommitmentSet(commitmentSetText);
+  if (list === null || state === null || set === null ||
+      !validSchnorrMessage(message)) {
+    return Promise.resolve(null);
+  }
+  if (state.index > list.count) return Promise.resolve(null);
+  if (set.indices.length !== list.count) return Promise.resolve(null);
+  for (var i = 0; i < list.count; i++) {
+    if (set.indices[i] !== i + 1) return Promise.resolve(null);
+  }
+  if (proofCommitmentForNonce(state.nonce) !== state.commitment) {
+    return Promise.resolve(null);
+  }
+  if (set.commitments[state.index] !== state.commitment) {
+    return Promise.resolve(null);
+  }
+  return musigKeyCoefficient(keyListText, state.index).then(function (coefficient) {
+    if (coefficient === null) return null;
+    return agreementPrivateParts(privateKeyHex).then(function (parts) {
+      if (!parts) return null;
+      var signerPoint = parseP256Point(SPENDKEY_SPKI_PREFIX_HEX + parts.pointHex);
+      if (signerPoint === null) return null;
+      if (formatP256PublicKey(signerPoint) !== list.keys[state.index - 1]) {
+        return null;
+      }
+      var weighted = (BigInt("0x" + coefficient) * BigInt("0x" + parts.scalarHex)) % P256_N;
+      if (weighted === P256_ZERO) return null;
+      return schnorrChallenge(set.aggregate, message).then(function (challenge) {
+        if (challenge === null) return null;
+        return proofResponseForScalar(p256IntToHex(weighted), state.nonce, challenge);
+      });
+    });
+  });
+}
+
+/* The combination: the partial answers — one per
+   signer, in any order, because addition does not
+   care — summed under the order over the set's
+   aggregate commitment, formatted as an ordinary
+   p4a-schnorr-v1 signature. The summation is tool
+   37's own, deliberately: addition is addition, and
+   what differs here is everything upstream of it.
+   Whether the result is a REAL signature is tool
+   33's verdict, over the aggregate key and the exact
+   message — a missing partial sums to a line tool 33
+   rejects, and the count check here refuses to even
+   format a set that does not match its commitments. */
+function combineMusigResponses(commitmentSetText, responsesText) {
+  return combineThresholdResponses(commitmentSetText, responsesText);
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -5792,7 +6061,12 @@ if (typeof module !== "undefined" && module.exports) {
                      adaptorPointForSecret, generateAdaptorSecret,
                      formatAdaptorSignature, parseAdaptorSignature,
                      createAdaptorSignature, verifyAdaptorSignature,
-                     adaptAdaptorSignature, extractAdaptorSecret };
+                     adaptAdaptorSignature, extractAdaptorSecret,
+                     MUSIG_KEYAGG_PREFIX, MUSIG_SIGNER_FORMAT,
+                     parseMusigKeyList, musigKeyCoefficient, aggregateMusigKey,
+                     formatMusigSignerState, parseMusigSignerState,
+                     makeMusigCommitment, musigPartialResponse,
+                     combineMusigResponses };
 }
 
 if (typeof document !== "undefined") {
@@ -8134,6 +8408,99 @@ if (typeof document !== "undefined") {
         "the first form of tool 39 — its point is the adaptor " +
         "point the pre-signature was locked to — and use it to " +
         "adapt any other pre-signature locked to the same point.";
+    });
+
+    /* --- many keys, one signature (aggregate signatures) --- */
+    document.getElementById("musig-aggregate").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("musig-agg-out");
+      var status = document.getElementById("musig-aggregate-result");
+      out.value = "";
+      status.textContent = "Working…";
+      aggregateMusigKey(document.getElementById("musig-keys").value).then(function (agg) {
+        if (!agg) {
+          status.textContent = "No aggregate key: the list must be " +
+            "two to five whole 91-byte public keys, one per line, " +
+            "with no key repeated.";
+          return;
+        }
+        out.value = agg;
+        status.textContent = "Aggregate key computed. It is one " +
+          "ordinary public key, weighted so no late joiner can " +
+          "cancel the others out of it. Everyone on the list must " +
+          "sign; the finished signature is checked against this " +
+          "key in tool 33's verify form.";
+      });
+    });
+
+    document.getElementById("musig-commit").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var lineOut = document.getElementById("musig-commitment-out");
+      var stateOut = document.getElementById("musig-state-out");
+      var status = document.getElementById("musig-commit-result");
+      lineOut.value = "";
+      stateOut.value = "";
+      var made = makeMusigCommitment(parseInt(document.getElementById("musig-position").value, 10));
+      if (!made) {
+        status.textContent = "No commitment drawn: the position " +
+          "must be a whole number from 1 to 5 — your place in the " +
+          "agreed key list.";
+        return;
+      }
+      lineOut.value = made.line;
+      stateOut.value = made.state;
+      status.textContent = "Commitment drawn for position " +
+        made.index + ". Publish the commitment line; keep the " +
+        "state line secret — it carries the nonce, and it is " +
+        "shown here once and stored nowhere.";
+    });
+
+    document.getElementById("musig-part").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("musig-part-out");
+      var status = document.getElementById("musig-part-result");
+      out.value = "";
+      status.textContent = "Working…";
+      musigPartialResponse(document.getElementById("musig-part-priv").value,
+        document.getElementById("musig-part-state").value,
+        document.getElementById("musig-part-keys").value,
+        document.getElementById("musig-part-message").value,
+        document.getElementById("musig-part-set").value).then(function (partial) {
+          if (!partial) {
+            status.textContent = "No partial answer: the private " +
+              "key must be the key standing at the state's position " +
+              "in the list, the state must be the commitment's own, " +
+              "the commitment set must be complete — one line per " +
+              "position, 1 through the list's count — and the " +
+              "message a whole message of at most 2,000 characters.";
+            return;
+          }
+          out.value = partial;
+          status.textContent = "Partial answer computed. Publish " +
+            "the number; it signs nothing alone — the signature " +
+            "exists only when every signer's partial is in.";
+        });
+    });
+
+    document.getElementById("musig-combine").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("musig-combine-out");
+      var status = document.getElementById("musig-combine-result");
+      out.value = "";
+      var line = combineMusigResponses(document.getElementById("musig-combine-set").value,
+        document.getElementById("musig-combine-responses").value);
+      if (!line) {
+        status.textContent = "Nothing combined: the commitment set " +
+          "must be whole and the answers exactly one per commitment " +
+          "line — a missing signer is no signature, and this form " +
+          "will not dress a partial sum up as one.";
+        return;
+      }
+      out.value = line;
+      status.textContent = "Combined. Check the line in tool 33's " +
+        "verify form against the aggregate key from the first form " +
+        "and the exact message — that check, not this page, is what " +
+        "says the group signed.";
     });
 
     /* --- copy donation address --- */
