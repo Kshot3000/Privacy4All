@@ -669,6 +669,39 @@ renewable resource that pays for shielded transactions.
   Never paste a real wallet key or a production
   private key into any web page, including this
   one.
+- **It takes a quorum — a threshold signature** —
+  one group key, split at setup by a dealer with
+  tool 15's Shamir idea moved into the curve's own
+  scalar field: the polynomial
+  `f(t) = x + a₁t (+ a₂t²)` mod n deals holder i the
+  single number f(i) in a share line
+  (`p4a-threshshare-v1`), while the group public
+  key stays the ordinary `Y = x×G`. Any quorum —
+  2 or 3 of up to 5 holders — signs together: each
+  commits to a fresh nonce (state format
+  `p4a-threshsigner-v1`), the commitments sum to
+  one aggregate, the challenge is tool 33's own
+  hash of it under `privacy4all-schnorr-v1`, and
+  each holder answers with their share weighted by
+  their Lagrange coefficient for the participating
+  set, `s_j = k_j + e·λ_j·f(j)`, so the answers sum
+  to an ordinary `p4a-schnorr-v1` line — because
+  `Σ λ_j·f(j)` is exactly `x`, interpolated at zero
+  without ever being reconstructed — that tool
+  33's verifier checks against the group key.
+  Fewer than the quorum interpolate to a scalar
+  that is not x, and the line verifies false.
+  Honestly labelled: a trusted-dealer teaching
+  construction — real threshold protocols such as
+  FROST generate the key jointly, by distributed
+  key generation, so the whole key never exists in
+  one place, and add coordination against
+  concurrent-session attacks this page does not
+  attempt; one nonce behind two partial answers
+  leaks the holder's share. Not the signature
+  format any chain or wallet checks. Never paste
+  a real wallet key or a production private key
+  into any web page, including this one.
 
 ## Guides
 

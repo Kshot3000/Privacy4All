@@ -4655,6 +4655,413 @@ function unblindSignature(requestStateText, blindedResponseHex) {
   return formatSchnorrSignature(state.finalCommitment, p256IntToHex(lifted));
 }
 
+/* ---------- 37. It takes a quorum — threshold signatures ----------
+
+   Every signature so far has had exactly one key
+   behind it: one holder, one point of failure, one
+   person who can be coerced, robbed or simply
+   unavailable. Groups that hold something together —
+   a treasury, a release key, a community fund — want
+   the opposite shape: no single key can sign, and no
+   single loss can silence the group. The threshold
+   signature is that shape. One group key is split at
+   setup, and any quorum of the holders — here any 2
+   or any 3 of up to 5 — can together produce ONE
+   ordinary signature under the group public key,
+   while fewer than the quorum can produce nothing
+   that verifies.
+
+   The split is tool 15's Shamir idea moved into the
+   scalar field of the curve itself, mod n. The
+   dealer's polynomial is f(t) = x + a₁t (+ a₂t² for a
+   quorum of 3), where x is the group private scalar
+   and the a's are fresh random scalars; holder i is
+   handed the single number f(i) in a share line
+   (p4a-threshshare-v1) that carries the quorum size
+   and their index and nothing else. The group public
+   key is the ordinary Y = x×G — the coefficients and
+   the shares never appear in it, and no verifier ever
+   learns the split existed.
+
+   Signing is tools 32 and 33 run by a committee.
+   Each participating holder commits to a fresh nonce
+   exactly as in tool 32, keeping it in a signer state
+   line (p4a-threshsigner-v1) that also carries their
+   index. The commitments are gathered into one set —
+   one "index:commitment" line per participant — and
+   summed into a single aggregate commitment R. The
+   challenge is tool 33's own: e = H(R, message) under
+   privacy4all-schnorr-v1. Holder j then answers not
+   with their raw share but weighted by their Lagrange
+   coefficient for the participating set S,
+   λ_j = Π_{l∈S, l≠j} l/(l−j) mod n, computed with a
+   Fermat inverse under the order: s_j = k_j + e·λ_j·f(j).
+   Adding the partial answers gives s with
+   s×G = R + e×Y, because Σ λ_j·f(j) is exactly f(0) = x
+   — Lagrange interpolation evaluated at zero, never
+   reconstructing x anywhere. The combined line is an
+   ordinary p4a-schnorr-v1 signature, and tool 33's
+   verifier — nothing in this tool — is the judge.
+
+   The honest limits are structural, not fine print.
+   A DEALER runs the split: whoever deals sees the
+   whole group key at setup, so this is a trusted-
+   dealer teaching construction — real threshold
+   protocols such as FROST generate the key jointly,
+   by distributed key generation, so the whole key
+   never exists in one place, and they add nonce
+   commitments and binding factors against the
+   concurrent-session attacks a page like this does
+   no coordination against. Fewer than the quorum is
+   not "weaker signing", it is nothing: the partial
+   answers of a sub-quorum set interpolate to a scalar
+   that is not x, and tool 33's verifier calls the
+   result false. One nonce behind two partial answers
+   leaks the holder's weighted share exactly as in
+   tools 32 and 33 — λ_j·f(j) falls out, and f(j) with
+   it, since λ_j is public arithmetic — so one
+   commitment, one answer, ever. A share line is a
+   secret of the same rank as a private key: any
+   quorum of them, pooled, is the group. And the
+   frame is the house one: a real threshold signature
+   computed and checked locally, but not the signature
+   format any chain or wallet checks, not a Compact
+   circuit proof, and not an audited wallet and not
+   side-channel resistant. Never paste a real wallet
+   key or a production private key into any web page,
+   including this one — practise with throwaway keys
+   from tools 17 and 18. */
+var THRESH_SHARE_FORMAT = "p4a-threshshare-v1";
+var THRESH_SIGNER_FORMAT = "p4a-threshsigner-v1";
+var THRESH_MIN_THRESHOLD = 2;
+var THRESH_MAX_THRESHOLD = 3;
+var THRESH_MIN_COUNT = 2;
+var THRESH_MAX_COUNT = 5;
+
+/* An index is a whole number in [1, THRESH_MAX_COUNT]:
+   holder numbers on share lines, state lines and
+   commitment sets. Zero is refused — index 0 is the
+   point the polynomial is evaluated at to recover x
+   itself, so a "holder 0" would be handed the group
+   key, not a share of it. */
+function parseThresholdIndexText(text) {
+  if (typeof text !== "string") return null;
+  var t = text.trim();
+  if (!/^[1-9][0-9]*$/.test(t)) return null;
+  var v = Number(t);
+  if (v < 1 || v > THRESH_MAX_COUNT) return null;
+  return v;
+}
+
+function validThresholdIndexValue(v) {
+  return typeof v === "number" && isFinite(v) && Math.floor(v) === v &&
+    v >= 1 && v <= THRESH_MAX_COUNT;
+}
+
+function validThresholdValue(v) {
+  return typeof v === "number" && isFinite(v) && Math.floor(v) === v &&
+    v >= THRESH_MIN_THRESHOLD && v <= THRESH_MAX_THRESHOLD;
+}
+
+/* The dealer polynomial evaluated at one holder's
+   index: f(i) = x + a₁·i + a₂·i² mod n, deterministic
+   once the scalar and the coefficients exist, so
+   tests can pin it against hand arithmetic. One
+   coefficient makes a quorum of 2, two make 3; a
+   share that lands on exactly zero is null — a zero
+   share would answer challenges with the nonce
+   alone, and the dealer simply draws fresh
+   coefficients, an event of probability about 2^-256. */
+function thresholdShareScalar(scalarHex, coefficientHexes, index) {
+  var scalar = parseProofScalar(scalarHex);
+  if (scalar === null || !Array.isArray(coefficientHexes) ||
+      coefficientHexes.length < 1 ||
+      coefficientHexes.length > THRESH_MAX_THRESHOLD - 1 ||
+      !validThresholdIndexValue(index)) {
+    return null;
+  }
+  var total = BigInt("0x" + scalar);
+  var power = BigInt(index);
+  var iBig = BigInt(index);
+  for (var i = 0; i < coefficientHexes.length; i++) {
+    var coeff = parseProofScalar(coefficientHexes[i]);
+    if (coeff === null) return null;
+    total = (total + BigInt("0x" + coeff) * power) % P256_N;
+    power = power * iBig;
+  }
+  if (total === P256_ZERO) return null;
+  return p256IntToHex(total);
+}
+
+/* A share line: the format tag, the quorum size, the
+   holder's index, and the share scalar — everything
+   the holder needs at signing time, and a secret of
+   the same rank as a private key. */
+function formatThresholdShare(threshold, index, shareHex) {
+  var share = parseProofScalar(shareHex);
+  if (!validThresholdValue(threshold) || !validThresholdIndexValue(index) ||
+      share === null) {
+    return null;
+  }
+  return THRESH_SHARE_FORMAT + ":" + threshold + ":" + index + ":" + share;
+}
+
+function parseThresholdShare(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 4 || parts[0] !== THRESH_SHARE_FORMAT) return null;
+  if (!/^[2-3]$/.test(parts[1])) return null;
+  var index = parseThresholdIndexText(parts[2]);
+  var share = parseProofScalar(parts[3]);
+  if (index === null || share === null) return null;
+  return { threshold: Number(parts[1]), index: index, share: share };
+}
+
+/* The split itself: read the group private key's own
+   scalar back through the platform, draw the dealer
+   coefficients, evaluate the polynomial once per
+   holder, and hand back the group public key and one
+   share line per holder. The dealer's coefficients
+   are never returned — once the shares exist, nobody
+   needs them, and keeping them would keep a second
+   road back to the whole key. */
+function splitThresholdKey(privateKeyHex, threshold, count) {
+  if (!validThresholdValue(threshold) ||
+      typeof count !== "number" || !isFinite(count) ||
+      Math.floor(count) !== count ||
+      count < threshold || count > THRESH_MAX_COUNT) {
+    return Promise.resolve(null);
+  }
+  return agreementPrivateParts(privateKeyHex).then(function (parts) {
+    if (!parts) return null;
+    var coeffs = [];
+    for (var c = 0; c < threshold - 1; c++) {
+      var coeff = randomProofScalar();
+      if (coeff === null) return null;
+      coeffs.push(coeff);
+    }
+    var shares = [];
+    for (var i = 1; i <= count; i++) {
+      var shareScalar = thresholdShareScalar(parts.scalarHex, coeffs, i);
+      if (shareScalar === null) return null;
+      var line = formatThresholdShare(threshold, i, shareScalar);
+      if (line === null) return null;
+      shares.push(line);
+    }
+    var publicKey = proofCommitmentForNonce(parts.scalarHex);
+    if (publicKey === null) return null;
+    return { publicKey: publicKey, shares: shares };
+  });
+}
+
+/* Modular inverse under the curve ORDER (also prime)
+   by Fermat's little theorem — p256Invert works mod
+   p, the field prime; Lagrange division lives mod n.
+   Same five-line spirit. Zero has no inverse: null. */
+function thresholdScalarInvert(value) {
+  var base = value % P256_N;
+  if (base < P256_ZERO) base += P256_N;
+  if (base === P256_ZERO) return null;
+  var exp = P256_N - BigInt(2);
+  var result = BigInt(1);
+  var b = base;
+  while (exp > P256_ZERO) {
+    if ((exp & BigInt(1)) === BigInt(1)) result = result * b % P256_N;
+    b = b * b % P256_N;
+    exp = exp >> BigInt(1);
+  }
+  return result;
+}
+
+/* One holder's Lagrange coefficient for a
+   participating set S, evaluated at zero:
+   λ_j = Π_{l∈S, l≠j} l/(l−j) mod n. The set must be
+   two to five distinct valid indices including j —
+   a set of one is not a quorum of anything, and its
+   coefficient would quietly be 1, the raw share,
+   which is exactly the confusion this gate exists to
+   prevent. Deterministic, so tests pin it against
+   hand arithmetic and against the reconstruction
+   identity Σ λ_j·f(j) = x. */
+function thresholdLagrangeCoefficient(index, indices) {
+  if (!validThresholdIndexValue(index) || !Array.isArray(indices) ||
+      indices.length < 2 || indices.length > THRESH_MAX_COUNT) {
+    return null;
+  }
+  var seen = {};
+  var found = false;
+  for (var i = 0; i < indices.length; i++) {
+    if (!validThresholdIndexValue(indices[i]) || seen[indices[i]]) return null;
+    seen[indices[i]] = true;
+    if (indices[i] === index) found = true;
+  }
+  if (!found) return null;
+  var acc = BigInt(1);
+  for (var j = 0; j < indices.length; j++) {
+    var l = indices[j];
+    if (l === index) continue;
+    var inv = thresholdScalarInvert(BigInt(l - index));
+    if (inv === null) return null;
+    acc = acc * BigInt(l) % P256_N * inv % P256_N;
+  }
+  if (acc === P256_ZERO) return null;
+  return p256IntToHex(acc);
+}
+
+/* One line of a commitment set: a holder's index and
+   the commitment they published, "index:commitment".
+   The set — all participants' lines together — is
+   what every partial answer and the final combination
+   are computed against, so it parses strictly: two to
+   five lines, distinct indices, whole on-curve
+   commitments, and a summed aggregate that is not the
+   point at infinity. */
+function formatThresholdCommitmentLine(index, commitmentHex) {
+  var point = parseP256Point(commitmentHex);
+  if (!validThresholdIndexValue(index) || point === null) return null;
+  return index + ":" + formatP256PublicKey(point);
+}
+
+function parseThresholdCommitmentSet(text) {
+  if (typeof text !== "string") return null;
+  var lines = text.split(/\r?\n/);
+  var commitments = {};
+  var indices = [];
+  var aggregate = null;
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (line === "") continue;
+    var parts = line.split(":");
+    if (parts.length !== 2) return null;
+    var index = parseThresholdIndexText(parts[0]);
+    var point = parseP256Point(parts[1]);
+    if (index === null || point === null || commitments[index]) return null;
+    commitments[index] = formatP256PublicKey(point);
+    indices.push(index);
+    aggregate = aggregate === null ? point : p256PointAdd(aggregate, point);
+    if (aggregate === null) return null;
+  }
+  if (indices.length < 2 || indices.length > THRESH_MAX_COUNT) return null;
+  indices.sort(function (a, b) { return a - b; });
+  return { indices: indices, commitments: commitments,
+           aggregate: formatP256PublicKey(aggregate) };
+}
+
+/* The signer-only state line: the format tag, the
+   holder's index, the nonce, and the commitment it
+   belongs to — tool 32's pairing discipline plus the
+   index, so a state can never be quietly re-paired
+   with a different commitment, a different holder, or
+   another tool, at answer time. */
+function formatThresholdSignerState(index, nonceHex, commitmentHex) {
+  var nonce = parseProofScalar(nonceHex);
+  var point = parseP256Point(commitmentHex);
+  if (!validThresholdIndexValue(index) || nonce === null || point === null) {
+    return null;
+  }
+  return THRESH_SIGNER_FORMAT + ":" + index + ":" + nonce + ":" +
+    formatP256PublicKey(point);
+}
+
+function parseThresholdSignerState(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 4 || parts[0] !== THRESH_SIGNER_FORMAT) return null;
+  var index = parseThresholdIndexText(parts[1]);
+  var nonce = parseProofScalar(parts[2]);
+  var point = parseP256Point(parts[3]);
+  if (index === null || nonce === null || point === null) return null;
+  return { index: index, nonce: nonce, commitment: formatP256PublicKey(point) };
+}
+
+/* A participating holder's first move: draw a fresh
+   nonce from the share line's own index, commit to
+   it, and hand back the commitment-set line to
+   publish and the secret state line to keep. The
+   share itself is read only for its index here — the
+   scalar is asked again at answer time and never
+   stored anywhere. */
+function makeThresholdCommitment(shareText) {
+  var share = parseThresholdShare(shareText);
+  if (share === null) return null;
+  var nonce = randomProofScalar();
+  if (nonce === null) return null;
+  var commitment = proofCommitmentForNonce(nonce);
+  var state = formatThresholdSignerState(share.index, nonce, commitment);
+  var line = formatThresholdCommitmentLine(share.index, commitment);
+  if (commitment === null || state === null || line === null) return null;
+  return { index: share.index, commitment: commitment, line: line, state: state };
+}
+
+/* The partial answer: s_j = k_j + e·λ_j·f(j) mod n,
+   tool 32's response arithmetic with the holder's
+   share first weighted by their Lagrange coefficient
+   for THIS participating set — the same share answers
+   differently inside a different quorum, which is the
+   whole mechanism. Every pairing is checked before
+   any arithmetic: the state's index is the share's
+   index, the state's commitment is its own nonce's
+   commitment, that commitment stands in the set under
+   that index, and the set is at least the share's
+   quorum. A weighted share of exactly zero, or a
+   challenge of zero, is null: the answer would carry
+   no trace of the share. */
+function thresholdPartialResponse(shareText, stateText, message, commitmentSetText) {
+  var share = parseThresholdShare(shareText);
+  var state = parseThresholdSignerState(stateText);
+  var set = parseThresholdCommitmentSet(commitmentSetText);
+  if (share === null || state === null || set === null ||
+      !validSchnorrMessage(message)) {
+    return Promise.resolve(null);
+  }
+  if (state.index !== share.index) return Promise.resolve(null);
+  if (proofCommitmentForNonce(state.nonce) !== state.commitment) {
+    return Promise.resolve(null);
+  }
+  if (set.commitments[share.index] !== state.commitment) {
+    return Promise.resolve(null);
+  }
+  if (set.indices.length < share.threshold) return Promise.resolve(null);
+  var lambda = thresholdLagrangeCoefficient(share.index, set.indices);
+  if (lambda === null) return Promise.resolve(null);
+  var weighted = (BigInt("0x" + lambda) * BigInt("0x" + share.share)) % P256_N;
+  if (weighted === P256_ZERO) return Promise.resolve(null);
+  return schnorrChallenge(set.aggregate, message).then(function (challenge) {
+    if (challenge === null) return null;
+    return proofResponseForScalar(p256IntToHex(weighted), state.nonce, challenge);
+  });
+}
+
+/* The combination, and the tool's only output line:
+   the partial answers — one per participating holder,
+   in any order, because addition does not care — are
+   summed under the order over the set's aggregate
+   commitment, and the result is formatted as an
+   ordinary p4a-schnorr-v1 signature. Whether it is a
+   REAL signature is not this function's verdict to
+   give: it is tool 33's, over the group public key
+   and the exact message. A sub-quorum set, a missing
+   answer, or an extra one is null rather than a
+   wrong line — count first, then sum. */
+function combineThresholdResponses(commitmentSetText, responsesText) {
+  var set = parseThresholdCommitmentSet(commitmentSetText);
+  if (set === null || typeof responsesText !== "string") return null;
+  var lines = responsesText.split(/\r?\n/);
+  var total = P256_ZERO;
+  var count = 0;
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (line === "") continue;
+    var response = parseProofResponse(line);
+    if (response === null) return null;
+    total = (total + BigInt("0x" + response)) % P256_N;
+    count++;
+  }
+  if (count !== set.indices.length) return null;
+  if (total === P256_ZERO) return null;
+  return formatSchnorrSignature(set.aggregate, p256IntToHex(total));
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -4762,7 +5169,17 @@ if (typeof module !== "undefined" && module.exports) {
                      formatBlindSignerState, parseBlindSignerState,
                      makeBlindSignerCommitment, blindChallengeFor,
                      formatBlindRequestState, parseBlindRequestState,
-                     blindSignatureRequest, blindSign, unblindSignature };
+                     blindSignatureRequest, blindSign, unblindSignature,
+                     THRESH_SHARE_FORMAT, THRESH_SIGNER_FORMAT,
+                     THRESH_MIN_THRESHOLD, THRESH_MAX_THRESHOLD,
+                     THRESH_MIN_COUNT, THRESH_MAX_COUNT,
+                     thresholdShareScalar, formatThresholdShare,
+                     parseThresholdShare, splitThresholdKey,
+                     thresholdLagrangeCoefficient,
+                     formatThresholdCommitmentLine, parseThresholdCommitmentSet,
+                     formatThresholdSignerState, parseThresholdSignerState,
+                     makeThresholdCommitment, thresholdPartialResponse,
+                     combineThresholdResponses };
 }
 
 if (typeof document !== "undefined") {
@@ -6779,6 +7196,116 @@ if (typeof document !== "undefined") {
         "message, and it balances. The signer produced it without " +
         "ever seeing either, and nothing in the line points back to " +
         "the session that made it.";
+    });
+
+    /* --- it takes a quorum (threshold signatures) --- */
+    document.getElementById("thresh-split").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var pubOut = document.getElementById("thresh-split-pub-out");
+      var sharesOut = document.getElementById("thresh-split-shares-out");
+      var status = document.getElementById("thresh-split-result");
+      pubOut.value = "";
+      sharesOut.value = "";
+      status.textContent = "Splitting the group key, locally…";
+      splitThresholdKey(document.getElementById("thresh-split-priv").value,
+        Number(document.getElementById("thresh-split-threshold").value),
+        Number(document.getElementById("thresh-split-count").value)).then(function (split) {
+        if (!split) {
+          status.textContent = "That cannot be split: the group " +
+            "private key must be a whole key (exactly 138 bytes), " +
+            "the quorum must be 2 or 3, and the holder count must " +
+            "be at least the quorum and at most 5.";
+          return;
+        }
+        pubOut.value = split.publicKey;
+        sharesOut.value = split.shares.join("\n");
+        status.textContent = "Split. Publish the group public key " +
+          "anywhere — it is an ordinary public key, and nothing in " +
+          "it shows a split ever happened. Give each holder exactly " +
+          "ONE share line, over a private channel: a share is a " +
+          "secret of the same rank as a private key, and any quorum " +
+          "of shares pooled together is the group key. As the dealer " +
+          "you saw the whole key at this moment — that is this " +
+          "teaching construction's stated limit; real threshold " +
+          "protocols generate the key jointly so nobody ever does.";
+      });
+    });
+
+    document.getElementById("thresh-commit").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var lineOut = document.getElementById("thresh-commitment-out");
+      var stateOut = document.getElementById("thresh-state-out");
+      var status = document.getElementById("thresh-commit-result");
+      lineOut.value = "";
+      stateOut.value = "";
+      var made = makeThresholdCommitment(document.getElementById("thresh-commit-share").value);
+      if (!made) {
+        status.textContent = "That cannot be started: the share " +
+          "must be one whole p4a-threshshare-v1 line, and this " +
+          "browser must offer randomness to draw the nonce from.";
+        return;
+      }
+      lineOut.value = made.line;
+      stateOut.value = made.state;
+      status.textContent = "Committed, holder " + made.index + ". " +
+        "Publish the commitment line where whoever gathers the set " +
+        "can reach it, and keep the state line secret and beside " +
+        "it: the state holds your nonce. One commitment, one " +
+        "answer — answering twice from it hands over your share, " +
+        "exactly as in tools 32 and 33.";
+    });
+
+    document.getElementById("thresh-part").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("thresh-part-out");
+      var status = document.getElementById("thresh-part-result");
+      out.value = "";
+      status.textContent = "Answering as one holder of the quorum, locally…";
+      thresholdPartialResponse(document.getElementById("thresh-part-share").value,
+        document.getElementById("thresh-part-state").value,
+        document.getElementById("thresh-part-message").value,
+        document.getElementById("thresh-part-set").value).then(function (resp) {
+        if (!resp) {
+          status.textContent = "That cannot be answered: the share " +
+            "and the signer state must be one whole line each, of " +
+            "the same holder; the state's commitment must stand in " +
+            "the commitment set under that holder's index; the set " +
+            "must hold at least the share's quorum of distinct " +
+            "commitment lines; and the message must not be blank " +
+            "and must be at most 2,000 characters.";
+          return;
+        }
+        out.value = resp;
+        status.textContent = "Answered — partially. That number is " +
+          "your nonce plus the challenge times your share weighted " +
+          "by your Lagrange coefficient for exactly this set of " +
+          "holders: inside a different quorum the same share would " +
+          "answer differently. Send it to whoever combines; on its " +
+          "own it verifies as nothing.";
+      });
+    });
+
+    document.getElementById("thresh-combine").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("thresh-combine-out");
+      var status = document.getElementById("thresh-combine-result");
+      out.value = "";
+      var line = combineThresholdResponses(document.getElementById("thresh-combine-set").value,
+        document.getElementById("thresh-combine-responses").value);
+      if (!line) {
+        status.textContent = "That cannot be combined: the " +
+          "commitment set must be whole — distinct holder lines, " +
+          "at least the quorum of them — and there must be exactly " +
+          "one whole 64-hex partial answer per line in the set, " +
+          "no more and no fewer.";
+        return;
+      }
+      out.value = line;
+      status.textContent = "Combined. That line is an ordinary " +
+        "tool 33 signature: check it in tool 33's verify form, " +
+        "against the GROUP public key and the exact message, and " +
+        "it balances — signed by a quorum, under one key, with no " +
+        "trace in the line of who held shares or how many it took.";
     });
 
     /* --- copy donation address --- */
