@@ -5933,6 +5933,250 @@ function combineMusigResponses(commitmentSetText, responsesText) {
   return combineThresholdResponses(commitmentSetText, responsesText);
 }
 
+/* ---------- 41. Check them all at once — batch verification ----------
+
+   Every verifier on this page checks one signature at
+   a time: tool 33 recomputes one challenge and balances
+   one equation, s×G = R + e×Y. A verifier holding a
+   pile of signatures — a block of statements, a bundle
+   of signed messages — does that work once per line,
+   and most of the cost is the curve arithmetic. Batch
+   verification checks the whole pile with ONE equation
+   instead. Each entry keeps its own challenge, drawn by
+   tool 33's hash from its own commitment and message,
+   and the batch asks whether the weighted sum balances:
+
+     (Σ a_i·s_i)×G  =  Σ a_i×R_i  +  Σ (a_i·e_i)×Y_i
+
+   If every signature is honest, every individual
+   equation holds, so the sum holds too — that direction
+   is just addition. The interesting direction is the
+   converse, and it is exactly why the weights a_i are
+   there. With plain weights (every a_i = 1) the converse
+   FAILS in a way anyone can build: nudge one response up
+   by any amount d and another down by the same d, and
+   the two errors cancel in the sum — the batch passes
+   over two signatures that are each, on their own,
+   false. So each weight here is hashed, under the label
+   privacy4all-batch-v1, from the WHOLE batch — every
+   canonical key, signature line and message, in order —
+   and the entry's position: a_i is a commitment to the
+   final pile, fixed only once every entry is fixed, so
+   a forger crafting a cancelling pair cannot know the
+   weights their errors will be multiplied by, and
+   errors weighted differently do not cancel except
+   with probability about 2^-256. The tests pin the
+   attack both ways: the forged pair fools a plain sum
+   and fails this weighted one.
+
+   The verdict keeps the house split, sharpened by what
+   a batch can and cannot say. True means the weighted
+   equation balances — every entry in the pile checks
+   out, up to that negligible forgery probability. False
+   means the equation does not balance: at least one
+   entry is wrong, and the batch verdict alone cannot
+   say which — that is the honest price of one equation,
+   and it is why this tool's second move exists: when a
+   batch fails, findInvalidBatchEntries falls back to
+   tool 33's check per entry and names the positions
+   that fail on their own. Null means the pile itself
+   cannot be judged — a malformed key, line or message
+   anywhere in it — because "one entry was garbled" and
+   "one entry was forged" must never blur into one
+   answer. Entries are two to six, each written as a
+   public key line, a signature line, then the message
+   (as many lines as it needs), with a blank line
+   between entries; the same key may sign in several
+   entries — a batch is a pile of statements, not a
+   list of people.
+
+   The honest limits are plain. A batch verdict is a
+   statement about the pile exactly as pasted: reorder
+   the entries and the weights change (the verdict for
+   an honest pile does not — every honest equation
+   holds under any weights — but a transcript agreed
+   with anyone else must be pasted in the agreed
+   order). Batching saves the verifier work; it does
+   not make any signature stronger, fresher or more
+   transferable than tool 33 already said it was, and
+   a true batch adds nothing tool 33 checking each line
+   would not say — it says it in one equation instead
+   of six. This is real batch verification computed and
+   checked locally, but over this hub's own
+   p4a-schnorr-v1 teaching lines, not the signature
+   format any chain or wallet checks; production
+   batch verifiers (BIP-340's among them) draw their
+   weights from a verifier-side random source rather
+   than a transcript hash, and work over secp256k1
+   with their own encodings; and like tool 30 the
+   curve code is a teaching implementation — affine
+   arithmetic written to be read, not an audited
+   verifier and not side-channel resistant. This tool
+   takes public keys and published signatures only —
+   never paste a real wallet key or a production
+   private key into any web page, including this one;
+   practise with throwaway keys from tools 17 and 18. */
+var BATCH_COEFF_PREFIX = "privacy4all-batch-v1";
+var BATCH_MIN_ENTRIES = 2;
+var BATCH_MAX_ENTRIES = 6;
+
+/* One batch entry, parsed strictly: a whole public
+   key on the first line, a whole p4a-schnorr-v1 line
+   on the second, and the message — everything after
+   the signature line, newlines kept, because the
+   challenge was drawn over exactly that text. Both
+   pieces are canonicalised, so the transcript the
+   weights are hashed from names the pieces and not
+   one spelling of them. */
+function parseBatchEntryBlock(block) {
+  var lines = block.split("\n");
+  if (lines.length < 3) return null;
+  var point = parseP256Point(lines[0].trim());
+  var sig = parseSchnorrSignature(lines[1].trim());
+  var message = lines.slice(2).join("\n");
+  if (point === null || sig === null || !validSchnorrMessage(message)) {
+    return null;
+  }
+  return {
+    publicKey: formatP256PublicKey(point),
+    signature: formatSchnorrSignature(sig.commitment, sig.response),
+    commitment: sig.commitment,
+    response: sig.response,
+    message: message
+  };
+}
+
+/* The whole pile: entries separated by blank lines,
+   two to six of them, order kept exactly as pasted —
+   position in this pile is each entry's position in
+   every later step. One malformed entry makes the
+   pile null, never a shorter pile that quietly judges
+   fewer signatures than were pasted. */
+function parseBatchEntries(text) {
+  if (typeof text !== "string") return null;
+  var blocks = text.replace(/\r\n/g, "\n").split(/\n[ \t]*\n/);
+  var entries = [];
+  for (var i = 0; i < blocks.length; i++) {
+    var block = blocks[i].trim();
+    if (block === "") continue;
+    var entry = parseBatchEntryBlock(block);
+    if (entry === null) return null;
+    entries.push(entry);
+  }
+  if (entries.length < BATCH_MIN_ENTRIES ||
+      entries.length > BATCH_MAX_ENTRIES) {
+    return null;
+  }
+  return { entries: entries, count: entries.length };
+}
+
+/* The transcript the weights commit to: each entry's
+   canonical key, canonical signature line and exact
+   message, entries in pile order. Change any entry —
+   a key, a line, one character of a message — and
+   every weight in the batch changes. */
+function batchTranscript(entries) {
+  return entries.map(function (e) {
+    return e.publicKey + "\n" + e.signature + "\n" + e.message;
+  }).join("\n\n");
+}
+
+/* One entry's weight: SHA-256 over the label, the
+   whole transcript and that entry's position, reduced
+   under the order. A reduction to zero is null — a
+   zero weight would silently drop the entry from the
+   equation while its name stayed on the pile. */
+function batchCoefficient(entriesText, position) {
+  var parsed = parseBatchEntries(entriesText);
+  if (parsed === null || typeof position !== "number" ||
+      !isFinite(position) || Math.floor(position) !== position ||
+      position < 1 || position > parsed.count) {
+    return Promise.resolve(null);
+  }
+  return sha256Hex(BATCH_COEFF_PREFIX + "\n" +
+    batchTranscript(parsed.entries) + "\n" + position)
+    .then(function (digest) {
+      if (digest === null) return null;
+      var value = BigInt("0x" + digest) % P256_N;
+      if (value === P256_ZERO) return null;
+      return p256IntToHex(value);
+    });
+}
+
+/* The batch check itself: draw each entry's own
+   challenge with tool 33's hash, weight every term,
+   and balance the one equation. True only when it
+   balances; false — never null — when the pile is
+   well-formed and the equation does not balance (at
+   least one entry wrong, and this verdict does not
+   say which); null when any piece is malformed or a
+   weight or challenge cannot be drawn. */
+function verifyBatchSignatures(entriesText) {
+  var parsed = parseBatchEntries(entriesText);
+  if (parsed === null) return Promise.resolve(null);
+  var entries = parsed.entries;
+  var weights = [];
+  var challenges = [];
+  var chain = Promise.resolve(null);
+  entries.forEach(function (entry, i) {
+    chain = chain.then(function () {
+      return batchCoefficient(entriesText, i + 1).then(function (w) {
+        weights.push(w);
+        return schnorrChallenge(entry.commitment, entry.message)
+          .then(function (e) { challenges.push(e); });
+      });
+    });
+  });
+  return chain.then(function () {
+    var totalResponse = P256_ZERO;
+    var rhs = null;
+    for (var i = 0; i < entries.length; i++) {
+      if (weights[i] === null || challenges[i] === null) return null;
+      var a = BigInt("0x" + weights[i]);
+      totalResponse = (totalResponse +
+        a * BigInt("0x" + entries[i].response)) % P256_N;
+      var commitPoint = parseP256Point(entries[i].commitment);
+      var pubPoint = parseP256Point(entries[i].publicKey);
+      var termCommit = p256PointMultiply(a, commitPoint);
+      var termKey = p256PointMultiply(
+        (a * BigInt("0x" + challenges[i])) % P256_N, pubPoint);
+      if (termCommit === null || termKey === null) return false;
+      rhs = rhs === null ? termCommit : p256PointAdd(rhs, termCommit);
+      if (rhs === null) return false;
+      rhs = p256PointAdd(rhs, termKey);
+      if (rhs === null) return false;
+    }
+    var lhs = p256PointMultiply(totalResponse, { x: P256_GX, y: P256_GY });
+    if (lhs === null) return false;
+    return lhs.x === rhs.x && lhs.y === rhs.y;
+  });
+}
+
+/* The fallback a failed batch needs: check each entry
+   on its own with tool 33's verifier and name the
+   positions — 1-based, in pile order — that fail alone.
+   An empty list means every entry passes individually
+   (so a false batch over the same pile is the
+   negligible-probability case, not a hidden forgery);
+   null means the pile, or one verdict in it, cannot be
+   judged at all. */
+function findInvalidBatchEntries(entriesText) {
+  var parsed = parseBatchEntries(entriesText);
+  if (parsed === null) return Promise.resolve(null);
+  var invalid = [];
+  var chain = Promise.resolve(null);
+  parsed.entries.forEach(function (entry, i) {
+    chain = chain.then(function () {
+      return verifySchnorrSignature(entry.publicKey, entry.message,
+        entry.signature).then(function (verdict) {
+          if (verdict === null) { invalid = null; return; }
+          if (invalid !== null && verdict === false) invalid.push(i + 1);
+        });
+    });
+  });
+  return chain.then(function () { return invalid; });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -6066,7 +6310,10 @@ if (typeof module !== "undefined" && module.exports) {
                      parseMusigKeyList, musigKeyCoefficient, aggregateMusigKey,
                      formatMusigSignerState, parseMusigSignerState,
                      makeMusigCommitment, musigPartialResponse,
-                     combineMusigResponses };
+                     combineMusigResponses,
+                     BATCH_COEFF_PREFIX, BATCH_MIN_ENTRIES, BATCH_MAX_ENTRIES,
+                     parseBatchEntries, batchCoefficient,
+                     verifyBatchSignatures, findInvalidBatchEntries };
 }
 
 if (typeof document !== "undefined") {
@@ -8501,6 +8748,61 @@ if (typeof document !== "undefined") {
         "verify form against the aggregate key from the first form " +
         "and the exact message — that check, not this page, is what " +
         "says the group signed.";
+    });
+
+    /* --- check them all at once (batch verification) --- */
+    document.getElementById("batch-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("batch-check-result");
+      status.textContent = "Working…";
+      verifyBatchSignatures(document.getElementById("batch-entries").value).then(function (verdict) {
+        if (verdict === null) {
+          status.textContent = "Cannot judge this pile: it must be " +
+            "two to six entries separated by blank lines, each a " +
+            "whole 91-byte public key, a whole p4a-schnorr-v1 " +
+            "signature line, then the exact message that was signed.";
+          return;
+        }
+        status.textContent = verdict ?
+          "The batch balances. Every signature in the pile checks " +
+            "out, in one weighted equation — the weights are hashed " +
+            "from the whole pile, so two forged entries cannot " +
+            "cancel each other out of it." :
+          "The batch does not balance: at least one entry in the " +
+            "pile is wrong. A batch verdict cannot say which — use " +
+            "the finder below to name the failing positions.";
+      });
+    });
+
+    document.getElementById("batch-find").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("batch-find-out");
+      var status = document.getElementById("batch-find-result");
+      out.value = "";
+      status.textContent = "Working…";
+      findInvalidBatchEntries(document.getElementById("batch-find-entries").value).then(function (invalid) {
+        if (invalid === null) {
+          status.textContent = "Cannot judge this pile: it must be " +
+            "two to six entries separated by blank lines, each a " +
+            "whole 91-byte public key, a whole p4a-schnorr-v1 " +
+            "signature line, then the exact message that was signed.";
+          return;
+        }
+        if (invalid.length === 0) {
+          out.value = "none";
+          status.textContent = "Every entry passes on its own. If " +
+            "the batch above still failed over this same pile, that " +
+            "is the negligible-probability case the tool text " +
+            "names — re-check that both forms hold the same pile, " +
+            "in the same order.";
+          return;
+        }
+        out.value = invalid.join(", ");
+        status.textContent = "These positions fail tool 33's check " +
+          "on their own — a wrong message, a nudged answer, or a " +
+          "signature that belongs to a different key. The rest of " +
+          "the pile passed individually.";
+      });
     });
 
     /* --- copy donation address --- */

@@ -796,6 +796,34 @@ renewable resource that pays for shielded transactions.
   any chain or wallet checks. Never paste a real
   wallet key or a production private key into
   any web page, including this one.
+- **Check them all at once — batch
+  verification** — many tool 33 signatures, each
+  under its own key and message, checked in one
+  weighted equation instead of one per line:
+  `(Σ aᵢ·sᵢ)×G = Σ aᵢ×Rᵢ + Σ (aᵢ·eᵢ)×Yᵢ`. The
+  weights are not plain ones: with every
+  `aᵢ = 1` a forger can nudge one response up
+  and another down by the same amount and the
+  errors cancel in the sum, so each `aᵢ` is
+  SHA-256 under `privacy4all-batch-v1` of the
+  whole batch transcript and the entry's
+  position — a commitment to the final pile
+  that differently weights the errors so they
+  no longer cancel. A failed batch cannot say
+  which entry failed — that is the honest
+  price of one equation — so a second form
+  falls back to tool 33's per-entry check and
+  names the failing positions. Entries are two
+  to six, written key line, signature line,
+  then the message, blank line between them;
+  the same key may sign several entries.
+  Honestly labelled: batching saves verifier
+  work and strengthens nothing; production
+  batch verifiers (BIP-340 among them) draw
+  weights from verifier-side randomness and
+  work over secp256k1. Not the signature format
+  any chain or wallet checks. This tool takes
+  public keys and published signatures only.
 
 ## Guides
 
