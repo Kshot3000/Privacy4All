@@ -4395,6 +4395,266 @@ function verifyLinkableRingSignature(ringText, message, signatureText) {
   });
 }
 
+/* ---------- 36. Signed without seeing — blind signatures ----------
+
+   Tools 33 to 35 all assume the signer knows what
+   they are signing: the message is right there in the
+   hash. Some signatures must work the other way. A
+   token, a voucher, an anonymous credential is worth
+   having precisely because the authority who issued
+   it cannot recognise it when it comes back — if the
+   issuer could, issuance and redemption would link,
+   and the holder's privacy would be gone. David
+   Chaum's answer is the blind signature: the signer
+   signs, genuinely, with their real key — and never
+   sees the message, the final commitment, or the real
+   challenge. This tool runs the Schnorr form of it on
+   the hub's P-256 curve, in four moves that mirror
+   tool 32's exchange with the requester standing
+   between the signer and the message.
+
+   Move 1 is the signer's alone and needs no key at
+   all: a fresh nonce k and its commitment R = k×G,
+   exactly tool 32's first move, with the nonce kept
+   in a signer-only state line (p4a-blindsigner-v1)
+   that pairs it with its own commitment, as tool 32's
+   state does. Move 2 is the blinding, and it is the
+   requester's alone: they draw two secret scalars
+   α and β, shift the commitment to
+   R′ = R + α×G + β×Y — a point the signer never
+   sees — hash the REAL challenge e′ out of R′ and
+   the message with tool 33's own challenge, and send
+   the signer only the blinded challenge e = e′ + β.
+   To the signer, e is one more number in [1, n−1];
+   it carries no trace of the message, of R′, or of
+   e′ that they could check or later recognise.
+   Move 3 is tool 32's answer, unchanged:
+   s = k + e·x mod n, the one place a private key is
+   used — used over a number the signer cannot read.
+   Move 4 is the unblinding, the requester's alone
+   again: s′ = s + α mod n, and the published line is
+   an ordinary tool 33 signature (p4a-schnorr-v1)
+   over R′, which tool 33's verifier — and nothing in
+   this tool — checks: s′×G = R′ + e′×Y, because
+   s′×G = R + α×G + (e′ + β)×Y and the β×Y folded
+   into R′ at move 2 is exactly the β the blinded
+   challenge added. The signer DID sign this message;
+   the algebra says so and tool 33's check confirms
+   it; they simply never saw it, and the line itself
+   carries neither α nor β, so nothing in it points
+   back to the signing session that produced it.
+
+   The dangers are stated as plainly as the promise,
+   because blindness cuts both ways. The signer is
+   endorsing sight unseen: a blind-signing key must
+   only ever sign for a service whose blinded
+   challenges are worth honouring whoever presents
+   them — tokens, vouchers, ballots — never for
+   statements, because a blinded challenge can hide
+   ANY message, including one the signer would refuse
+   in the open. The nonce rule sharpens: one nonce
+   behind two blinded answers leaks the private
+   scalar exactly as in tools 32 and 33, and a signer
+   who answers many sessions in parallel faces the
+   ROS attack on blind Schnorr (Wagner's algorithm
+   against concurrent sessions) — real deployments
+   answer one session at a time, bind each commitment
+   to a single session, or use constructions built to
+   resist it; this teaching page does none of that
+   coordination for you, and says so. The requester's
+   blinding factors are load-bearing secrets of a
+   smaller kind: leak α and β beside the published
+   line and anyone can walk back to the session's
+   blinded challenge — the unlinkability is only as
+   good as their secrecy, and the request state line
+   that carries them is never published. The verdict
+   split is the house one: a move that cannot be
+   performed is null, never a half-built line; there
+   is no "false" here because nothing in this tool
+   renders a verdict — the verdict is tool 33's, over
+   the finished line. Honestly labelled: this is a
+   real blind signature computed and checked locally,
+   but it is not the signature format any chain or
+   wallet checks, not one of Midnight's Compact
+   circuit proofs, and not an audited wallet and not
+   side-channel resistant. Never paste a real wallet
+   key or a production private key into any web page,
+   including this one — practise with throwaway keys
+   from tools 17 and 18. */
+var BLINDSIGN_SIGNER_FORMAT = "p4a-blindsigner-v1";
+var BLINDSIGN_REQUEST_FORMAT = "p4a-blindreq-v1";
+
+/* The signer-only state line: the format tag, the
+   nonce, and the commitment it belongs to — the same
+   pairing discipline as tool 32's state, under this
+   tool's own tag, so a state can never be quietly
+   paired with a different commitment, or offered to
+   another tool, at answer time. */
+function formatBlindSignerState(nonceHex, commitmentHex) {
+  var nonce = parseProofScalar(nonceHex);
+  var point = parseP256Point(commitmentHex);
+  if (nonce === null || point === null) return null;
+  return BLINDSIGN_SIGNER_FORMAT + ":" + nonce + ":" + formatP256PublicKey(point);
+}
+
+function parseBlindSignerState(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 3 || parts[0] !== BLINDSIGN_SIGNER_FORMAT) return null;
+  var nonce = parseProofScalar(parts[1]);
+  var point = parseP256Point(parts[2]);
+  if (nonce === null || point === null) return null;
+  return { nonce: nonce, commitment: formatP256PublicKey(point) };
+}
+
+/* Move 1, the signer's start: draw a fresh nonce,
+   commit to it, hand back the public commitment and
+   the secret state line. No private key is read here
+   — a commitment binds a nonce, not a key, and the
+   key is asked once, at answer time, and never stored
+   anywhere. Synchronous, like tool 32's commitment
+   arithmetic: no randomness, no start — null, never
+   a predictable commitment. */
+function makeBlindSignerCommitment() {
+  var nonce = randomProofScalar();
+  if (nonce === null) return null;
+  var commitment = proofCommitmentForNonce(nonce);
+  var state = formatBlindSignerState(nonce, commitment);
+  if (commitment === null || state === null) return null;
+  return { commitment: commitment, state: state };
+}
+
+/* Move 2's arithmetic, deterministic once the two
+   blinding factors exist: shift the signer's
+   commitment by α×G and β×Y to the final commitment
+   the signer never sees, hash the real challenge out
+   of it and the message with tool 33's own challenge,
+   and blind that challenge by β. Any sum landing on
+   the point at infinity, a zero factor, or a blinded
+   challenge of exactly zero is null — the requester
+   simply draws fresh factors, an event with
+   probability about 2^-256 for the honest sums. */
+function blindChallengeFor(commitmentHex, publicKeyHex, message, alphaHex, betaHex) {
+  var commitPoint = parseP256Point(commitmentHex);
+  var pubPoint = parseP256Point(publicKeyHex);
+  var alpha = parseProofScalar(alphaHex);
+  var beta = parseProofScalar(betaHex);
+  if (commitPoint === null || pubPoint === null || alpha === null ||
+      beta === null || !validSchnorrMessage(message)) {
+    return Promise.resolve(null);
+  }
+  var shifted = p256PointAdd(commitPoint,
+    p256PointMultiply(BigInt("0x" + alpha), { x: P256_GX, y: P256_GY }));
+  if (shifted !== null) {
+    shifted = p256PointAdd(shifted,
+      p256PointMultiply(BigInt("0x" + beta), pubPoint));
+  }
+  if (shifted === null) return Promise.resolve(null);
+  var finalCommitment = formatP256PublicKey(shifted);
+  return schnorrChallenge(finalCommitment, message).then(function (challenge) {
+    if (challenge === null) return null;
+    var blinded = (BigInt("0x" + challenge) + BigInt("0x" + beta)) % P256_N;
+    if (blinded === P256_ZERO) return null;
+    return { finalCommitment: finalCommitment, challenge: challenge,
+             blindedChallenge: p256IntToHex(blinded) };
+  });
+}
+
+/* The requester-only state line: the format tag, the
+   two blinding factors, and the final commitment
+   they produce — everything move 4 needs, and
+   nothing move 3 ever sees. This line is a secret of
+   the requester's: published beside the finished
+   signature, α and β would walk anyone back to the
+   signing session. */
+function formatBlindRequestState(alphaHex, betaHex, finalCommitmentHex) {
+  var alpha = parseProofScalar(alphaHex);
+  var beta = parseProofScalar(betaHex);
+  var point = parseP256Point(finalCommitmentHex);
+  if (alpha === null || beta === null || point === null) return null;
+  return BLINDSIGN_REQUEST_FORMAT + ":" + alpha + ":" + beta + ":" +
+    formatP256PublicKey(point);
+}
+
+function parseBlindRequestState(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 4 || parts[0] !== BLINDSIGN_REQUEST_FORMAT) return null;
+  var alpha = parseProofScalar(parts[1]);
+  var beta = parseProofScalar(parts[2]);
+  var point = parseP256Point(parts[3]);
+  if (alpha === null || beta === null || point === null) return null;
+  return { alpha: alpha, beta: beta, finalCommitment: formatP256PublicKey(point) };
+}
+
+/* Move 2, the requester's whole job: draw the two
+   blinding factors, run the shift, and hand back the
+   blinded challenge — the only thing the signer is
+   ever shown — and the requester-only state line.
+   The message, the real challenge and the final
+   commitment stay on this side of the exchange. */
+function blindSignatureRequest(commitmentHex, publicKeyHex, message) {
+  if (parseP256Point(commitmentHex) === null ||
+      parseP256Point(publicKeyHex) === null ||
+      !validSchnorrMessage(message)) {
+    return Promise.resolve(null);
+  }
+  var attempt = function (triesLeft) {
+    var alpha = randomProofScalar();
+    var beta = randomProofScalar();
+    if (alpha === null || beta === null) return Promise.resolve(null);
+    return blindChallengeFor(commitmentHex, publicKeyHex, message, alpha, beta)
+      .then(function (blinded) {
+        if (blinded === null) {
+          return triesLeft > 1 ? attempt(triesLeft - 1) : null;
+        }
+        var state = formatBlindRequestState(alpha, beta, blinded.finalCommitment);
+        if (state === null) {
+          return triesLeft > 1 ? attempt(triesLeft - 1) : null;
+        }
+        return { blindedChallenge: blinded.blindedChallenge, state: state };
+      });
+  };
+  return attempt(8);
+}
+
+/* Move 3, the signer's answer: tool 32's arithmetic,
+   unchanged, over a challenge the signer cannot read.
+   The state supplies the nonce — and is checked
+   against its own commitment first, recomputed from
+   the nonce, so a state paired with a commitment it
+   did not come from answers nothing. A blinded
+   challenge of zero is refused by the scalar gate
+   itself: answering it would hand over the nonce. */
+function blindSign(privateKeyHex, signerStateText, blindedChallengeHex) {
+  var state = parseBlindSignerState(signerStateText);
+  var challenge = parseProofScalar(blindedChallengeHex);
+  if (state === null || challenge === null) return Promise.resolve(null);
+  if (proofCommitmentForNonce(state.nonce) !== state.commitment) {
+    return Promise.resolve(null);
+  }
+  return agreementPrivateParts(privateKeyHex).then(function (parts) {
+    if (!parts) return null;
+    return proofResponseForScalar(parts.scalarHex, state.nonce, challenge);
+  });
+}
+
+/* Move 4, the requester's finish: lift the blinded
+   answer by α and publish the line — an ordinary
+   p4a-schnorr-v1 signature over the final commitment,
+   checkable by tool 33's verifier and by nothing in
+   this tool. The line carries neither factor: the
+   session that produced it is not recoverable from
+   it. A malformed state or answer is null, never a
+   half-built line. */
+function unblindSignature(requestStateText, blindedResponseHex) {
+  var state = parseBlindRequestState(requestStateText);
+  var response = parseProofResponse(blindedResponseHex);
+  if (state === null || response === null) return null;
+  var lifted = (BigInt("0x" + response) + BigInt("0x" + state.alpha)) % P256_N;
+  return formatSchnorrSignature(state.finalCommitment, p256IntToHex(lifted));
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -4497,7 +4757,12 @@ if (typeof module !== "undefined" && module.exports) {
                      linkablePointPair, linkableKeyImage,
                      formatLinkableRingSignature, parseLinkableRingSignature,
                      linkableRingSignaturesLinked,
-                     signLinkableRingMessage, verifyLinkableRingSignature };
+                     signLinkableRingMessage, verifyLinkableRingSignature,
+                     BLINDSIGN_SIGNER_FORMAT, BLINDSIGN_REQUEST_FORMAT,
+                     formatBlindSignerState, parseBlindSignerState,
+                     makeBlindSignerCommitment, blindChallengeFor,
+                     formatBlindRequestState, parseBlindRequestState,
+                     blindSignatureRequest, blindSign, unblindSignature };
 }
 
 if (typeof document !== "undefined") {
@@ -6408,6 +6673,112 @@ if (typeof document !== "undefined") {
           "be unverified or forged — linking compares images, it does " +
           "not check a signature; run each line through the check " +
           "above for that.)";
+    });
+
+    /* --- signed without seeing (blind signatures) --- */
+    document.getElementById("blind-commit").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var commitOut = document.getElementById("blind-commitment-out");
+      var stateOut = document.getElementById("blind-state-out");
+      var status = document.getElementById("blind-commit-result");
+      commitOut.value = "";
+      stateOut.value = "";
+      var made = makeBlindSignerCommitment();
+      if (!made) {
+        status.textContent = "That cannot be started: this browser " +
+          "offered no randomness to draw the signer's nonce from, so " +
+          "no commitment exists. Nothing was committed to.";
+        return;
+      }
+      commitOut.value = made.commitment;
+      stateOut.value = made.state;
+      status.textContent = "Committed. Publish the commitment line " +
+        "where the requester can reach it, and keep the state line " +
+        "secret and beside it: the state holds the nonce, the one " +
+        "secret this move makes. One commitment, one session, one " +
+        "answer — answering twice from it hands over the private " +
+        "key, exactly as in tools 32 and 33.";
+    });
+
+    document.getElementById("blind-request").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var challengeOut = document.getElementById("blind-req-challenge-out");
+      var stateOut = document.getElementById("blind-req-state-out");
+      var status = document.getElementById("blind-req-result");
+      challengeOut.value = "";
+      stateOut.value = "";
+      status.textContent = "Blinding locally…";
+      blindSignatureRequest(document.getElementById("blind-req-commitment").value,
+        document.getElementById("blind-req-pub").value,
+        document.getElementById("blind-req-message").value).then(function (req) {
+        if (!req) {
+          status.textContent = "That cannot be blinded: the signer's " +
+            "public key and their commitment must both be whole keys " +
+            "(exactly 91 bytes each), and the message must not be " +
+            "blank and must be at most 2,000 characters.";
+          return;
+        }
+        challengeOut.value = req.blindedChallenge;
+        stateOut.value = req.state;
+        status.textContent = "Blinded. Send the signer ONLY the " +
+          "blinded challenge — never the message, never the state " +
+          "line. The state holds the two blinding factors and the " +
+          "final commitment; it is yours alone, and move 4 needs it. " +
+          "From the blinded challenge alone the signer can learn " +
+          "nothing about what they are about to sign.";
+      });
+    });
+
+    document.getElementById("blind-sign").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("blind-sign-out");
+      var status = document.getElementById("blind-sign-result");
+      out.value = "";
+      status.textContent = "Signing blindly, locally…";
+      blindSign(document.getElementById("blind-sign-priv").value,
+        document.getElementById("blind-sign-state").value,
+        document.getElementById("blind-sign-challenge").value).then(function (resp) {
+        if (!resp) {
+          status.textContent = "That cannot be answered: the private " +
+            "key must be a whole key (exactly 138 bytes), the signer " +
+            "state one whole p4a-blindsigner-v1 line whose commitment " +
+            "matches its own nonce, and the blinded challenge a whole " +
+            "64-hex number that is not zero — a zero challenge would " +
+            "be answered with the nonce itself, so it is refused.";
+          return;
+        }
+        out.value = resp;
+        status.textContent = "Answered — blindly. That number is " +
+          "your nonce plus the blinded challenge times your private " +
+          "scalar: a real answer from your real key, over a challenge " +
+          "you cannot read, for a message you have never seen. Send " +
+          "it back to the requester; on its own it verifies as " +
+          "nothing, and it becomes a signature only in their hands.";
+      });
+    });
+
+    document.getElementById("blind-unblind").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("blind-unblind-out");
+      var status = document.getElementById("blind-unblind-result");
+      out.value = "";
+      var line = unblindSignature(document.getElementById("blind-unblind-state").value,
+        document.getElementById("blind-unblind-response").value);
+      if (!line) {
+        status.textContent = "That cannot be unblinded: the request " +
+          "state must be one whole p4a-blindreq-v1 line and the " +
+          "signer's answer one whole 64-hex number under the curve " +
+          "order. A half-typed piece produces no line at all, rather " +
+          "than a wrong one.";
+        return;
+      }
+      out.value = line;
+      status.textContent = "Unblinded — and finished. That line is " +
+        "an ordinary tool 33 signature: check it in tool 33's verify " +
+        "form, against the signer's public key and your exact " +
+        "message, and it balances. The signer produced it without " +
+        "ever seeing either, and nothing in the line points back to " +
+        "the session that made it.";
     });
 
     /* --- copy donation address --- */

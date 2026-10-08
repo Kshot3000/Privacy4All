@@ -640,6 +640,35 @@ renewable resource that pays for shielded transactions.
   format any chain or wallet checks. Never paste a
   real wallet key or a production private key into
   any web page, including this one.
+- **Signed without seeing — a blind signature** —
+  Chaum's construction in its Schnorr form, a
+  four-move exchange over the same curve: the signer
+  commits to a fresh nonce (state format
+  `p4a-blindsigner-v1`); the requester shifts the
+  commitment by two secret blinding factors,
+  `R′ = R + α×G + β×Y`, hashes the real challenge
+  out of `R′` and the message with tool 33's own
+  challenge under the label `privacy4all-schnorr-v1`,
+  and sends the signer only the blinded challenge
+  `e = e′ + β` (request state format
+  `p4a-blindreq-v1`); the signer answers with tool
+  32's arithmetic, `s = k + e·x mod n`, over a
+  challenge they cannot read; the requester lifts
+  the answer by `α` and publishes an ordinary
+  `p4a-schnorr-v1` line that tool 33's verifier
+  checks — the signer signed the message, and never
+  saw it, and nothing in the line points back to
+  the signing session. Honestly labelled: the
+  signer endorses sight unseen, so a blind-signing
+  key is for tokens, vouchers and ballots, never
+  statements; one nonce behind two blinded answers
+  leaks the private scalar, and parallel sessions
+  face the ROS attack on blind Schnorr — this
+  teaching page does no session coordination. Not
+  the signature format any chain or wallet checks.
+  Never paste a real wallet key or a production
+  private key into any web page, including this
+  one.
 
 ## Guides
 
