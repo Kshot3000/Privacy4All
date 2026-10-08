@@ -752,6 +752,35 @@
           <p id="box-open-result" role="status" aria-live="polite"></p>
         </form>
       </div>
+
+      <div class="tool" id="auth-box">
+        <h3>27 · A box that names its sender — sign it, then close it in the box</h3>
+        <p>Tool 26's sealed box serves the person who is not there, and names its own limit in the same breath: a box proves nothing about who sent it, because the recipient's public key is public and anyone can close a box in anyone's name. Tool 21 is this hub's answer when the sender matters — a signature inside a seal — but it needs a session key both sides derived together, which is exactly what the box case does not have. This tool puts the two together: sign it, then close it in the box. The sender signs the message with their signing key (tool 17), and the signature rides inside the box in the same signed envelope tool 21 uses — inside, so only the recipient ever sees it, and a watcher cannot even tell this box is signed. The envelope is then closed exactly like tool 26's box — a fresh, one-message agreement pair (tool 18), HKDF stretched once, AES-GCM (tool 20) — with two deliberate separations: the stretching step uses its own label, so signed and plain boxes derive unrelated keys from the same secret, and the line gets its own format, <code>p4a-authbox-v1:&lt;ephemeral public key&gt;:&lt;iv&gt;:&lt;cipher&gt;</code>, so neither box can be relabelled into the other — a relabelled line fails closed at the seal before any envelope is read. Opening keeps tool 21's honest split: opening and verifying are two separate answers, so the box can open perfectly while the name does not check out — that result is shown with its message, not hidden. The honest limits are inherited from both parents: the signature proves the signing key, not a legal name; both public keys have to really be theirs — a swapped recipient key hands every box to the swapper, and a swapped sender key makes a stranger's signature verify under the wrong name; there is still no ratchet, so if the recipient's private key is copied later, every signed box ever closed to it opens, signatures and all; and a copied box line opens again — nothing inside proves when it was signed or that it was sent only once, so freshness is the application's job, not the box's. Honestly labelled: this is a teaching implementation, not an audited messaging app. Never paste a real wallet key or a production private key into any web page, including this one — practise with throwaway keys from tools 17 and 18.</p>
+        <form id="authbox-seal">
+          <label for="authbox-seal-pub">Their public key, as hex (exactly 91 bytes — tool 18's public key; a public key is safe to share, that is its job)</label>
+          <textarea id="authbox-seal-pub" rows="2" spellcheck="false" placeholder="Paste the recipient's public key hex here"></textarea>
+          <label for="authbox-seal-priv">Your signing private key, as hex (exactly 138 bytes — tool 17's private key; it signs inside this page and never leaves it)</label>
+          <textarea id="authbox-seal-priv" rows="2" spellcheck="false" placeholder="Paste your signing private key hex here"></textarea>
+          <label for="authbox-seal-message">Message to sign and close into the box</label>
+          <textarea id="authbox-seal-message" rows="3" spellcheck="false" placeholder="e.g. this one really is from me — the signature inside says so"></textarea>
+          <button type="submit" class="btn primary">Sign it and close the box locally</button>
+          <label for="authbox-seal-out">Your signed, closed box — one line; your signature is inside it, invisible until it opens</label>
+          <textarea id="authbox-seal-out" rows="3" readonly spellcheck="false"></textarea>
+          <p id="authbox-seal-result" role="status" aria-live="polite"></p>
+        </form>
+        <form id="authbox-open">
+          <label for="authbox-open-priv">Your private key, as hex (exactly 138 bytes — tool 18's private key matching the public key the box was closed to; it never leaves this page)</label>
+          <textarea id="authbox-open-priv" rows="2" spellcheck="false" placeholder="Paste your private key hex here"></textarea>
+          <label for="authbox-open-pub">The sender's signing public key, as hex (exactly 91 bytes — tool 17's public key; the signature inside is checked against this, and only this)</label>
+          <textarea id="authbox-open-pub" rows="2" spellcheck="false" placeholder="Paste the sender's signing public key hex here"></textarea>
+          <label for="authbox-open-in">Signed, closed box to open (a whole p4a-authbox-v1 line)</label>
+          <textarea id="authbox-open-in" rows="3" spellcheck="false" placeholder="p4a-authbox-v1:…"></textarea>
+          <button type="submit" class="btn primary">Open it locally and check the name</button>
+          <label for="authbox-open-out">The opened message — exactly as it was closed, or nothing at all; the result line below says whether the name checked out</label>
+          <textarea id="authbox-open-out" rows="3" readonly spellcheck="false"></textarea>
+          <p id="authbox-open-result" role="status" aria-live="polite"></p>
+        </form>
+      </div>
     </div>
   </section>
 
@@ -782,6 +811,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=24"></script>
+<script src="app.js?v=25"></script>
 </body>
 </html>

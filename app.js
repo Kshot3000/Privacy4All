@@ -2416,6 +2416,163 @@ function openBoxMessage(privateKeyHex, sealedText) {
   });
 }
 
+/* ---------- 27. A box that names its sender — sign it, then close it in the box ---------- */
+/* Tool 26 built the sealed box and named its own limit in
+   the same breath: a box proves nothing about who sent it,
+   because the recipient's public key is public and anyone
+   can close a box in anyone's name. Tool 21 is the suite's
+   answer when the sender matters — a signature inside the
+   seal — but it needs a session key both sides derived
+   together, which is exactly what the box case does not
+   have. This tool puts the two together: sign first, then
+   close it in the box. The sender signs the message with
+   their tool-17 signing key, the signature rides inside
+   the box in the same p4a-signed-v1 envelope tool 21 uses
+   — inside, so only the recipient ever sees it and a
+   watcher cannot even tell this box is signed — and the
+   envelope is closed exactly like tool 26's box: a fresh
+   one-message ECDH pair, HKDF stretched once, AES-GCM
+   through tool 20. Two deliberate separations: the HKDF
+   step uses its own info label, so a signed box and a
+   plain box closed from the same secret and the same
+   ephemeral key would still derive unrelated keys, and
+   the outer line gets its own format, p4a-authbox-v1 —
+   neither box can be relabelled into the other, and the
+   relabelled line fails closed at the GCM tag before any
+   envelope is even read. Opening keeps tool 21's honest
+   split: opening and verifying stay two separate answers,
+   { message, verified } — a box can open perfectly and
+   still not be from who it claims, and that case returns
+   the text with verified === false instead of hiding it.
+   The honest limits are inherited from both parents and
+   stated plainly: the signature proves the signing key,
+   not a legal name; both public keys have to really be
+   theirs — a swapped recipient key hands every box to the
+   swapper, and a swapped sender key makes a stranger's
+   signature verify under the wrong name; there is still
+   no ratchet, so a recipient private key copied later
+   opens every signed box ever closed to it, signatures
+   and all; and a copied box line opens again — nothing
+   in the envelope proves when it was signed or that it
+   was sent once, so freshness and replay protection are
+   the application's job, not the box's. Honest label:
+   teaching implementation, not an audited messaging app.
+   Keys exist only in this page; never paste a real
+   wallet key or a production private key into any web
+   page, including this one — practise with throwaway
+   keys from tools 17 and 18. */
+var AUTHBOX_FORMAT = "p4a-authbox-v1";
+var AUTHBOX_KEY_INFO = "privacy4all-authbox-v1 key";
+/* Same cap as tool 21: the message plus its signature
+   plus the envelope's JSON must fit tool 20's seal. */
+var AUTHBOX_MAX_MESSAGE_CHARS = AUTHSEAL_MAX_MESSAGE_CHARS;
+
+function parseAuthBoxSealed(text) {
+  if (typeof text !== "string") return null;
+  var m = text.trim().toLowerCase().match(/^p4a-authbox-v1:([0-9a-f]+):([0-9a-f]+):([0-9a-f]+)$/);
+  if (!m) return null;
+  var ephemeral = hexToBytes(m[1]);
+  var iv = hexToBytes(m[2]);
+  var cipher = hexToBytes(m[3]);
+  if (!ephemeral || !iv || !cipher) return null;
+  if (ephemeral.length !== AGREE_PUBLIC_KEY_BYTES) return null;
+  if (iv.length !== KEYSEAL_IV_BYTES) return null;
+  if (cipher.length < 17) return null;
+  return { ephemeralPublicKey: m[1], iv: iv, cipher: cipher };
+}
+
+/* Tool 26's stretching step under this tool's own info
+   label: same secret, same ephemeral salt, different
+   label, unrelated key. That domain separation is what
+   makes the two box formats non-interchangeable even
+   before their prefixes are read. */
+function deriveAuthBoxKey(secretHex, ephemeralPublicKeyHex) {
+  var secret = parseSharedSecret(secretHex);
+  var eph = parseKeyHex(ephemeralPublicKeyHex, AGREE_PUBLIC_KEY_BYTES);
+  if (secret === null || !eph) return Promise.resolve(null);
+  var cryptoObj = agreeCrypto();
+  if (!cryptoObj) return Promise.resolve(null);
+  return cryptoObj.subtle.importKey("raw", hexToBytes(secret), "HKDF", false, ["deriveBits"])
+    .then(function (base) {
+      return cryptoObj.subtle.deriveBits(
+        { name: "HKDF", hash: "SHA-256", salt: eph,
+          info: secretToBytes(AUTHBOX_KEY_INFO) },
+        base, DERIVE_KEY_BYTES * 8)
+        .then(function (bits) {
+          var bytes = new Uint8Array(bits);
+          if (bytes.length !== DERIVE_KEY_BYTES) return null;
+          return shareBytesToHex(bytes);
+        }, function () { return null; });
+    }, function () { return null; });
+}
+
+/* Close a signed box: the recipient's public key, the
+   sender's signing private key and the message go in; a
+   p4a-authbox-v1 line comes out. Signing happens first
+   and the envelope is what gets sealed, so the signature
+   itself is as private as the message. A malformed
+   recipient key (a private key pasted by mistake
+   included), a signing key that cannot sign, or a blank
+   or over-long message is null, never a plausible box. */
+function sealAuthenticatedBoxMessage(recipientPublicKeyHex, signingPrivateKeyHex, message) {
+  if (!validAuthMessage(message)) return Promise.resolve(null);
+  if (parseKeyHex(recipientPublicKeyHex, AGREE_PUBLIC_KEY_BYTES) === null) {
+    return Promise.resolve(null);
+  }
+  return signMessage(signingPrivateKeyHex, message).then(function (sig) {
+    if (!sig) return null;
+    var inner = JSON.stringify({ format: AUTHSEAL_ENVELOPE_FORMAT,
+                                 message: message, signature: sig });
+    if (inner.length > KEYSEAL_MAX_MESSAGE_CHARS) return null;
+    return generateAgreementKeyPair().then(function (eph) {
+      if (eph === null) return null;
+      return deriveSharedSecret(eph.privateKey, recipientPublicKeyHex).then(function (secret) {
+        if (secret === null) return null;
+        return deriveAuthBoxKey(secret, eph.publicKey).then(function (key) {
+          if (key === null) return null;
+          return sealWithSessionKey(inner, key).then(function (sealed) {
+            if (sealed === null) return null;
+            return AUTHBOX_FORMAT + ":" + eph.publicKey + sealed.slice(KEYSEAL_FORMAT.length);
+          });
+        });
+      });
+    });
+  });
+}
+
+/* Open a signed box: returns { message, verified }.
+   verified is true only when the signature inside checks
+   out against senderPublicKeyHex. A box that opens but
+   was signed by a different key comes back with its text
+   intact and verified === false — read it, but not as
+   theirs. A wrong recipient key, a tampered or
+   relabelled line, an inner text that is not a signed
+   envelope at all, or a malformed sender public key is
+   null: the box fails closed, and says nothing about
+   which part failed. */
+function openAuthenticatedBoxMessage(privateKeyHex, sealedText, senderPublicKeyHex) {
+  var parsed = parseAuthBoxSealed(sealedText);
+  if (parsed === null) return Promise.resolve(null);
+  return deriveSharedSecret(privateKeyHex, parsed.ephemeralPublicKey).then(function (secret) {
+    if (secret === null) return null;
+    return deriveAuthBoxKey(secret, parsed.ephemeralPublicKey).then(function (key) {
+      if (key === null) return null;
+      var inner = KEYSEAL_FORMAT + ":" + shareBytesToHex(parsed.iv) +
+        ":" + shareBytesToHex(parsed.cipher);
+      return openWithSessionKey(inner, key).then(function (text) {
+        if (text === null) return null;
+        var env = parseSignedEnvelope(text);
+        if (!env) return null;
+        return verifySignature(senderPublicKeyHex, env.message, env.signature)
+          .then(function (ok) {
+            if (ok === null) return null;
+            return { message: env.message, verified: ok };
+          });
+      });
+    });
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -2474,7 +2631,10 @@ if (typeof module !== "undefined" && module.exports) {
                      sealNumberedMessage, openNumberedMessage,
                      BOX_FORMAT, BOX_KEY_INFO, BOX_MAX_MESSAGE_CHARS,
                      parseBoxSealed, deriveBoxKey,
-                     sealBoxMessage, openBoxMessage };
+                     sealBoxMessage, openBoxMessage,
+                     AUTHBOX_FORMAT, AUTHBOX_KEY_INFO, AUTHBOX_MAX_MESSAGE_CHARS,
+                     parseAuthBoxSealed, deriveAuthBoxKey,
+                     sealAuthenticatedBoxMessage, openAuthenticatedBoxMessage };
 }
 
 if (typeof document !== "undefined") {
@@ -3708,6 +3868,66 @@ if (typeof document !== "undefined") {
         status.textContent = "✓ Opened locally — exactly the message that was closed into the " +
           "box. Remember what the box never proved: who closed it. Anyone holding the " +
           "recipient's public key can close one in any name.";
+      });
+    });
+
+    /* --- a box that names its sender: sign, then close it in the box --- */
+    document.getElementById("authbox-seal").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("authbox-seal-out");
+      var status = document.getElementById("authbox-seal-result");
+      status.textContent = "Signing and closing the box locally…";
+      sealAuthenticatedBoxMessage(document.getElementById("authbox-seal-pub").value,
+        document.getElementById("authbox-seal-priv").value,
+        document.getElementById("authbox-seal-message").value).then(function (sealed) {
+        if (sealed === null) {
+          out.value = "";
+          status.textContent = "That cannot be closed: paste the recipient's public key exactly " +
+            "as tool 18 made it (182 hex characters, 91 bytes — their private key is never the " +
+            "thing a sender needs), your own signing private key exactly as tool 17 made it " +
+            "(276 hex characters, 138 bytes), and write a message (up to " +
+            AUTHBOX_MAX_MESSAGE_CHARS + " characters, so the message and its signature fit " +
+            "inside the seal). Nothing was closed.";
+          return;
+        }
+        out.value = sealed;
+        status.textContent = "✓ Signed and closed locally. Your signature is inside the box, " +
+          "where only the recipient will ever see it — the line itself shows nothing but a " +
+          "fresh one-message public key, an IV and ciphertext. Send the whole line however " +
+          "you like; only the matching private key opens it, and only your public signing " +
+          "key makes the name check out.";
+      });
+    });
+    document.getElementById("authbox-open").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("authbox-open-out");
+      var status = document.getElementById("authbox-open-result");
+      status.textContent = "Opening locally…";
+      openAuthenticatedBoxMessage(document.getElementById("authbox-open-priv").value,
+        document.getElementById("authbox-open-in").value,
+        document.getElementById("authbox-open-pub").value).then(function (res) {
+        if (res === null) {
+          out.value = "";
+          status.textContent = "That does not open: the usual causes are the wrong private key " +
+            "(a box opens only for the key matching the public key it was closed to), a " +
+            "sender public key that is not a tool-17 signing key at all, a locked line that " +
+            "was changed, cut short or relabelled from another tool, or a plain box from " +
+            "tool 26 — those open in their own tool, not here. Nothing about which part " +
+            "failed is revealed, by design.";
+          return;
+        }
+        out.value = res.message;
+        if (res.verified) {
+          status.textContent = "✓ Opened locally, and the signature inside checks out against " +
+            "the sender public key you pasted: this message was signed by whoever holds that " +
+            "key. That proves the key, not a legal name — it means what you believe about " +
+            "whose key that is, and nothing more.";
+        } else {
+          status.textContent = "⚠ Opened locally, but the signature inside does NOT check out " +
+            "against the sender public key you pasted. The message above is exactly what was " +
+            "in the box — read it, but not as theirs: whoever closed this box does not hold " +
+            "the signing key for the name you expected.";
+        }
       });
     });
 

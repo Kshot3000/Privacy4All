@@ -402,6 +402,29 @@ renewable resource that pays for shielded transactions.
   the swapper instead. Never paste a real wallet key
   or a production private key into any web page,
   including this one.
+- **A box that names its sender — sign it, then close
+  it in the box** — tool 26's missing half, built from
+  tools 17, 21 and 26: the sender signs the message
+  with their tool-17 signing key, the signature rides
+  inside the box in tool 21's `p4a-signed-v1` envelope
+  (inside, so only the recipient ever sees it), and
+  the envelope is closed like a tool-26 box in its own
+  `p4a-authbox-v1` format, with its own HKDF label
+  (`privacy4all-authbox-v1 key`) so signed and plain
+  boxes derive unrelated keys and neither can be
+  relabelled into the other. Opening returns the
+  message and the verdict separately: a box that opens
+  but was signed by a different key comes back with
+  its text intact and `verified === false`. Honestly
+  labelled a teaching implementation, not an audited
+  messaging app: the signature proves the signing key,
+  not a legal name; both public keys have to really be
+  theirs; there is still no ratchet, so a recipient
+  private key copied later opens every signed box; and
+  a copied box line opens again — nothing inside
+  proves when it was signed. Never paste a real wallet
+  key or a production private key into any web page,
+  including this one.
 
 ## Guides
 
