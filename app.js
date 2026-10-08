@@ -2279,6 +2279,143 @@ function openNumberedMessage(stateText, storeText, sealedText) {
   });
 }
 
+/* ---------- 26. For their key only — a sealed box anyone can close ---------- */
+/* Every seal so far needs something shared in advance: tool
+   16 a password both sides know, tools 20–25 a session key
+   both sides derived together in tool 18's live, two-sided
+   agreement. That leaves the most ordinary case unserved:
+   sending something private to someone who is not there —
+   they published a public key, and that is all you have.
+   This is the sealed box, the pattern behind "encrypt to
+   their public key" in PGP and behind libsodium's sealed
+   boxes: anyone who knows your public key can close a box
+   for you, and only the matching private key opens it —
+   no handshake and no shared password. The sender makes a
+   fresh, one-message ECDH pair (tool 18's keys and sizes),
+   agrees it with the recipient's public key, stretches the
+   result with HKDF exactly once — the ephemeral public
+   key as the salt, so the box's key is bound to this box
+   and to no other use, under its own info label — and
+   seals with tool 20's exact AES-GCM. The box is one
+   versioned line, p4a-box-v1:<ephemeral public key>:<iv>:
+   <cipher>: the ephemeral public key rides on the outside
+   in plain view, because it is not a secret — the
+   recipient mixes it with their private key, lands on the
+   same secret, re-derives the same key and opens; anyone
+   else who tries lands on a different secret and the GCM
+   tag refuses. The sender's ephemeral private key is
+   never stored, shown or sent: once the box is closed it
+   has done its only job, and there is deliberately no way
+   to re-derive a box's key from the line alone. The
+   honest limits are the other half of the lesson: a box
+   proves nothing about who sent it — the recipient's
+   public key is public, so anyone can close a box in
+   anyone's name (tool 21's signature inside a seal is
+   this suite's answer when the sender matters); there is
+   no ratchet here, so if your private key is copied
+   later, every box ever closed to it opens — forward
+   secrecy belongs to tools 22–25, whose keys are erased
+   as they are used; and a public key only protects you
+   if it really is theirs — a swapped key closes every
+   box to the swapper instead, which nothing inside the
+   box can detect. Honest label: teaching implementation,
+   not an audited messaging app. Keys exist only in this
+   page; never paste a real wallet key or a production
+   private key into any web page, including this one —
+   practise with throwaway keys from tool 18. */
+var BOX_FORMAT = "p4a-box-v1";
+var BOX_KEY_INFO = "privacy4all-box-v1 key";
+var BOX_MAX_MESSAGE_CHARS = KEYSEAL_MAX_MESSAGE_CHARS;
+
+function parseBoxSealed(text) {
+  if (typeof text !== "string") return null;
+  var m = text.trim().toLowerCase().match(/^p4a-box-v1:([0-9a-f]+):([0-9a-f]+):([0-9a-f]+)$/);
+  if (!m) return null;
+  var ephemeral = hexToBytes(m[1]);
+  var iv = hexToBytes(m[2]);
+  var cipher = hexToBytes(m[3]);
+  if (!ephemeral || !iv || !cipher) return null;
+  if (ephemeral.length !== AGREE_PUBLIC_KEY_BYTES) return null;
+  if (iv.length !== KEYSEAL_IV_BYTES) return null;
+  /* GCM tag is 16 bytes, so ciphertext is at least 1 byte + tag. */
+  if (cipher.length < 17) return null;
+  return { ephemeralPublicKey: m[1], iv: iv, cipher: cipher };
+}
+
+/* The one stretching step: HKDF-SHA-256 over the ECDH
+   secret, salted with the ephemeral public key itself.
+   The salt is public — it rides on the box — and that is
+   the point: the derived key is bound to this one box,
+   and the same secret under any other ephemeral key (or
+   under tool 19's purposes, or tool 23's heal label)
+   derives an unrelated key. */
+function deriveBoxKey(secretHex, ephemeralPublicKeyHex) {
+  var secret = parseSharedSecret(secretHex);
+  var eph = parseKeyHex(ephemeralPublicKeyHex, AGREE_PUBLIC_KEY_BYTES);
+  if (secret === null || !eph) return Promise.resolve(null);
+  var cryptoObj = agreeCrypto();
+  if (!cryptoObj) return Promise.resolve(null);
+  return cryptoObj.subtle.importKey("raw", hexToBytes(secret), "HKDF", false, ["deriveBits"])
+    .then(function (base) {
+      return cryptoObj.subtle.deriveBits(
+        { name: "HKDF", hash: "SHA-256", salt: eph,
+          info: secretToBytes(BOX_KEY_INFO) },
+        base, DERIVE_KEY_BYTES * 8)
+        .then(function (bits) {
+          var bytes = new Uint8Array(bits);
+          if (bytes.length !== DERIVE_KEY_BYTES) return null;
+          return shareBytesToHex(bytes);
+        }, function () { return null; });
+    }, function () { return null; });
+}
+
+/* Close a box: only the recipient's public key and the
+   message go in; a p4a-box-v1 line comes out. A fresh
+   ephemeral pair is made per box, so two boxes to the
+   same person share nothing — not the ephemeral key, not
+   the derived key, not the IV. Malformed public keys
+   (including a private key pasted by mistake) and blank
+   or over-long messages are null, never a plausible box. */
+function sealBoxMessage(recipientPublicKeyHex, message) {
+  if (!validKeySealMessage(message)) return Promise.resolve(null);
+  if (parseKeyHex(recipientPublicKeyHex, AGREE_PUBLIC_KEY_BYTES) === null) {
+    return Promise.resolve(null);
+  }
+  return generateAgreementKeyPair().then(function (eph) {
+    if (eph === null) return null;
+    return deriveSharedSecret(eph.privateKey, recipientPublicKeyHex).then(function (secret) {
+      if (secret === null) return null;
+      return deriveBoxKey(secret, eph.publicKey).then(function (key) {
+        if (key === null) return null;
+        return sealWithSessionKey(message, key).then(function (sealed) {
+          if (sealed === null) return null;
+          return BOX_FORMAT + ":" + eph.publicKey + sealed.slice(KEYSEAL_FORMAT.length);
+        });
+      });
+    });
+  });
+}
+
+/* Open a box: the recipient's private key mixes with the
+   ephemeral public key on the box, landing on the same
+   secret the sender reached from the other side. A wrong
+   private key, a swapped ephemeral key, a tampered byte
+   — every failure is the same null, never gibberish and
+   never a hint about which part failed. */
+function openBoxMessage(privateKeyHex, sealedText) {
+  var parsed = parseBoxSealed(sealedText);
+  if (parsed === null) return Promise.resolve(null);
+  return deriveSharedSecret(privateKeyHex, parsed.ephemeralPublicKey).then(function (secret) {
+    if (secret === null) return null;
+    return deriveBoxKey(secret, parsed.ephemeralPublicKey).then(function (key) {
+      if (key === null) return null;
+      var inner = KEYSEAL_FORMAT + ":" + shareBytesToHex(parsed.iv) +
+        ":" + shareBytesToHex(parsed.cipher);
+      return openWithSessionKey(inner, key);
+    });
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -2334,7 +2471,10 @@ if (typeof module !== "undefined" && module.exports) {
                      SKIPPED_MAX_KEYS,
                      parseNumberedSealed, formatSkippedStore,
                      parseSkippedStore, emptySkippedStore,
-                     sealNumberedMessage, openNumberedMessage };
+                     sealNumberedMessage, openNumberedMessage,
+                     BOX_FORMAT, BOX_KEY_INFO, BOX_MAX_MESSAGE_CHARS,
+                     parseBoxSealed, deriveBoxKey,
+                     sealBoxMessage, openBoxMessage };
 }
 
 if (typeof document !== "undefined") {
@@ -3523,6 +3663,51 @@ if (typeof document !== "undefined") {
           "new lines below: any positions this message jumped over now have their keys banked in " +
           "the store, and a stored key is erased the moment its message opens, so each late " +
           "message opens exactly once.";
+      });
+    });
+
+    /* --- for their key only: the sealed box --- */
+    document.getElementById("box-seal").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("box-seal-out");
+      var status = document.getElementById("box-seal-result");
+      status.textContent = "Closing the box locally…";
+      sealBoxMessage(document.getElementById("box-seal-pub").value,
+        document.getElementById("box-seal-message").value).then(function (sealed) {
+        if (sealed === null) {
+          out.value = "";
+          status.textContent = "That cannot be closed: paste the recipient's public key exactly " +
+            "as tool 18 made it (182 hex characters, 91 bytes — a private key pasted here is " +
+            "refused, it is never the thing a sender needs) and write a message (up to " +
+            BOX_MAX_MESSAGE_CHARS + " characters). Nothing was closed.";
+          return;
+        }
+        out.value = sealed;
+        status.textContent = "✓ Closed locally. The long hex after the format label is a fresh " +
+          "one-message public key made for this box alone — it is not a secret, and it is the " +
+          "only part of the key agreement anyone ever sees. Send the whole line however you " +
+          "like; only the matching private key opens it.";
+      });
+    });
+    document.getElementById("box-open").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("box-open-out");
+      var status = document.getElementById("box-open-result");
+      status.textContent = "Opening locally…";
+      openBoxMessage(document.getElementById("box-open-priv").value,
+        document.getElementById("box-open-in").value).then(function (message) {
+        if (message === null) {
+          out.value = "";
+          status.textContent = "That does not open: the usual causes are the wrong private key " +
+            "(a box opens only for the key matching the public key it was closed to), a locked " +
+            "line that was changed or cut short, or a line from another tool — those open in " +
+            "their own tools, not here. Nothing about which part failed is revealed, by design.";
+          return;
+        }
+        out.value = message;
+        status.textContent = "✓ Opened locally — exactly the message that was closed into the " +
+          "box. Remember what the box never proved: who closed it. Anyone holding the " +
+          "recipient's public key can close one in any name.";
       });
     });
 

@@ -377,6 +377,31 @@ renewable resource that pays for shielded transactions.
   and tool 23's heal remains the answer to a leak.
   Never paste a real wallet key or a production session
   key into any web page, including this one.
+- **For their key only — a sealed box anyone can close,
+  only they can open** — the case every earlier seal
+  leaves out: sending something private to someone who
+  is not there, where all you have is their published
+  public key. The sender makes a fresh, one-message
+  ECDH pair (tool 18), agrees it with the recipient's
+  public key, stretches the result once with HKDF —
+  the one-message public key itself as the salt, so
+  the key is bound to this box alone — and seals with
+  tool 20's AES-GCM in a versioned `p4a-box-v1` line
+  whose ephemeral public key rides on the outside in
+  plain view, because it is not a secret. The recipient
+  mixes it with their private key, lands on the same
+  secret and opens; anyone else lands on a different
+  secret and the seal refuses. The one-message private
+  key is never stored, shown or sent. Honestly
+  labelled a teaching implementation, not an audited
+  messaging app: a box proves nothing about who sent
+  it (the public key is public — tool 21 is the answer
+  when the sender matters), there is no ratchet, so a
+  private key copied later opens every box ever closed
+  to it, and a swapped public key closes every box to
+  the swapper instead. Never paste a real wallet key
+  or a production private key into any web page,
+  including this one.
 
 ## Guides
 

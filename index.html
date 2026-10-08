@@ -727,6 +727,31 @@
           <p id="ooo-open-result" role="status" aria-live="polite"></p>
         </form>
       </div>
+
+      <div class="tool" id="sealed-box">
+        <h3>26 · For their key only — a sealed box anyone can close, only they can open</h3>
+        <p>Every seal before this one needs something shared in advance: tool 16 a password both sides know, tools 20–25 a session key both sides derived together in tool 18's live, two-sided agreement. This tool serves the most ordinary case those leave out — sending something private to someone who is not there. They published a public key, and that is all you have. It is the sealed-box pattern behind “encrypt to their public key”: anyone who knows your public key can close a box for you, and only the matching private key opens it — no handshake and no shared password. Closing a box makes a fresh, one-message agreement pair, mixes it with the recipient's public key (tool 18), stretches the result once with HKDF — the one-message public key itself as the salt, so this box's key is bound to this box alone — and seals with tool 20's AES-GCM, in one versioned line: <code>p4a-box-v1:&lt;ephemeral public key&gt;:&lt;iv&gt;:&lt;cipher&gt;</code>. The ephemeral public key rides on the outside in plain view because it is not a secret: the recipient mixes it with their private key, lands on the same secret, re-derives the same key and opens; anyone else lands on a different secret and the seal refuses. The one-message private key is never stored, shown or sent — once the box is closed it has done its only job. The honest limits: a box proves nothing about who sent it — the recipient's public key is public, so anyone can close a box in anyone's name, and tool 21's signature inside a seal is this hub's answer when the sender matters; there is no ratchet here, so if your private key is copied later, every box ever closed to it opens — forward secrecy belongs to tools 22–25, whose keys are erased as they are used; and a public key only protects you if it really is theirs, because a swapped key closes every box to the swapper instead. Honestly labelled: this is a teaching implementation, not an audited messaging app. Never paste a real wallet key or a production private key into any web page, including this one — practise with throwaway keys from tool 18.</p>
+        <form id="box-seal">
+          <label for="box-seal-pub">Their public key, as hex (exactly 91 bytes — tool 18's public key; a public key is safe to share, that is its job)</label>
+          <textarea id="box-seal-pub" rows="2" spellcheck="false" placeholder="Paste the recipient's public key hex here"></textarea>
+          <label for="box-seal-message">Message to close into the box</label>
+          <textarea id="box-seal-message" rows="3" spellcheck="false" placeholder="e.g. for your key only — nobody else can open this"></textarea>
+          <button type="submit" class="btn primary">Close the box locally</button>
+          <label for="box-seal-out">Your closed box — one line; the long hex after the label is a fresh one-message public key, not a secret</label>
+          <textarea id="box-seal-out" rows="3" readonly spellcheck="false"></textarea>
+          <p id="box-seal-result" role="status" aria-live="polite"></p>
+        </form>
+        <form id="box-open">
+          <label for="box-open-priv">Your private key, as hex (exactly 138 bytes — tool 18's private key matching the public key the box was closed to; it never leaves this page)</label>
+          <textarea id="box-open-priv" rows="2" spellcheck="false" placeholder="Paste your private key hex here"></textarea>
+          <label for="box-open-in">Closed box to open (a whole p4a-box-v1 line)</label>
+          <textarea id="box-open-in" rows="3" spellcheck="false" placeholder="p4a-box-v1:…"></textarea>
+          <button type="submit" class="btn primary">Open it locally</button>
+          <label for="box-open-out">The opened message — exactly as it was closed, or nothing at all</label>
+          <textarea id="box-open-out" rows="3" readonly spellcheck="false"></textarea>
+          <p id="box-open-result" role="status" aria-live="polite"></p>
+        </form>
+      </div>
     </div>
   </section>
 
@@ -757,6 +782,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=23"></script>
+<script src="app.js?v=24"></script>
 </body>
 </html>
