@@ -587,6 +587,33 @@ renewable resource that pays for shielded transactions.
   fresh nonce is drawn for every signature. Never
   paste a real wallet key or a production private
   key into any web page, including this one.
+- **One of us signed it — a ring signature** —
+  tool 33's hashed challenges chained into a closed
+  loop over a ring of 2–6 published public keys: the
+  Abe–Ohkubo–Suzuki construction, where each link is
+  `E_i = z_i×G + c_i×Y_i` and each challenge is
+  SHA-256 under the label `privacy4all-ring-v1` of
+  the previous link and the message. The signer
+  invents the other members' answers forwards,
+  walks the chain around, and answers the final
+  challenge with the only private key used anywhere
+  in the signature; a verifier walks the same chain
+  from the seed and learns the loop closed — one of
+  the listed keys signed (format `p4a-ring-v1`) —
+  and never which one. The verdict returns `true`,
+  `false`, or `null` for malformed pieces, so "not
+  proved" and "cannot be checked" never blur.
+  Honestly labelled: the ring is the whole anonymity
+  set (two keys are a coin flip); nobody in the ring
+  had to agree to be in it, so a ring signature is
+  not a group endorsement; and this teaching version
+  carries no key image, so two signatures by the
+  same signer cannot be linked by the signatures
+  alone — Monero, the best-known ring signature
+  system, adds one deliberately. Not the signature
+  format any chain or wallet checks. Never paste a
+  real wallet key or a production private key into
+  any web page, including this one.
 
 ## Guides
 

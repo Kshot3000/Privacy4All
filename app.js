@@ -3724,6 +3724,311 @@ function verifySchnorrSignature(publicKeyHex, message, signatureText) {
   });
 }
 
+/* ---------- 34. One of us signed it — ring signatures ----------
+
+   Tools 17 and 33 answer "did THIS key sign?" — and the
+   answer names the signer to anyone who checks. This
+   tool answers a weaker question on purpose: "did ONE
+   of these keys sign?" The signature is a ring
+   signature (the Abe–Ohkubo–Suzuki construction, the
+   classic Schnorr ring): the signer picks a ring of
+   public keys — theirs among them, the rest borrowed
+   from anyone whose key is published — and produces
+   one line that verifies against the whole ring and
+   no single member. The maths is a chain of tool 33's
+   hashed challenges closed into a loop. Each member i
+   contributes a link point E_i = z_i×G + c_i×Y_i, and
+   each link's challenge is hashed from the previous
+   link: c_{i+1} = SHA-256, under the label
+   privacy4all-ring-v1, of that link point and the
+   message. The signer alone can close the loop: they
+   invent the other members' answers outright (random
+   c and z values need no private key — the link point
+   is computed forwards from them), walk the chain
+   around from their own position, and at the last
+   step the chain hands them the one challenge their
+   own link must answer; their answer z_s = k − c_s·x
+   is the only place in the whole signature where a
+   private key is used, and it is algebraically
+   indistinguishable from the invented answers around
+   it. Verification walks the same chain from the
+   seed challenge c_0 and checks it comes back to
+   c_0 exactly: the loop closes only if every link
+   balances, and exactly one link was answered with a
+   private key — but the walk cannot say which.
+
+   What that buys, and what it does not. The ambiguity
+   is the privacy: a verifier learns "one of these
+   keys signed" and nothing more — not with better
+   maths, not with more time; every member is an
+   equally good suspect from the signature alone. But
+   the ring is the whole anonymity set: with two keys
+   the ambiguity is a coin flip, and the six-key cap
+   here is a page-practicality limit, not a strength
+   claim. The flip side is just as plain: nobody in
+   the ring had to agree to be in it. A ring is
+   assembled from published public keys by the signer
+   alone — the other members need not know, consent,
+   or even exist as people the signer has met — so a
+   ring signature is NOT a group endorsement and must
+   never be read as "these people agreed": it proves
+   one of the listed keys signed, full stop, and
+   borrowing a famous key into your ring lends your
+   statement none of their authority. This teaching
+   version also carries no key image, so two
+   signatures by the same signer cannot be linked by
+   the signatures alone; real deployments choose
+   deliberately here — Monero, the best-known ring
+   signature system, adds a key image precisely so a
+   ring member cannot spend the same note twice
+   undetected, trading unlinkability away on purpose.
+   The verdict keeps the house split: true for a loop
+   that closes, false — never null — for well-formed
+   pieces whose loop does not close (a changed
+   message, a nudged answer, a member swapped out),
+   null for malformed pieces. Honestly labelled: this
+   is a real ring signature computed and checked
+   locally, but it is not the signature format any
+   chain or wallet checks; like tools 32 and 33 this
+   is the maths in the open, not one of Midnight's
+   Compact circuit proofs, and not an audited wallet
+   and not side-channel resistant. Never paste a real
+   wallet key or a production private key into any web
+   page, including this one — practise with throwaway
+   keys from tools 17 and 18. */
+var RING_FORMAT = "p4a-ring-v1";
+var RING_CHALLENGE_PREFIX = "privacy4all-ring-v1";
+var RING_MIN_KEYS = 2;
+var RING_MAX_KEYS = 6;
+
+/* The ring itself: a list of whole public keys, one
+   per line or comma-separated, or an array of them.
+   Each is canonicalised, duplicates are refused — a
+   doubled key would fake a bigger anonymity set than
+   exists — and the count is held to this page's
+   honest limits: at least two (a ring of one is just
+   a signature, and tool 33 already signs), at most
+   six. Anything else is null. */
+function parseRingPublicKeys(text) {
+  var tokens;
+  if (Array.isArray(text)) tokens = text;
+  else if (typeof text === "string") tokens = text.split(/[\s,;]+/);
+  else return null;
+  var keys = [];
+  for (var i = 0; i < tokens.length; i++) {
+    if (typeof tokens[i] !== "string") return null;
+    if (tokens[i].trim() === "") continue;
+    var point = parseP256Point(tokens[i]);
+    if (point === null) return null;
+    var canonical = formatP256PublicKey(point);
+    if (keys.indexOf(canonical) !== -1) return null;
+    keys.push(canonical);
+  }
+  if (keys.length < RING_MIN_KEYS || keys.length > RING_MAX_KEYS) return null;
+  return keys;
+}
+
+/* One link's challenge: SHA-256 over the label, the
+   link point (canonicalised, so the hash names the
+   point and not one spelling of it) and the message,
+   reduced under the order. A reduced digest of zero
+   is refused as null — a zero challenge would make
+   the next link carry no trace of that member's key;
+   it arises with probability about 2^-256 and the
+   signer simply starts again. */
+function ringChallenge(message, pointHex) {
+  var point = parseP256Point(pointHex);
+  if (point === null || !validSchnorrMessage(message)) return Promise.resolve(null);
+  var canonical = formatP256PublicKey(point);
+  return sha256Hex(RING_CHALLENGE_PREFIX + "\n" + canonical + "\n" + message)
+    .then(function (digest) {
+      if (digest === null) return null;
+      var value = BigInt("0x" + digest) % P256_N;
+      if (value === P256_ZERO) return null;
+      return p256IntToHex(value);
+    });
+}
+
+/* One link of the chain, computed forwards:
+   E = z×G + c×Y, returned as a canonical public key.
+   A zero answer honestly contributes no z×G term, and
+   the sum can be the point at infinity only when the
+   pieces were arranged against each other — either
+   way an unusable link is null, never a half-point.
+   Synchronous and deterministic, so tests can pin it
+   against Node's own curve arithmetic. */
+function ringPointFor(challengeHex, responseHex, publicKeyHex) {
+  var challenge = parseProofScalar(challengeHex);
+  var response = parseProofResponse(responseHex);
+  var pubPoint = parseP256Point(publicKeyHex);
+  if (challenge === null || response === null || pubPoint === null) return null;
+  var responsePoint = BigInt("0x" + response) === P256_ZERO ? null :
+    p256PointMultiply(BigInt("0x" + response), { x: P256_GX, y: P256_GY });
+  var challengePoint = p256PointMultiply(BigInt("0x" + challenge), pubPoint);
+  var sum = p256PointAdd(responsePoint, challengePoint);
+  if (sum === null) return null;
+  return formatP256PublicKey(sum);
+}
+
+/* The signature line: the format tag, the seed
+   challenge c_0 the verifier's walk starts from, and
+   one answer per ring member, in ring order. It
+   carries no key material and no marker of the
+   signer's position — the answers are deliberately
+   indistinguishable, the signer's included. Pieces
+   that do not check out are null. */
+function formatRingSignature(seedHex, responses) {
+  var seed = parseProofScalar(seedHex);
+  if (seed === null || !Array.isArray(responses)) return null;
+  if (responses.length < RING_MIN_KEYS || responses.length > RING_MAX_KEYS) return null;
+  var parts = [];
+  for (var i = 0; i < responses.length; i++) {
+    var response = parseProofResponse(responses[i]);
+    if (response === null) return null;
+    parts.push(response);
+  }
+  return RING_FORMAT + ":" + seed + ":" + parts.join(",");
+}
+
+function parseRingSignature(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 3 || parts[0] !== RING_FORMAT) return null;
+  var seed = parseProofScalar(parts[1]);
+  if (seed === null) return null;
+  var raw = parts[2].split(",");
+  if (raw.length < RING_MIN_KEYS || raw.length > RING_MAX_KEYS) return null;
+  var responses = [];
+  for (var i = 0; i < raw.length; i++) {
+    var response = parseProofResponse(raw[i]);
+    if (response === null) return null;
+    responses.push(response);
+  }
+  return { seed: seed, responses: responses };
+}
+
+/* Where the signer's own key sits in the ring: the
+   private key's public point, read back through the
+   platform when the key was imported, matched point
+   for point against the ring's members. Not found is
+   -1 — a key that is not in the ring cannot sign for
+   it, however the request is phrased. */
+function ringSignerIndex(points, parts) {
+  var sx = BigInt("0x" + parts.pointHex.slice(2, 66));
+  var sy = BigInt("0x" + parts.pointHex.slice(66, 130));
+  for (var i = 0; i < points.length; i++) {
+    if (points[i].x === sx && points[i].y === sy) return i;
+  }
+  return -1;
+}
+
+/* Signing: fix the signer's own link first from a
+   fresh nonce (the commitment-first rule of tools 32
+   and 33, kept), hash the next challenge out of it,
+   then walk the ring inventing each other member's
+   answer and link forwards — no private key but the
+   signer's is touched, or exists, anywhere in this —
+   until the walk arrives back at the signer's
+   position carrying the one challenge only they can
+   answer: z_s = k − c_s·x (mod n). A zero hashed
+   challenge or an unusable link anywhere — each a
+   vanishingly rare event — starts the attempt over
+   with a fresh nonce rather than handing over a line
+   that proves less than it claims. A private key
+   whose public half is not in the ring is null: it
+   cannot sign for a ring it is not part of. */
+function signRingMessage(privateKeyHex, ringText, message) {
+  var keys = parseRingPublicKeys(ringText);
+  if (keys === null || !validSchnorrMessage(message)) return Promise.resolve(null);
+  return agreementPrivateParts(privateKeyHex).then(function (parts) {
+    if (!parts) return null;
+    var points = [];
+    for (var i = 0; i < keys.length; i++) points.push(parseP256Point(keys[i]));
+    var s = ringSignerIndex(points, parts);
+    if (s < 0) return null;
+    var n = keys.length;
+    var x = BigInt("0x" + parts.scalarHex);
+    var attempt = function (triesLeft) {
+      var nonce = randomProofScalar();
+      if (nonce === null) return Promise.resolve(null);
+      var c = new Array(n);
+      var z = new Array(n);
+      var startPoint = p256PointMultiply(BigInt("0x" + nonce), { x: P256_GX, y: P256_GY });
+      if (startPoint === null) return Promise.resolve(null);
+      var walk = ringChallenge(message, formatP256PublicKey(startPoint)).then(function (first) {
+        if (first === null) return null;
+        c[(s + 1) % n] = first;
+        return true;
+      });
+      var chainStep = function (j) {
+        walk = walk.then(function (ok) {
+          if (!ok) return null;
+          var i = (s + j) % n;
+          var invented = randomProofScalar();
+          if (invented === null) return null;
+          z[i] = invented;
+          var link = ringPointFor(c[i], invented, keys[i]);
+          if (link === null) return null;
+          return ringChallenge(message, link).then(function (next) {
+            if (next === null) return null;
+            c[(i + 1) % n] = next;
+            return true;
+          });
+        });
+      };
+      for (var j = 1; j < n; j++) chainStep(j);
+      return walk.then(function (ok) {
+        if (!ok) return triesLeft > 1 ? attempt(triesLeft - 1) : null;
+        var zs = (BigInt("0x" + nonce) - BigInt("0x" + c[s]) * x) % P256_N;
+        if (zs < P256_ZERO) zs += P256_N;
+        z[s] = p256IntToHex(zs);
+        var line = formatRingSignature(c[0], z);
+        if (line === null) return triesLeft > 1 ? attempt(triesLeft - 1) : null;
+        return line;
+      });
+    };
+    return attempt(8);
+  });
+}
+
+/* Verifying: walk the chain from the signature's own
+   seed, recomputing each link from that member's
+   answer and key and hashing the next challenge out
+   of it, and check the walk comes home to the seed
+   exactly. True only when the loop closes; false —
+   never null — for well-formed pieces whose loop
+   does not close (a message changed after signing, an
+   answer nudged by one, a ring member swapped or the
+   ring reordered — order is part of the chain);
+   null for any malformed piece, including an answer
+   count that does not match the ring, so "not proved"
+   and "cannot be checked" never blur. The walk
+   establishes that exactly one ring member's private
+   key was used — and, by construction, cannot say
+   which one. */
+function verifyRingSignature(ringText, message, signatureText) {
+  var keys = parseRingPublicKeys(ringText);
+  var parsed = parseRingSignature(signatureText);
+  if (keys === null || parsed === null || !validSchnorrMessage(message)) {
+    return Promise.resolve(null);
+  }
+  if (parsed.responses.length !== keys.length) return Promise.resolve(null);
+  var walk = Promise.resolve(parsed.seed);
+  var step = function (i) {
+    walk = walk.then(function (current) {
+      if (current === null || current === false) return current;
+      var link = ringPointFor(current, parsed.responses[i], keys[i]);
+      if (link === null) return false;
+      return ringChallenge(message, link);
+    });
+  };
+  for (var i = 0; i < keys.length; i++) step(i);
+  return walk.then(function (finalChallenge) {
+    if (finalChallenge === null || finalChallenge === false) return finalChallenge;
+    return finalChallenge === parsed.seed;
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -3813,7 +4118,12 @@ if (typeof module !== "undefined" && module.exports) {
                      SCHNORR_MAX_MESSAGE_CHARS,
                      validSchnorrMessage, schnorrChallenge,
                      formatSchnorrSignature, parseSchnorrSignature,
-                     signSchnorrMessage, verifySchnorrSignature };
+                     signSchnorrMessage, verifySchnorrSignature,
+                     RING_FORMAT, RING_CHALLENGE_PREFIX,
+                     RING_MIN_KEYS, RING_MAX_KEYS,
+                     parseRingPublicKeys, ringChallenge, ringPointFor,
+                     formatRingSignature, parseRingSignature,
+                     signRingMessage, verifyRingSignature };
 }
 
 if (typeof document !== "undefined") {
@@ -5572,6 +5882,70 @@ if (typeof document !== "undefined") {
             "does not balance. The line was not produced from the " +
             "private key behind that public key over this message — or " +
             "the message has been changed since it was signed.";
+      });
+    });
+
+    /* --- one of us signed it (ring signatures) --- */
+    document.getElementById("ring-sign").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("ring-sig-out");
+      var status = document.getElementById("ring-sign-result");
+      out.value = "";
+      status.textContent = "Signing locally…";
+      signRingMessage(document.getElementById("ring-priv").value,
+        document.getElementById("ring-keys").value,
+        document.getElementById("ring-message").value).then(function (sig) {
+        if (!sig) {
+          status.textContent = "That cannot be signed: the ring must be " +
+            "2 to 6 whole public keys (exactly 91 bytes each, one per " +
+            "line, no duplicates), your private key must be the private " +
+            "half of one of them — a key that is not in the ring cannot " +
+            "sign for it — and the message must not be blank and must be " +
+            "at most 2,000 characters.";
+          return;
+        }
+        out.value = sig;
+        status.textContent = "Signed — as one of the ring. The line " +
+          "carries a seed challenge and one answer per member, in ring " +
+          "order; nothing in it says which member you are, and the " +
+          "other members were never asked and never involved: their " +
+          "answers were invented forwards from random numbers, and " +
+          "only yours was built from a private key. Anyone with the " +
+          "ring — the same keys in the same order — and the exact " +
+          "message can check that one of you signed, and can learn " +
+          "nothing more from the line.";
+      });
+    });
+
+    document.getElementById("ring-verify").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("ring-verify-result");
+      status.textContent = "Checking locally…";
+      verifyRingSignature(document.getElementById("ring-verify-keys").value,
+        document.getElementById("ring-verify-message").value,
+        document.getElementById("ring-verify-sig").value).then(function (ok) {
+        if (ok === null) {
+          status.textContent = "That cannot be checked: the ring must " +
+            "be 2 to 6 whole public keys (exactly 91 bytes each, one " +
+            "per line, no duplicates), the message must be the exact " +
+            "signed text (not blank, at most 2,000 characters), the " +
+            "signature one whole p4a-ring-v1 line, and the number of " +
+            "answers in it must match the number of keys in the ring. " +
+            "A half-typed piece gets no verdict at all, rather than a " +
+            "wrong one.";
+          return;
+        }
+        status.textContent = ok
+          ? "✓ One of them signed: the chain of challenges closes back " +
+            "on its own seed — exactly one private key from this ring " +
+            "produced that line over this exact message. The check " +
+            "cannot say which member, and neither can anyone else: " +
+            "that silence is the point of the construction."
+          : "⚠ Not proved: the pieces are well-formed, but the chain " +
+            "does not close. No single member of this ring, in this " +
+            "order, signed this exact message with that line — or the " +
+            "message, the ring, or the line has been changed since " +
+            "signing.";
       });
     });
 
