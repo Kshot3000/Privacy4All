@@ -1922,6 +1922,151 @@ function healChainState(stateText, privateKeyHex, peerPublicKeyHex) {
   });
 }
 
+/* ---------- 24. Hide the length — pad it to one size before sealing ---------- */
+/* Every seal in this suite is honest about the same leak:
+   tools 13, 15, 16 and 20 all state it — the sealed text's
+   length tracks the message's length, so anyone who can see
+   the sealed text (a relay, a ledger watcher, a curious
+   server) learns roughly how much was said, even though they
+   cannot read a word. "Yes", a four-figure amount and a long
+   confession seal to visibly different sizes. The standard
+   fix is padding: before sealing, the message is extended
+   to a fixed size, so every sealed text in a size class is
+   exactly the same length and the watcher learns only which
+   class, not the length. This tool pads at the byte level:
+   an 8-byte header ("P4AP" magic plus the message's true
+   byte length, big-endian) goes in front of the message's
+   UTF-8 bytes, fresh random bytes from Web Crypto fill the
+   rest, and the whole block — exactly one of the labelled
+   bucket sizes — is sealed with AES-GCM under a tool-19
+   session key in its own format, p4a-paddedseal-v1. The
+   padding sits INSIDE the seal, so the GCM tag covers the
+   filler too: tampering with it fails outright like any
+   other tampering. Opening decrypts, checks the block is
+   exactly a bucket with an intact header, reads exactly the
+   labelled number of message bytes and ignores the rest.
+   Bucket boundaries: a message whose bytes plus the header
+   exactly fill a bucket stays in it; one byte more moves up
+   to the next. Honest limits: padding hides length only
+   inside a bucket — which bucket a message landed in still
+   shows, timing and frequency are untouched, and a watcher
+   who sees many messages can still learn plenty from the
+   pattern; real messengers pad inside a ratcheted protocol
+   with constant-rate cover traffic on top. Teaching
+   implementation, not an audited messaging app. Keys and
+   messages exist only in this page: nothing is stored or
+   sent. Never paste a real wallet key or a production
+   session key into any web page, including this one —
+   practise with throwaway keys from tools 18–19. */
+var PADDEDSEAL_FORMAT = "p4a-paddedseal-v1";
+var PAD_MAGIC = "P4AP";
+var PAD_HEADER_BYTES = 8;
+var PAD_BUCKETS = [256, 1024, 4096, 16384];
+var PAD_MAX_MESSAGE_BYTES = PAD_BUCKETS[PAD_BUCKETS.length - 1] - PAD_HEADER_BYTES;
+
+/* The bucket a message of this many UTF-8 bytes is padded
+   to — the smallest labelled bucket that fits the bytes
+   plus the header — or null when it fits no bucket. */
+function paddedBucketFor(byteLength) {
+  if (typeof byteLength !== "number" || !Number.isInteger(byteLength) ||
+      byteLength < 1) return null;
+  for (var i = 0; i < PAD_BUCKETS.length; i++) {
+    if (byteLength + PAD_HEADER_BYTES <= PAD_BUCKETS[i]) return PAD_BUCKETS[i];
+  }
+  return null;
+}
+
+/* The padded block itself: header, message bytes, random
+   filler, exactly one bucket long — or null for a blank,
+   non-string or over-cap message. Pure structure plus
+   randomness: the same message pads differently every time,
+   and that is the point. */
+function buildPaddedPayload(message) {
+  if (typeof message !== "string" || message.trim() === "") return null;
+  var data = secretToBytes(message);
+  var bucket = paddedBucketFor(data.length);
+  if (bucket === null) return null;
+  var cryptoObj = (typeof globalThis !== "undefined" && globalThis.crypto) || null;
+  if (!cryptoObj || typeof cryptoObj.getRandomValues !== "function") return null;
+  var payload = new Uint8Array(bucket);
+  for (var i = 0; i < 4; i++) payload[i] = PAD_MAGIC.charCodeAt(i);
+  payload[4] = (data.length >>> 24) & 0xff;
+  payload[5] = (data.length >>> 16) & 0xff;
+  payload[6] = (data.length >>> 8) & 0xff;
+  payload[7] = data.length & 0xff;
+  payload.set(data, PAD_HEADER_BYTES);
+  if (bucket > PAD_HEADER_BYTES + data.length) {
+    cryptoObj.getRandomValues(payload.subarray(PAD_HEADER_BYTES + data.length));
+  }
+  return payload;
+}
+
+/* Reads a padded block back: exactly one bucket long, magic
+   intact, the labelled length in range, the message bytes
+   valid UTF-8 and non-blank. The filler is never read —
+   any bytes there extract the same message. Anything else
+   is null, never a best guess. */
+function extractPaddedMessage(payload) {
+  if (!(payload instanceof Uint8Array)) return null;
+  if (PAD_BUCKETS.indexOf(payload.length) === -1) return null;
+  for (var i = 0; i < 4; i++) {
+    if (payload[i] !== PAD_MAGIC.charCodeAt(i)) return null;
+  }
+  var len = payload[4] * 16777216 + payload[5] * 65536 +
+    payload[6] * 256 + payload[7];
+  if (len < 1 || PAD_HEADER_BYTES + len > payload.length) return null;
+  var msg = bytesToSecret(payload.slice(PAD_HEADER_BYTES, PAD_HEADER_BYTES + len));
+  if (msg === null || msg.trim() === "") return null;
+  return msg;
+}
+
+function parsePaddedSealed(text) {
+  if (typeof text !== "string") return null;
+  var m = text.trim().toLowerCase().match(/^p4a-paddedseal-v1:([0-9a-f]+):([0-9a-f]+)$/);
+  if (!m) return null;
+  var iv = hexToBytes(m[1]);
+  var cipher = hexToBytes(m[2]);
+  if (!iv || !cipher) return null;
+  if (iv.length !== KEYSEAL_IV_BYTES) return null;
+  /* The ciphertext is one whole padded bucket plus the
+     16-byte GCM tag — any other length was never padded. */
+  if (PAD_BUCKETS.indexOf(cipher.length - 16) === -1) return null;
+  return { iv: iv, cipher: cipher };
+}
+
+function sealPaddedMessage(message, keyText) {
+  var payload = buildPaddedPayload(message);
+  if (payload === null) return Promise.resolve(null);
+  var cryptoObj = (typeof globalThis !== "undefined" && globalThis.crypto) || null;
+  if (!cryptoObj || typeof cryptoObj.getRandomValues !== "function" || !cryptoObj.subtle) {
+    return Promise.resolve(null);
+  }
+  var iv = new Uint8Array(KEYSEAL_IV_BYTES);
+  cryptoObj.getRandomValues(iv);
+  return importSessionKey(keyText).then(function (key) {
+    if (!key) return null;
+    return cryptoObj.subtle.encrypt({ name: "AES-GCM", iv: iv }, key, payload)
+      .then(function (buf) {
+        return PADDEDSEAL_FORMAT + ":" + shareBytesToHex(iv) +
+          ":" + shareBytesToHex(new Uint8Array(buf));
+      }, function () { return null; });
+  });
+}
+
+function openPaddedMessage(sealed, keyText) {
+  var parsed = parsePaddedSealed(sealed);
+  if (!parsed) return Promise.resolve(null);
+  var cryptoObj = (typeof globalThis !== "undefined" && globalThis.crypto) || null;
+  if (!cryptoObj || !cryptoObj.subtle) return Promise.resolve(null);
+  return importSessionKey(keyText).then(function (key) {
+    if (!key) return null;
+    return cryptoObj.subtle.decrypt({ name: "AES-GCM", iv: parsed.iv }, key, parsed.cipher)
+      .then(function (buf) {
+        return extractPaddedMessage(new Uint8Array(buf));
+      }, function () { return null; /* wrong key or tampered — GCM refuses */ });
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -1967,7 +2112,12 @@ if (typeof module !== "undefined" && module.exports) {
                      parseChainState, formatChainState,
                      startChainState, ratchetStep,
                      sealRatchetMessage, openRatchetMessage,
-                     HEAL_INFO, healChainState };
+                     HEAL_INFO, healChainState,
+                     PADDEDSEAL_FORMAT, PAD_MAGIC, PAD_HEADER_BYTES,
+                     PAD_BUCKETS, PAD_MAX_MESSAGE_BYTES,
+                     paddedBucketFor, buildPaddedPayload,
+                     extractPaddedMessage, parsePaddedSealed,
+                     sealPaddedMessage, openPaddedMessage };
 }
 
 if (typeof document !== "undefined") {
@@ -3035,6 +3185,52 @@ if (typeof document !== "undefined") {
           "following takes a fresh private key they never had. The other side must heal from exactly " +
           "the same pre-heal state, with their own fresh pair, or their chain lands somewhere else and " +
           "seals will simply fail until you both heal from the same state.";
+      });
+    });
+
+    /* --- hide the length: pad it to one size before sealing --- */
+    document.getElementById("padseal-make").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("padseal-out");
+      var status = document.getElementById("padseal-result");
+      var message = document.getElementById("padseal-message").value;
+      status.textContent = "Padding and locking locally…";
+      sealPaddedMessage(message, document.getElementById("padseal-key").value).then(function (sealed) {
+        if (sealed === null) {
+          out.value = "";
+          status.textContent = "That cannot be padded and locked: write a message (up to " +
+            PAD_MAX_MESSAGE_BYTES + " bytes once encoded — the largest labelled bucket), and paste the " +
+            "derived key exactly as tool 19 made it (64 hex characters, 32 bytes). Nothing was locked.";
+          return;
+        }
+        out.value = sealed;
+        var bytes = secretToBytes(message).length;
+        status.textContent = "✓ Padded and locked locally. Your message is " + bytes +
+          " byte" + (bytes === 1 ? "" : "s") + ", padded up to the " +
+          paddedBucketFor(bytes) + "-byte bucket before locking — so this locked line is exactly " +
+          "as long as any other locked line in that bucket, whatever the message inside it says. " +
+          "Copy the whole line; the key is not in it.";
+      });
+    });
+    document.getElementById("padseal-open").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("padopen-out");
+      var status = document.getElementById("padopen-result");
+      status.textContent = "Opening locally…";
+      openPaddedMessage(document.getElementById("padopen-sealed").value,
+        document.getElementById("padopen-key").value).then(function (message) {
+        if (message === null) {
+          out.value = "";
+          status.textContent = "That does not open: the usual causes are the wrong derived key, a " +
+            "locked line that was changed or cut short (the padding is inside the lock, so changing any " +
+            "of it fails outright), or a plain tool-20 line — those open in tool 20, not here, and this " +
+            "tool's lines open only here.";
+          return;
+        }
+        out.value = message;
+        status.textContent = "✓ Opened locally — exactly the message that was padded and locked, " +
+          "with the random filler stripped away and never shown. The locked line told a watcher only " +
+          "which size bucket it was in; this page is the first place its true length exists again.";
       });
     });
 

@@ -330,6 +330,26 @@ renewable resource that pays for shielded transactions.
   and real messengers run this step on every reply.
   Never paste a real wallet key or a production session
   key into any web page, including this one.
+- **Hide the length — pad it to one size before
+  sealing** — builds the fix tools 13, 15, 16 and 20 all
+  name for their shared leak: a sealed text's length
+  tracks the message's length. Before sealing, the
+  message's UTF-8 bytes are padded to exactly one of
+  four labelled bucket sizes (256 / 1,024 / 4,096 /
+  16,384 bytes) — an 8-byte header (`P4AP` magic plus
+  the true byte length) in front, fresh Web Crypto
+  random bytes behind — and the whole block is sealed
+  with AES-GCM under a tool-19 session key in the
+  `p4a-paddedseal-v1` format, so the tag covers the
+  filler too and two messages in one bucket seal to
+  exactly the same length. Honestly labelled a teaching
+  implementation, not an audited messaging app: padding
+  hides length only inside a bucket (which bucket still
+  shows), timing and frequency are untouched, and real
+  messengers pad inside a ratcheted protocol with cover
+  traffic on top. Never paste a real wallet key or a
+  production session key into any web page, including
+  this one.
 
 ## Guides
 

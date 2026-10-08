@@ -540,7 +540,7 @@
 
       <div class="tool" id="key-sealed-message">
         <h3>20 · Use the key — lock a message with the key you both derived</h3>
-        <p>Tools 18 and 19 end with a key nobody has used yet — this is where it gets used. This tool uses the derived key directly as a real AES-GCM key: no password, no stretching and no salt, because tool 19's output is already high-entropy key material, which is exactly what the derivation was for. (Tool 16 is the contrast: it starts from a human password, so it must stretch it first, and its sealed text carries a salt. Here the sealed text carries only a fresh random IV per message.) Locking and opening run locally for real, and the authentication tag means a wrong key fails outright, exactly like a tampered or truncated message — there is no password fallback and no best guess. Honestly labelled limits: this is a teaching implementation, not an audited messaging app — real messengers add ratcheting, message numbering and key erasure on top of this shape. The key itself is the whole secret: whoever it leaks to reads everything locked with it, past and future, until both sides derive a fresh one, and the locked text still leaks the message's approximate length. Keys exist only in this page — nothing is stored or sent. Never paste a real wallet key or a production session key into any web page, including this one — practise with throwaway keys from tools 18–19.</p>
+        <p>Tools 18 and 19 end with a key nobody has used yet — this is where it gets used. This tool uses the derived key directly as a real AES-GCM key: no password, no stretching and no salt, because tool 19's output is already high-entropy key material, which is exactly what the derivation was for. (Tool 16 is the contrast: it starts from a human password, so it must stretch it first, and its sealed text carries a salt. Here the sealed text carries only a fresh random IV per message.) Locking and opening run locally for real, and the authentication tag means a wrong key fails outright, exactly like a tampered or truncated message — there is no password fallback and no best guess. Honestly labelled limits: this is a teaching implementation, not an audited messaging app — real messengers add ratcheting, message numbering and key erasure on top of this shape. The key itself is the whole secret: whoever it leaks to reads everything locked with it, past and future, until both sides derive a fresh one, and the locked text still leaks the message's approximate length. Tool 24 below is the standard fix for that leak. Keys exist only in this page — nothing is stored or sent. Never paste a real wallet key or a production session key into any web page, including this one — practise with throwaway keys from tools 18–19.</p>
         <form id="keyseal-make">
           <label for="keyseal-message">Message to lock</label>
           <textarea id="keyseal-message" rows="3" spellcheck="false" placeholder="e.g. the blue locker, Friday, nine — bring the spare key"></textarea>
@@ -651,6 +651,30 @@
           <p id="heal-result" role="status" aria-live="polite"></p>
         </form>
       </div>
+      <div class="tool" id="padded-seal-tool">
+        <h3>24 · Hide the length — pad it to one size before sealing</h3>
+        <p>Every seal on this page is honest about the same leak — tools 13, 15, 16 and 20 all name it: a sealed text's length tracks the message's length, so a relay, a ledger watcher or a curious server learns roughly how much was said without reading a word. A one-word answer, a four-figure amount and a long confession seal to visibly different sizes: the length itself is the leak. The standard fix is padding, and that is what this tool does for real: the message is padded up to a fixed bucket size before it is locked — an 8-byte header (a "P4AP" marker plus the message's true byte length) goes in front of its UTF-8 bytes, fresh random bytes fill the rest, and the whole block, exactly 256, 1,024, 4,096 or 16,384 bytes, is locked with AES-GCM under a tool-19 session key, in its own p4a-paddedseal-v1 format. The padding sits inside the lock, so the authentication tag covers the filler too: changing any of it fails outright. Two messages in the same bucket produce locked lines of exactly the same length; the opener reads the true length back from the header and the filler is never shown. The honest limits: padding hides length only inside a bucket — which bucket a message landed in still shows; timing and frequency are untouched, and a watcher who sees many messages can still learn from the pattern; and real messengers pad inside a ratcheted protocol with cover traffic on top. Honestly labelled: this is a teaching implementation, not an audited messaging app. Never paste a real wallet key or a production session key into any web page, including this one — practise with throwaway keys from tools 18–19.</p>
+        <form id="padseal-make">
+          <label for="padseal-message">Message to pad and lock</label>
+          <textarea id="padseal-message" rows="3" spellcheck="false" placeholder="e.g. yes — short messages are exactly what padding protects"></textarea>
+          <label for="padseal-key">Derived key, as hex (exactly 32 bytes — tool 19's output; use its messaging purpose for messages)</label>
+          <textarea id="padseal-key" rows="2" spellcheck="false" placeholder="Paste the derived key hex here"></textarea>
+          <button type="submit" class="btn primary">Pad and lock it locally</button>
+          <label for="padseal-out">Your padded, locked message — its length says only which bucket it is in; the key is not in it</label>
+          <textarea id="padseal-out" rows="4" readonly spellcheck="false"></textarea>
+          <p id="padseal-result" role="status" aria-live="polite"></p>
+        </form>
+        <form id="padseal-open">
+          <label for="padopen-sealed">Padded, locked message to open</label>
+          <textarea id="padopen-sealed" rows="4" spellcheck="false" placeholder="p4a-paddedseal-v1:…"></textarea>
+          <label for="padopen-key">The derived key it was locked with, as hex (exactly 32 bytes)</label>
+          <textarea id="padopen-key" rows="2" spellcheck="false" placeholder="Paste the derived key hex here"></textarea>
+          <button type="submit" class="btn primary">Open it locally</button>
+          <label for="padopen-out">The opened message — exactly as it was written, with the padding stripped away</label>
+          <textarea id="padopen-out" rows="3" readonly spellcheck="false"></textarea>
+          <p id="padopen-result" role="status" aria-live="polite"></p>
+        </form>
+      </div>
     </div>
   </section>
 
@@ -681,6 +705,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=21"></script>
+<script src="app.js?v=22"></script>
 </body>
 </html>
