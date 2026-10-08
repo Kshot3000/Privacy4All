@@ -43,7 +43,7 @@
     </div>
     <dl class="stats">
       <div><dt>Flagship projects</dt><dd>4 live sites</dd></div>
-      <div><dt>Catalogued repos</dt><dd>14 Midnight / privacy</dd></div>
+      <div><dt>Catalogued repos</dt><dd>16 Midnight / privacy</dd></div>
       <div><dt>Builder loop</dt><dd>Hourly, tested + verified</dd></div>
     </dl>
   </section>
@@ -806,6 +806,41 @@
           <p id="safety-check-result" role="status" aria-live="polite"></p>
         </form>
       </div>
+
+      <div class="tool" id="one-time">
+        <h3>29 · A fresh destination for every payment — one-time destinations</h3>
+        <p>Every tool before this one protects the content of a message or the fact behind a proof. This one protects the address itself. Publish one address and reuse it for every payment, and anyone watching the ledger can total what you received, see when, and link every payer who ever used it — no decryption needed, because the link is the address. The stealth pattern answers with a fresh destination for every payment. The sender makes a one-payment agreement pair (tool 18), mixes its private half with the recipient's published public key, and hashes the shared secret under this tool's own label: that digest is the destination — a fresh identifier nobody can connect to the published key from the outside. The one-payment public key travels with the payment in plain view, because it is not a secret: the recipient scans with it, mixing their private key with it to land on the same secret, the same hash, the same destination — and a match means “this one is mine”. Two payments to the same person produce two unrelated destinations, because each rides on a fresh pair; the one-payment private key is never stored, shown or sent. The honest limits: this is a teaching model of the recognition half of stealth addressing — real schemes derive a one-time public key on the curve, so the recipient also derives the matching one-time private key that spends; here the destination is an identifier computed from the shared secret, it is not an address on any chain, and nothing here moves or holds funds. The sender necessarily knows the destination they made — unlinkability here is against outside watchers, not against the payer. Scanning needs the one-payment key that travelled with the payment: lose it and that destination can no longer be recognised. And a fresh destination hides who was paid, not that a payment happened — amounts, timing and network-level metadata still leak (tool 9's lesson). Honestly labelled: this is a teaching implementation, not an audited wallet. Never paste a real wallet key or a production private key into any web page, including this one — practise with throwaway keys from tool 18.</p>
+        <form id="onetime-make">
+          <label for="onetime-pub">Their public key, as hex (exactly 91 bytes — tool 18's public key; a public key is safe to share, that is its job)</label>
+          <textarea id="onetime-pub" rows="2" spellcheck="false" placeholder="Paste the recipient's public key hex here"></textarea>
+          <button type="submit" class="btn primary">Make a fresh destination locally</button>
+          <label for="onetime-eph-out">The one-payment public key — send this alongside the payment; it is not a secret</label>
+          <textarea id="onetime-eph-out" rows="2" readonly spellcheck="false"></textarea>
+          <label for="onetime-dest-out">The one-time destination — the address for this payment only; nobody can connect it to their published key</label>
+          <textarea id="onetime-dest-out" rows="2" readonly spellcheck="false"></textarea>
+          <p id="onetime-result" role="status" aria-live="polite"></p>
+        </form>
+        <form id="onetime-scan">
+          <label for="onetime-scan-priv">Your private key, as hex (exactly 138 bytes — tool 18's private key matching your published key; it never leaves this page)</label>
+          <textarea id="onetime-scan-priv" rows="2" spellcheck="false" placeholder="Paste your private key hex here"></textarea>
+          <label for="onetime-scan-eph">The one-payment public key that travelled with the payment (exactly 91 bytes)</label>
+          <textarea id="onetime-scan-eph" rows="2" spellcheck="false" placeholder="Paste the one-payment public key hex here"></textarea>
+          <button type="submit" class="btn primary">Scan for my destination locally</button>
+          <label for="onetime-scan-out">The destination your key recognises — if the payment used it, the payment is yours</label>
+          <textarea id="onetime-scan-out" rows="2" readonly spellcheck="false"></textarea>
+          <p id="onetime-scan-result" role="status" aria-live="polite"></p>
+        </form>
+        <form id="onetime-check">
+          <label for="onetime-check-priv">Your private key, as hex (exactly 138 bytes — tool 18's private key)</label>
+          <textarea id="onetime-check-priv" rows="2" spellcheck="false" placeholder="Paste your private key hex here"></textarea>
+          <label for="onetime-check-eph">The one-payment public key that travelled with the payment (exactly 91 bytes)</label>
+          <textarea id="onetime-check-eph" rows="2" spellcheck="false" placeholder="Paste the one-payment public key hex here"></textarea>
+          <label for="onetime-check-dest">The destination to check (64 hex characters)</label>
+          <textarea id="onetime-check-dest" rows="2" spellcheck="false" placeholder="Paste the destination hex here"></textarea>
+          <button type="submit" class="btn primary">Check this destination locally</button>
+          <p id="onetime-check-result" role="status" aria-live="polite"></p>
+        </form>
+      </div>
     </div>
   </section>
 
@@ -836,6 +871,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=26"></script>
+<script src="app.js?v=27"></script>
 </body>
 </html>

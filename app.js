@@ -2689,6 +2689,125 @@ function checkSafetyNumber(publicKeyA, publicKeyB, expectedText) {
   });
 }
 
+/* ---------- 29. A fresh destination for every payment — one-time destinations ---------- */
+/* Every tool so far protects the CONTENT of a message or
+   the fact behind a proof. This one protects the ADDRESS
+   itself. A single published address, reused for every
+   payment, is a correlation machine: anyone watching the
+   ledger can total what its owner received, see when, and
+   link every payer who ever used it — no decryption
+   needed, because the link is the address. The stealth
+   pattern answers it with a ONE-TIME DESTINATION per
+   payment. The sender makes a fresh, one-payment
+   agreement pair (tool 18), mixes its private half with
+   the recipient's published public key, and hashes the
+   shared secret under this tool's own label: that digest
+   is the destination, a fresh 64-hex identifier nobody
+   can connect to the published key from the outside. The
+   ephemeral public key travels with the payment in plain
+   view — it is not a secret — and the recipient SCANS
+   with it: mixing their private key with the ephemeral
+   public key lands on the same secret, the same hash,
+   the same destination, and a match means "this one is
+   mine". A stranger scanning with the wrong private key
+   lands on a different secret and a different
+   destination. Two payments to the same person produce
+   two unrelated destinations, because each rides on a
+   fresh ephemeral pair. The one-payment private key is
+   never stored, shown or sent — like tool 26's box key,
+   it has exactly one job. Honest limits, stated plainly:
+   this is a teaching model of the recognition half of
+   stealth addressing — real schemes (Monero-style,
+   EIP-5564-style) derive a one-time public KEY on the
+   curve, so the recipient also derives the matching
+   one-time private key that spends; here the destination
+   is an identifier computed from the shared secret, it
+   is not an address on any chain, and nothing here moves
+   or holds funds. The sender necessarily knows the
+   destination they made — unlinkability here is against
+   outside watchers, not against the payer. Scanning needs
+   the ephemeral key that travelled with the payment: lose
+   it and that destination can no longer be recognised by
+   anyone. And a fresh destination hides WHO was paid, not
+   THAT a payment happened — amounts, timing and
+   network-level metadata still leak (tool 9's lesson).
+   Teaching implementation, not an audited wallet. Never
+   paste a real wallet key or a production private key
+   into any web page, including this one — practise with
+   throwaway keys from tool 18. */
+var ONETIME_PREFIX = "privacy4all-onetime-v1";
+var ONETIME_DESTINATION_BYTES = 32;
+
+function parseOneTimeDestination(text) {
+  if (typeof text !== "string") return null;
+  var hex = text.trim().toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(hex)) return null;
+  return hex;
+}
+
+/* The destination is a labelled hash of the shared
+   secret alone — never of the recipient's public key,
+   which anyone can see. The label domain-separates it
+   from tool 18's fingerprint of the same secret: same
+   input, different question, different digest. A secret
+   that is not exactly 32 bytes is null, never a
+   destination for the wrong thing. */
+function oneTimeDestinationForSecret(secretHex) {
+  var hex = parseSharedSecret(secretHex);
+  if (hex === null) return Promise.resolve(null);
+  return sha256Hex(ONETIME_PREFIX + "\n" + hex);
+}
+
+/* The sender's half: a fresh ephemeral pair per payment,
+   mixed with the recipient's published key. A private
+   key offered as the recipient key (138 bytes, not 91),
+   a short key or junk is null before any pair is made. */
+function makeOneTimeDestination(recipientPublicKeyHex) {
+  if (parseKeyHex(recipientPublicKeyHex, AGREE_PUBLIC_KEY_BYTES) === null) {
+    return Promise.resolve(null);
+  }
+  return generateAgreementKeyPair().then(function (eph) {
+    if (!eph) return null;
+    return deriveSharedSecret(eph.privateKey, recipientPublicKeyHex)
+      .then(function (secret) {
+        if (secret === null) return null;
+        return oneTimeDestinationForSecret(secret).then(function (dest) {
+          if (dest === null) return null;
+          return { ephemeralPublicKey: eph.publicKey, destination: dest };
+        });
+      });
+  });
+}
+
+/* The recipient's half: the same secret from the other
+   side — their private key, the ephemeral public key
+   that travelled with the payment. Malformed keys are
+   null (deriveSharedSecret validates both lengths). */
+function scanOneTimeDestination(privateKeyHex, ephemeralPublicKeyHex) {
+  return deriveSharedSecret(privateKeyHex, ephemeralPublicKeyHex)
+    .then(function (secret) {
+      if (secret === null) return null;
+      return oneTimeDestinationForSecret(secret);
+    });
+}
+
+/* The verdict: true only when the destination this
+   private key computes from this ephemeral key is
+   exactly the destination in question. A malformed
+   claimed destination (not 64 hex) is null, never
+   false: false means "these keys, that well-formed
+   destination, not yours", and the two answers must
+   never blur — the same rule as tool 28's checker. */
+function checkOneTimeDestination(privateKeyHex, ephemeralPublicKeyHex, destinationText) {
+  var expected = parseOneTimeDestination(destinationText);
+  if (expected === null) return Promise.resolve(null);
+  return scanOneTimeDestination(privateKeyHex, ephemeralPublicKeyHex)
+    .then(function (actual) {
+      if (actual === null) return null;
+      return actual === expected;
+    });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -2753,7 +2872,11 @@ if (typeof module !== "undefined" && module.exports) {
                      sealAuthenticatedBoxMessage, openAuthenticatedBoxMessage,
                      SAFETY_PREFIX, SAFETY_GROUPS, SAFETY_GROUP_DIGITS,
                      parseSafetyPublicKey, formatSafetyNumber, parseSafetyNumber,
-                     safetyNumberForKeys, checkSafetyNumber };
+                     safetyNumberForKeys, checkSafetyNumber,
+                     ONETIME_PREFIX, ONETIME_DESTINATION_BYTES,
+                     parseOneTimeDestination, oneTimeDestinationForSecret,
+                     makeOneTimeDestination, scanOneTimeDestination,
+                     checkOneTimeDestination };
 }
 
 if (typeof document !== "undefined") {
@@ -4099,6 +4222,81 @@ if (typeof document !== "undefined") {
             "Do not proceed as if they were theirs — one of the keys is not the key its " +
             "owner published, or the number was read from a different pair. Re-check the " +
             "keys on a channel you already trust before sending anything private.";
+        }
+      });
+    });
+
+    /* --- a fresh destination for every payment — one-time destinations --- */
+    document.getElementById("onetime-make").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var ephOut = document.getElementById("onetime-eph-out");
+      var destOut = document.getElementById("onetime-dest-out");
+      var status = document.getElementById("onetime-result");
+      status.textContent = "Making a fresh one-time destination locally…";
+      makeOneTimeDestination(document.getElementById("onetime-pub").value).then(function (made) {
+        if (made === null) {
+          ephOut.value = "";
+          destOut.value = "";
+          status.textContent = "That makes no destination: paste the recipient's public " +
+            "key exactly as tool 18 made it (182 hex characters, 91 bytes). A private key " +
+            "(276 hex characters) is never the recipient input here — destinations are " +
+            "made TO a public key, that is its job. Nothing was computed from the wrong thing.";
+          return;
+        }
+        ephOut.value = made.ephemeralPublicKey;
+        destOut.value = made.destination;
+        status.textContent = "✓ Made locally. Send the destination as the payment's " +
+          "address, and the one-payment public key alongside it — the key is not a " +
+          "secret, it is how the recipient recognises the payment as theirs. Make a " +
+          "fresh one for every payment: reuse is exactly what this tool exists to avoid.";
+      });
+    });
+    document.getElementById("onetime-scan").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("onetime-scan-out");
+      var status = document.getElementById("onetime-scan-result");
+      status.textContent = "Scanning locally…";
+      scanOneTimeDestination(document.getElementById("onetime-scan-priv").value,
+        document.getElementById("onetime-scan-eph").value).then(function (dest) {
+        if (dest === null) {
+          out.value = "";
+          status.textContent = "That scans nothing: paste your private key exactly as " +
+            "tool 18 made it (276 hex characters, 138 bytes) and the one-payment public " +
+            "key that travelled with the payment (182 hex characters, 91 bytes). " +
+            "Nothing was computed from the wrong thing.";
+          return;
+        }
+        out.value = dest;
+        status.textContent = "✓ Scanned locally. If this destination is the one the " +
+          "payment used, the payment is yours — your key is the only one that lands " +
+          "here from that one-payment key. A different destination means that payment " +
+          "was made to a different key, or with a different one-payment key.";
+      });
+    });
+    document.getElementById("onetime-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("onetime-check-result");
+      status.textContent = "Checking the destination locally…";
+      checkOneTimeDestination(document.getElementById("onetime-check-priv").value,
+        document.getElementById("onetime-check-eph").value,
+        document.getElementById("onetime-check-dest").value).then(function (ok) {
+        if (ok === null) {
+          status.textContent = "That cannot be checked: paste your private key exactly " +
+            "as tool 18 made it (276 hex characters, 138 bytes), the one-payment public " +
+            "key (182 hex characters, 91 bytes) and a whole destination — 64 hex " +
+            "characters. A half-typed destination gets no verdict at all, rather than " +
+            "a wrong one.";
+          return;
+        }
+        if (ok) {
+          status.textContent = "✓ Yours: the destination your key computes from that " +
+            "one-payment key is exactly this destination. Nobody watching could have " +
+            "connected it to your published key — only your private key lands here.";
+        } else {
+          status.textContent = "⚠ Not yours: your key and that one-payment key land on " +
+            "a different destination. This payment was made to a different recipient " +
+            "key, or paired with a different one-payment key — it is not a payment " +
+            "this key can claim.";
         }
       });
     });

@@ -448,6 +448,35 @@ renewable resource that pays for shielded transactions.
   truncated hash. Public keys only — never paste a
   real wallet key or any private key into any web
   page, including this one.
+- **A fresh destination for every payment — one-time
+  destinations** — the stealth-addressing pattern,
+  built from tool 18's agreement: a reused address
+  links every payment to its owner for any watcher,
+  so the sender makes a fresh one-payment agreement
+  pair, mixes its private half with the recipient's
+  published public key, and hashes the shared secret
+  under the `privacy4all-onetime-v1` label — that
+  digest is the destination, a fresh 64-hex
+  identifier nobody can connect to the published
+  key. The one-payment public key travels with the
+  payment in plain view; the recipient scans with
+  their private key and lands on the same
+  destination, and a checker returns `true`, `false`,
+  or `null` for a malformed destination, so "not
+  yours" and "cannot be checked" never blur. Two
+  payments to the same person produce two unrelated
+  destinations. Honestly labelled a teaching
+  implementation, not an audited wallet: this models
+  the recognition half of stealth addressing — real
+  schemes derive a one-time public key on the curve
+  with a matching spend key; the destination here is
+  an identifier, not an address on any chain, and
+  nothing moves funds; the sender necessarily knows
+  the destination they made; scanning needs the
+  one-payment key, and amounts, timing and metadata
+  still leak. Never paste a real wallet key or a
+  production private key into any web page,
+  including this one.
 
 ## Guides
 
