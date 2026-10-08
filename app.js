@@ -2067,6 +2067,218 @@ function openPaddedMessage(sealed, keyText) {
   });
 }
 
+/* ---------- 25. Out of order, still private — skipped message keys ---------- */
+/* Tool 22 is honest about the limit this tool removes: its
+   chain opens messages strictly in order, because it keeps
+   no store for skipped message keys. Real networks do not
+   deliver in order — a message is delayed, retried, routed
+   another way — and real messengers (Signal's protocol is
+   the famous one) answer with a skipped-key store. Two
+   changes make it work here. First, the seal carries its
+   position: p4a-oooseal-v1:<position>:<iv>:<cipher> is tool
+   20's exact AES-GCM seal under that position's ratchet key,
+   with the position it was sealed at written on the outside,
+   so the receiver knows which key it needs before opening
+   anything. Second, the receiver keeps a small store,
+   p4a-skipped-v1, of message keys for positions the chain
+   stepped past: when the message for position 5 arrives
+   while the chain sits at 3, the chain steps forward,
+   positions 3 and 4's message keys go into the store, 5
+   opens now, and when 3 and 4 finally arrive their stored
+   keys open them — each stored key is erased the moment it
+   is used, so a late message opens exactly once and a replay
+   of it finds no key and a chain that has already passed it:
+   null, never a second opening. The store is bounded on
+   purpose: at most SKIPPED_MAX_KEYS keys kept — and that cap
+   is also the jump cap, because one open never steps more
+   positions than the store could hold the skipped keys for.
+   A bigger jump would mean stepping the chain thousands of
+   times and warehousing keys for messages that may never
+   arrive, which is exactly the denial-of-service shape real
+   protocols cap for the same reason; a refusal changes
+   nothing, so the message can be retried once the gap
+   closes honestly. A store entry at or beyond the chain's
+   current position can never be legitimate — the store and
+   the state belong to different chains, or one of them is
+   stale — so that pairing is refused outright rather than
+   guessed at. Everything is atomic in the suite's usual
+   way: inputs are never mutated, and a failed open returns
+   null with no new state and no new store, so nothing is
+   consumed by a message that did not open. Honest limits:
+   every stored key is a past message's whole secret kept
+   alive past its turn — forward secrecy for those positions
+   is PAUSED, not held, until the late message arrives and
+   the key is erased, and someone who copies the store reads
+   exactly the messages it holds keys for; the position on
+   the outside is metadata a watcher can see, like tool 24's
+   bucket; and this is still the symmetric chain — tool 23's
+   heal remains the answer to a leak. Honest label: teaching
+   implementation, not an audited messaging app. States,
+   stores and keys exist only in this page; never paste a
+   real wallet key, a production session key or a live chain
+   state into any web page, including this one — practise
+   with throwaway keys from tools 18–19. */
+var OOOSEAL_FORMAT = "p4a-oooseal-v1";
+var SKIPPED_FORMAT = "p4a-skipped-v1";
+var SKIPPED_MAX_KEYS = 32;
+
+function parseNumberedSealed(text) {
+  if (typeof text !== "string") return null;
+  var m = text.trim().toLowerCase().match(/^p4a-oooseal-v1:([0-9]+):([0-9a-f]+):([0-9a-f]+)$/);
+  if (!m) return null;
+  var position = Number(m[1]);
+  if (!isFinite(position) || position > RATCHET_MAX_INDEX) return null;
+  /* One spelling per position: "007" is not position 7. */
+  if (String(position) !== m[1]) return null;
+  var iv = hexToBytes(m[2]);
+  var cipher = hexToBytes(m[3]);
+  if (!iv || !cipher) return null;
+  if (iv.length !== KEYSEAL_IV_BYTES) return null;
+  if (cipher.length < 17) return null;
+  return { position: position, iv: iv, cipher: cipher };
+}
+
+/* The store as one canonical line: positions strictly
+   ascending, each paired with one valid 32-byte message
+   key. An empty store is the bare prefix. Anything else —
+   duplicates, disorder, junk keys, too many entries — is
+   null, never a best guess. */
+function formatSkippedStore(entries) {
+  if (!Array.isArray(entries) || entries.length > SKIPPED_MAX_KEYS) return null;
+  var seen = {};
+  var clean = [];
+  for (var i = 0; i < entries.length; i++) {
+    var e = entries[i];
+    if (!e || typeof e !== "object") return null;
+    if (typeof e.index !== "number" || !isFinite(e.index) ||
+        Math.floor(e.index) !== e.index || e.index < 0 ||
+        e.index > RATCHET_MAX_INDEX) return null;
+    var hex = parseDerivedKey(e.key);
+    if (hex === null) return null;
+    if (seen[e.index]) return null;
+    seen[e.index] = true;
+    clean.push({ index: e.index, key: hex });
+  }
+  clean.sort(function (a, b) { return a.index - b.index; });
+  var parts = [];
+  for (var j = 0; j < clean.length; j++) parts.push(clean[j].index + ":" + clean[j].key);
+  return SKIPPED_FORMAT + ":" + parts.join(",");
+}
+
+function parseSkippedStore(text) {
+  if (typeof text !== "string") return null;
+  var t = text.trim().toLowerCase();
+  if (t.indexOf(SKIPPED_FORMAT + ":") !== 0) return null;
+  var rest = t.slice(SKIPPED_FORMAT.length + 1);
+  if (rest === "") return [];
+  var parts = rest.split(",");
+  if (parts.length > SKIPPED_MAX_KEYS) return null;
+  var entries = [];
+  var prev = -1;
+  for (var i = 0; i < parts.length; i++) {
+    var m = parts[i].match(/^([0-9]+):([0-9a-f]+)$/);
+    if (!m) return null;
+    var index = Number(m[1]);
+    if (!isFinite(index) || index > RATCHET_MAX_INDEX) return null;
+    if (String(index) !== m[1]) return null;
+    if (index <= prev) return null; /* strictly ascending: no reorder, no duplicates */
+    var hex = parseDerivedKey(m[2]);
+    if (hex === null) return null;
+    entries.push({ index: index, key: hex });
+    prev = index;
+  }
+  return entries;
+}
+
+function emptySkippedStore() {
+  return formatSkippedStore([]);
+}
+
+/* Returns { sealed, state }: the message sealed under this
+   position's own key in the numbered format — the position
+   rides on the outside so a receiver can find the key —
+   and the next chain state. The state passed in is spent,
+   exactly as in tool 22. */
+function sealNumberedMessage(stateText, message) {
+  var state = parseChainState(stateText);
+  if (state === null || !validKeySealMessage(message)) return Promise.resolve(null);
+  return ratchetStep(state.chainKey).then(function (step) {
+    if (step === null) return null;
+    var next = formatChainState(state.index + 1, step.nextChainKey);
+    if (next === null) return null;
+    return sealWithSessionKey(message, step.messageKey).then(function (sealed) {
+      if (sealed === null) return null;
+      return { sealed: OOOSEAL_FORMAT + ":" + state.index +
+        sealed.slice(KEYSEAL_FORMAT.length), state: next };
+    });
+  });
+}
+
+/* Returns { message, state, store } on success, null for
+   anything else — and on null the caller's state and store
+   are untouched, because nothing here mutates its inputs.
+   A position behind the chain opens only from the store and
+   consumes its key; a position ahead steps the chain,
+   banking the skipped positions' keys — and the store cap
+   is also the jump cap: one open never steps more positions
+   than the store could hold the skipped keys for. */
+function openNumberedMessage(stateText, storeText, sealedText) {
+  var state = parseChainState(stateText);
+  var store = parseSkippedStore(storeText);
+  var seal = parseNumberedSealed(sealedText);
+  if (state === null || store === null || seal === null) return Promise.resolve(null);
+  for (var s = 0; s < store.length; s++) {
+    /* A stored key at or past the chain's position means the
+       store and the state do not belong together. */
+    if (store[s].index >= state.index) return Promise.resolve(null);
+  }
+  var inner = KEYSEAL_FORMAT + ":" + shareBytesToHex(seal.iv) +
+    ":" + shareBytesToHex(seal.cipher);
+  if (seal.position < state.index) {
+    var found = null;
+    var rest = [];
+    for (var i = 0; i < store.length; i++) {
+      if (store[i].index === seal.position) found = store[i];
+      else rest.push(store[i]);
+    }
+    if (found === null) return Promise.resolve(null);
+    return openWithSessionKey(inner, found.key).then(function (message) {
+      if (message === null) return null;
+      var outStore = formatSkippedStore(rest);
+      if (outStore === null) return null;
+      return { message: message, state: formatChainState(state.index, state.chainKey),
+        store: outStore };
+    });
+  }
+  var gap = seal.position - state.index;
+  if (store.length + gap > SKIPPED_MAX_KEYS) return Promise.resolve(null);
+  var banked = store.slice();
+  var walk = Promise.resolve({ chainKey: state.chainKey, messageKey: null });
+  for (var j = state.index; j <= seal.position; j++) {
+    walk = (function (jj, acc) {
+      return acc.then(function (cur) {
+        if (cur === null) return null;
+        return ratchetStep(cur.chainKey).then(function (step) {
+          if (step === null) return null;
+          if (jj < seal.position) banked.push({ index: jj, key: step.messageKey });
+          return { chainKey: step.nextChainKey, messageKey: step.messageKey };
+        });
+      });
+    })(j, walk);
+  }
+  return walk.then(function (done) {
+    if (done === null) return null;
+    var next = formatChainState(seal.position + 1, done.chainKey);
+    if (next === null) return null;
+    return openWithSessionKey(inner, done.messageKey).then(function (message) {
+      if (message === null) return null;
+      var outStore = formatSkippedStore(banked);
+      if (outStore === null) return null;
+      return { message: message, state: next, store: outStore };
+    });
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -2117,7 +2329,12 @@ if (typeof module !== "undefined" && module.exports) {
                      PAD_BUCKETS, PAD_MAX_MESSAGE_BYTES,
                      paddedBucketFor, buildPaddedPayload,
                      extractPaddedMessage, parsePaddedSealed,
-                     sealPaddedMessage, openPaddedMessage };
+                     sealPaddedMessage, openPaddedMessage,
+                     OOOSEAL_FORMAT, SKIPPED_FORMAT,
+                     SKIPPED_MAX_KEYS,
+                     parseNumberedSealed, formatSkippedStore,
+                     parseSkippedStore, emptySkippedStore,
+                     sealNumberedMessage, openNumberedMessage };
 }
 
 if (typeof document !== "undefined") {
@@ -3231,6 +3448,81 @@ if (typeof document !== "undefined") {
         status.textContent = "✓ Opened locally — exactly the message that was padded and locked, " +
           "with the random filler stripped away and never shown. The locked line told a watcher only " +
           "which size bucket it was in; this page is the first place its true length exists again.";
+      });
+    });
+
+    /* --- out of order, still private: skipped message keys --- */
+    document.getElementById("ooo-start").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var stateOut = document.getElementById("ooo-start-state-out");
+      var storeOut = document.getElementById("ooo-start-store-out");
+      var status = document.getElementById("ooo-start-result");
+      var state = startChainState(document.getElementById("ooo-start-in").value);
+      if (state === null) {
+        stateOut.value = "";
+        storeOut.value = "";
+        status.textContent = "That cannot start a receiving side: paste the derived key exactly as " +
+          "tool 19 made it (64 hex characters, 32 bytes). Nothing was started.";
+        return;
+      }
+      stateOut.value = state;
+      storeOut.value = emptySkippedStore();
+      status.textContent = "✓ Receiving side started locally: a chain state at position 0 and an " +
+        "empty skipped-key store. Keep the two together — they are a pair. The sender seals with the " +
+        "middle form from the same starting state; you open with the last form.";
+    });
+    document.getElementById("ooo-seal").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("ooo-seal-out");
+      var nextOut = document.getElementById("ooo-seal-next");
+      var status = document.getElementById("ooo-seal-result");
+      status.textContent = "Stepping the chain and locking locally…";
+      sealNumberedMessage(document.getElementById("ooo-seal-state").value,
+        document.getElementById("ooo-seal-message").value).then(function (res) {
+        if (res === null) {
+          out.value = "";
+          nextOut.value = "";
+          status.textContent = "That cannot be locked: paste your current chain state (a whole " +
+            "p4a-chain-v1 line) and write a message (up to " + KEYSEAL_MAX_MESSAGE_CHARS +
+            " characters). Nothing was locked and your state was not advanced.";
+          return;
+        }
+        out.value = res.sealed;
+        nextOut.value = res.state;
+        status.textContent = "✓ Locked locally, with its position written on the outside of the " +
+          "line — that number is how the receiver finds the right key, and it is the only thing the " +
+          "line gives away beyond its length. Replace your chain state with the NEXT one and let " +
+          "the old one go.";
+      });
+    });
+    document.getElementById("ooo-open").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("ooo-open-out");
+      var nextOut = document.getElementById("ooo-open-next");
+      var storeOut = document.getElementById("ooo-open-store-out");
+      var status = document.getElementById("ooo-open-result");
+      status.textContent = "Opening locally…";
+      openNumberedMessage(document.getElementById("ooo-open-state").value,
+        document.getElementById("ooo-open-store").value,
+        document.getElementById("ooo-open-in").value).then(function (res) {
+        if (res === null) {
+          out.value = "";
+          nextOut.value = "";
+          storeOut.value = "";
+          status.textContent = "That does not open, and nothing was consumed: the usual causes are " +
+            "a state and store that do not belong together, a message numbered further ahead than " +
+            "the labelled store cap lets the chain jump, a replay of a message whose stored key was already used and " +
+            "erased, or a locked line that was changed. Your saved state and store are unchanged — " +
+            "retry when the missing messages arrive.";
+          return;
+        }
+        out.value = res.message;
+        nextOut.value = res.state;
+        storeOut.value = res.store;
+        status.textContent = "✓ Opened locally. Replace your saved state and store with the two " +
+          "new lines below: any positions this message jumped over now have their keys banked in " +
+          "the store, and a stored key is erased the moment its message opens, so each late " +
+          "message opens exactly once.";
       });
     });
 

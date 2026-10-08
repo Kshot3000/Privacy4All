@@ -352,6 +352,31 @@ renewable resource that pays for shielded transactions.
   traffic on top. Never paste a real wallet key or a
   production session key into any web page, including
   this one.
+- **Out of order, still private — skipped message
+  keys** — builds the store tool 22 names as its
+  missing piece, the way Signal's protocol answers
+  out-of-order delivery. Seals carry their position on
+  the outside (`p4a-oooseal-v1` — tool 20's exact
+  AES-GCM seal under that position's ratchet key,
+  numbered); when a message arrives ahead of the
+  chain, the receiver steps the chain forward and
+  banks the skipped positions' message keys in a
+  small store (`p4a-skipped-v1`), and a late message
+  opens from its banked key — which is erased the
+  moment it is used, so it opens exactly once and a
+  replay gets nothing. The store is capped at 32 keys,
+  and one open will not step the chain more positions
+  than the store could hold the skipped keys for,
+  rather than warehousing keys for messages that may
+  never arrive; a mismatched state/store pair
+  is refused outright, and a failed open consumes
+  nothing. Honestly labelled a teaching implementation,
+  not an audited messaging app: a banked key pauses
+  forward secrecy for its position until its message
+  arrives, the position number is visible metadata,
+  and tool 23's heal remains the answer to a leak.
+  Never paste a real wallet key or a production session
+  key into any web page, including this one.
 
 ## Guides
 

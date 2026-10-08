@@ -603,7 +603,7 @@
       </div>
       <div class="tool" id="ratchet-message">
         <h3>22 · One key per message — the ratchet</h3>
-        <p>Tool 20 names the price of one key for everything: whoever it leaks to reads everything locked with it, past and future. This tool builds the fix real messengers use — a ratchet — in its simplest symmetric form: one fresh key per message, and the key moves on the moment it has been used. A chain state is one line, <code>p4a-chain-v1:&lt;position&gt;:&lt;chain key&gt;</code>, starting from a tool-19 session key at position 0. Each step runs HKDF (tool 19's machinery) twice over the chain key with two different labels: one output is this message's own key, sealing through tool 20's exact format, and the other is the next chain key. HKDF runs one way only, so there is no way to recompute an earlier message key from a later state — overwrite an old state and its messages are gone for good, even to someone who later gets your current state. That is forward secrecy for the past. The honest limits are the other half of the lesson: this chain protects the past only — a leaked current state opens every message after it, until both sides agree fresh keys with tools 18–19 and start a new chain; messages open strictly in order, because this simple chain keeps no skipped-message keys; each direction needs its own chain, started from a different tool-19 purpose or salt; and a chain stops at a labelled cap of 1,000,000 messages rather than running unbounded. A failed open advances nothing, so an early message can be retried when its turn comes. Honestly labelled: this is a teaching implementation, not an audited messaging app — real messengers add a second, asymmetric ratchet on top, which is what heals a chain after a leak — tool 23 below builds a simplified version of that healing step, done by hand. Never paste a real wallet key or a production session key into any web page, including this one — practise with throwaway keys from tools 18–19.</p>
+        <p>Tool 20 names the price of one key for everything: whoever it leaks to reads everything locked with it, past and future. This tool builds the fix real messengers use — a ratchet — in its simplest symmetric form: one fresh key per message, and the key moves on the moment it has been used. A chain state is one line, <code>p4a-chain-v1:&lt;position&gt;:&lt;chain key&gt;</code>, starting from a tool-19 session key at position 0. Each step runs HKDF (tool 19's machinery) twice over the chain key with two different labels: one output is this message's own key, sealing through tool 20's exact format, and the other is the next chain key. HKDF runs one way only, so there is no way to recompute an earlier message key from a later state — overwrite an old state and its messages are gone for good, even to someone who later gets your current state. That is forward secrecy for the past. The honest limits are the other half of the lesson: this chain protects the past only — a leaked current state opens every message after it, until both sides agree fresh keys with tools 18–19 and start a new chain; messages open strictly in order, because this simple chain keeps no skipped-message keys — tool 25 below adds that store, with numbered seals; each direction needs its own chain, started from a different tool-19 purpose or salt; and a chain stops at a labelled cap of 1,000,000 messages rather than running unbounded. A failed open advances nothing, so an early message can be retried when its turn comes. Honestly labelled: this is a teaching implementation, not an audited messaging app — real messengers add a second, asymmetric ratchet on top, which is what heals a chain after a leak — tool 23 below builds a simplified version of that healing step, done by hand. Never paste a real wallet key or a production session key into any web page, including this one — practise with throwaway keys from tools 18–19.</p>
         <form id="ratchet-start">
           <label for="ratchet-start-in">Session key, as hex (exactly 32 bytes — tool 19's output; both sides start from the same one)</label>
           <textarea id="ratchet-start-in" rows="2" spellcheck="false" placeholder="Paste the derived key hex here"></textarea>
@@ -685,6 +685,48 @@
           <p id="padopen-result" role="status" aria-live="polite"></p>
         </form>
       </div>
+      <div class="tool" id="ooo-message">
+        <h3>25 · Out of order, still private — skipped message keys</h3>
+        <p>Tool 22's ratchet is honest about its limit: it opens messages strictly in order, because it keeps no store for skipped message keys. Real networks do not deliver in order — a message is delayed, retried or routed another way — and real messengers answer with a skipped-key store, the way Signal's protocol does. This tool builds it. The seal carries its position on the outside, <code>p4a-oooseal-v1:&lt;position&gt;:&lt;iv&gt;:&lt;cipher&gt;</code> — tool 20's exact AES-GCM seal under that position's ratchet key, numbered, so the receiver knows which key it needs. When the message for position 5 arrives while your chain sits at 3, the chain steps forward, the keys for 3 and 4 go into a small store (<code>p4a-skipped-v1</code>), and 5 opens now; when 3 and 4 finally arrive, their stored keys open them — and each stored key is erased the moment it is used, so a late message opens exactly once and a replay finds no key and a chain that has already passed it. The store is bounded on purpose: at most 32 keys kept, and one open will not step the chain more positions than the store could hold the skipped keys for — warehousing keys for messages that may never arrive is the denial-of-service shape real protocols cap for the same reason, and a refusal consumes nothing, so the message can be retried once the gap closes honestly. The honest limits: a stored key is a past message's whole secret kept alive past its turn — forward secrecy for those positions is paused, not held, until the late message arrives and the key is erased, and someone who copies the store reads exactly the messages it holds keys for; the position on the outside is metadata a watcher can see, like tool 24's bucket; and this is still the symmetric chain, so tool 23's heal remains the answer to a leak. Honestly labelled: this is a teaching implementation, not an audited messaging app. Never paste a real wallet key or a production session key into any web page, including this one — practise with throwaway keys from tools 18–19.</p>
+        <form id="ooo-start">
+          <label for="ooo-start-in">Session key, as hex (exactly 32 bytes — tool 19's output; the receiver starts from the same key as the sender)</label>
+          <textarea id="ooo-start-in" rows="2" spellcheck="false" placeholder="Paste the derived key hex here"></textarea>
+          <button type="submit" class="btn primary">Start a receiving side locally</button>
+          <label for="ooo-start-state-out">Your receiving chain state — position 0; keep it together with the store below, they are a pair</label>
+          <textarea id="ooo-start-state-out" rows="2" readonly spellcheck="false"></textarea>
+          <label for="ooo-start-store-out">Your skipped-key store — empty for now; the opener below fills and trims it as messages jump the queue</label>
+          <textarea id="ooo-start-store-out" rows="2" readonly spellcheck="false"></textarea>
+          <p id="ooo-start-result" role="status" aria-live="polite"></p>
+        </form>
+        <form id="ooo-seal">
+          <label for="ooo-seal-state">Your current sending chain state (the latest p4a-chain-v1 line — start it with tool 22 or the receiver start above, from the same key)</label>
+          <textarea id="ooo-seal-state" rows="2" spellcheck="false" placeholder="p4a-chain-v1:0:…"></textarea>
+          <label for="ooo-seal-message">Message to lock with this position's key</label>
+          <textarea id="ooo-seal-message" rows="3" spellcheck="false" placeholder="e.g. seal three in a row, then deliver them to the opener out of order"></textarea>
+          <button type="submit" class="btn primary">Step the chain and lock it, numbered, locally</button>
+          <label for="ooo-seal-out">Your locked message — its position is written on the outside; the key is not in it</label>
+          <textarea id="ooo-seal-out" rows="3" readonly spellcheck="false"></textarea>
+          <label for="ooo-seal-next">Your NEXT chain state — replace the one you pasted with this, and let the old one go</label>
+          <textarea id="ooo-seal-next" rows="2" readonly spellcheck="false"></textarea>
+          <p id="ooo-seal-result" role="status" aria-live="polite"></p>
+        </form>
+        <form id="ooo-open">
+          <label for="ooo-open-state">Your current receiving chain state (the latest p4a-chain-v1 line you hold for receiving)</label>
+          <textarea id="ooo-open-state" rows="2" spellcheck="false" placeholder="p4a-chain-v1:0:…"></textarea>
+          <label for="ooo-open-store">Your current skipped-key store (the latest p4a-skipped-v1 line — from the start form above, or the last open)</label>
+          <textarea id="ooo-open-store" rows="2" spellcheck="false" placeholder="p4a-skipped-v1:…"></textarea>
+          <label for="ooo-open-in">Locked message to open — any order: ahead of the chain, on time, or late with its key in the store</label>
+          <textarea id="ooo-open-in" rows="3" spellcheck="false" placeholder="p4a-oooseal-v1:0:…"></textarea>
+          <button type="submit" class="btn primary">Open it locally, out of order if it comes that way</button>
+          <label for="ooo-open-out">The opened message — exactly as it was locked, or nothing at all</label>
+          <textarea id="ooo-open-out" rows="3" readonly spellcheck="false"></textarea>
+          <label for="ooo-open-next">Your NEXT receiving chain state — replace the one you pasted with this</label>
+          <textarea id="ooo-open-next" rows="2" readonly spellcheck="false"></textarea>
+          <label for="ooo-open-store-out">Your NEXT skipped-key store — replace the one you pasted with this; used keys are gone from it</label>
+          <textarea id="ooo-open-store-out" rows="2" readonly spellcheck="false"></textarea>
+          <p id="ooo-open-result" role="status" aria-live="polite"></p>
+        </form>
+      </div>
     </div>
   </section>
 
@@ -715,6 +757,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=22"></script>
+<script src="app.js?v=23"></script>
 </body>
 </html>
