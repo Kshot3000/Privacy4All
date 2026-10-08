@@ -7,7 +7,7 @@ and guides, built and maintained by Kyle Cox (@kshot9000).
 
 > Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) —
 > this is an independent community builder hub for the Midnight ecosystem
-> (14 catalogued projects, 4 live sites at launch). Team feedback and
+> (16 catalogued projects, 4 live flagship sites). Team feedback and
 > corrections welcome.
 
 ## What is Midnight?
@@ -47,6 +47,8 @@ renewable resource that pays for shielded transactions.
 | [midnight-awesome-dapps](https://github.com/Kshot3000/midnight-awesome-dapps) | Awesome list of Midnight Network dApps (fork) |
 | [midnight-rwa](https://github.com/Kshot3000/midnight-rwa) | Real-world assets on Midnight, Brick Towers example (fork) |
 | [midnight-seabattle](https://github.com/Kshot3000/midnight-seabattle) | ZK Sea Battle game on Midnight, Brick Towers example (fork) |
+| [midnight-faucet-api](https://github.com/Kshot3000/midnight-faucet-api) | API behind the Midnight testnet faucet, open-sourced from midnight-faucet (fork) |
+| [midnight-docs](https://github.com/Kshot3000/midnight-docs) | Source for the official Midnight developer docs site, Docusaurus (fork) |
 | [Cardano4all](https://github.com/Kshot3000/Cardano4all) | Sister hub: building for the Cardano blockchain ([live](https://kshot3000.github.io/Cardano4all/)) |
 
 ## Tools on the hub (local only, no wallet needed)

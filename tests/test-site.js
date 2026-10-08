@@ -51,6 +51,11 @@ for (const url of ["https://kshot3000.github.io/Night-Messenger-/", "https://ksh
   check("flagship linked: " + url, html.includes(url) && readme.includes(url));
 }
 
+/* catalogue forks added 2026-10-08 */
+for (const url of ["https://github.com/Kshot3000/midnight-faucet-api", "https://github.com/Kshot3000/midnight-docs"]) {
+  check("catalogue fork linked: " + url, html.includes(url) && readme.includes(url));
+}
+
 /* redactor */
 const sample = "Mail me at kyle@example.com, call (262) 555-0148, or send to " + ADA + " — thanks";
 const red = app.redactText(sample);
