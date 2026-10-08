@@ -2808,6 +2808,355 @@ function checkOneTimeDestination(privateKeyHex, ephemeralPublicKeyHex, destinati
     });
 }
 
+/* ---------- 30. The key that can spend it — one-time spend keys ---------- */
+/* Tool 29 ends on an honest gap: it models the RECOGNITION
+   half of stealth addressing — the recipient can spot a
+   payment as theirs — but real schemes (Monero-style,
+   EIP-5564-style) also derive a one-time public KEY on the
+   curve, so the recipient derives the matching one-time
+   PRIVATE key that spends. This tool builds that spend
+   half, with real P-256 curve arithmetic done locally in
+   plain BigInt code — no library, nothing sent anywhere.
+   The shared secret (tool 18) is hashed once under this
+   tool's own label; that digest, read as a number below
+   the curve order, is the TWEAK. The sender adds tweak×G
+   to the recipient's published point: that sum is the
+   one-time public key. The recipient adds the same tweak
+   to their private scalar: (r + t)×G = r×G + t×G is the
+   same point, so the tweaked private key matches the
+   one-time public key exactly, and nobody else can derive
+   either side — the tweak needs the secret, and the
+   secret needs a private key. Keys stay in this hub's
+   formats throughout: the one-time public key is a
+   91-byte SPKI key exactly like tool 18's, and the
+   one-time private key is a 138-byte PKCS#8 key rebuilt
+   around the tweaked scalar, so the tools here can import
+   it like any other practise key. Honest limits, stated
+   plainly: the key is still not an address on any chain
+   and nothing here moves or holds funds — it is the
+   derivation half of the pattern, shown on the curve
+   Midnight's own practise keys use here (P-256; real
+   stealth schemes run on their own curves and encodings,
+   and their exact tweak hashes differ). Whoever holds
+   the recipient's ordinary private key plus the
+   one-payment public key can derive the spend key — that
+   IS the design — so a copied private key endangers every
+   payment ever sent to it, exactly as tool 29 warned for
+   recognition. And the curve code is a teaching
+   implementation: affine arithmetic with a modular
+   inverse per step, chosen because it can be read and
+   checked line by line, not for speed or side-channel
+   resistance — production wallets use audited,
+   constant-time libraries. Never paste a real wallet key
+   or a production private key into any web page,
+   including this one — practise with throwaway keys from
+   tool 18. */
+var SPENDKEY_PREFIX = "privacy4all-spendkey-v1";
+var SPENDKEY_SPKI_PREFIX_HEX = "3059301306072a8648ce3d020106082a8648ce3d030107034200";
+var P256_P = BigInt("0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff");
+var P256_B = BigInt("0x5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b");
+var P256_GX = BigInt("0x6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296");
+var P256_GY = BigInt("0x4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5");
+var P256_N = BigInt("0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551");
+var P256_ZERO = BigInt(0);
+var P256_ONE = BigInt(1);
+var P256_TWO = BigInt(2);
+var P256_THREE = BigInt(3);
+
+function p256Mod(x) {
+  var r = x % P256_P;
+  return r < P256_ZERO ? r + P256_P : r;
+}
+
+/* Modular inverse by Fermat's little theorem — the field
+   prime is public, so x^(p-2) mod p is x's inverse. Slow
+   next to an audited library, and chosen anyway: it is
+   five lines anyone can verify. Zero has no inverse and
+   returns null, never a plausible number. */
+function p256Invert(x) {
+  var base = p256Mod(x);
+  if (base === P256_ZERO) return null;
+  var exp = P256_P - P256_TWO;
+  var result = P256_ONE;
+  while (exp > P256_ZERO) {
+    if ((exp & P256_ONE) === P256_ONE) result = p256Mod(result * base);
+    base = p256Mod(base * base);
+    exp = exp >> P256_ONE;
+  }
+  return result;
+}
+
+/* Points are {x, y} BigInt pairs; null is the point at
+   infinity, the group's identity. Addition handles the
+   three shapes honestly: identity on either side, a point
+   plus its own reflection (infinity), doubling, and the
+   general chord. Inputs are assumed on the curve —
+   parseP256Point is the gatekeeper that checks. */
+function p256PointAdd(p1, p2) {
+  if (p1 === null) return p2;
+  if (p2 === null) return p1;
+  if (p1.x === p2.x && p256Mod(p1.y + p2.y) === P256_ZERO) return null;
+  var lambda;
+  if (p1.x === p2.x && p1.y === p2.y) {
+    var invDy = p256Invert(P256_TWO * p1.y);
+    if (invDy === null) return null;
+    lambda = p256Mod((P256_THREE * p1.x * p1.x - P256_THREE) * invDy);
+  } else {
+    var invDx = p256Invert(p2.x - p1.x);
+    if (invDx === null) return null;
+    lambda = p256Mod((p2.y - p1.y) * invDx);
+  }
+  var x = p256Mod(lambda * lambda - p1.x - p2.x);
+  var y = p256Mod(lambda * (p1.x - x) - p1.y);
+  return { x: x, y: y };
+}
+
+/* Double-and-add over the scalar's bits. A scalar of zero
+   (or reduced to it) is the identity, null. */
+function p256PointMultiply(scalar, point) {
+  var k = scalar % P256_N;
+  if (k < P256_ZERO) k += P256_N;
+  var result = null;
+  var addend = point;
+  while (k > P256_ZERO) {
+    if ((k & P256_ONE) === P256_ONE) result = p256PointAdd(result, addend);
+    addend = p256PointAdd(addend, addend);
+    k = k >> P256_ONE;
+  }
+  return result;
+}
+
+function p256IntToHex(value) {
+  var hex = value.toString(16);
+  while (hex.length < 64) hex = "0" + hex;
+  return hex;
+}
+
+/* A public key is a point only if it is exactly tool 18's
+   91-byte SPKI shape, carries the fixed P-256 SPKI prefix
+   and the uncompressed-point marker, both coordinates are
+   under the field prime, and the point satisfies the
+   curve equation y² = x³ − 3x + b. Anything else — a
+   private key (138 bytes), a truncated key, a point from
+   another curve — is null, never a point for the wrong
+   thing. */
+function parseP256Point(publicKeyHex) {
+  var bytes = parseKeyHex(publicKeyHex, AGREE_PUBLIC_KEY_BYTES);
+  if (!bytes) return null;
+  var hex = shareBytesToHex(bytes);
+  if (hex.slice(0, SPENDKEY_SPKI_PREFIX_HEX.length) !== SPENDKEY_SPKI_PREFIX_HEX) return null;
+  var pointHex = hex.slice(SPENDKEY_SPKI_PREFIX_HEX.length);
+  if (pointHex.slice(0, 2) !== "04") return null;
+  var x = BigInt("0x" + pointHex.slice(2, 66));
+  var y = BigInt("0x" + pointHex.slice(66, 130));
+  if (x >= P256_P || y >= P256_P) return null;
+  if (p256Mod(y * y) !== p256Mod(x * x * x - P256_THREE * x + P256_B)) return null;
+  return { x: x, y: y };
+}
+
+function formatP256PublicKey(point) {
+  if (point === null) return null;
+  return SPENDKEY_SPKI_PREFIX_HEX + "04" + p256IntToHex(point.x) + p256IntToHex(point.y);
+}
+
+/* The tweak as a scalar: a full 64-hex digest read as a
+   number and reduced under the curve order. A digest that
+   reduces to zero would tweak nothing, so it is null,
+   never a key that quietly equals the untweaked one —
+   and anything that is not a whole digest is null too. */
+function spendTweakFromHash(hashHex) {
+  if (typeof hashHex !== "string") return null;
+  var hex = hashHex.trim().toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(hex)) return null;
+  var tweak = BigInt("0x" + hex) % P256_N;
+  if (tweak === P256_ZERO) return null;
+  return p256IntToHex(tweak);
+}
+
+/* A tweak offered directly (by the two functions below,
+   or by a caller) must be a whole 64-hex scalar in
+   [1, n−1] — zero and the order itself are null. */
+function parseSpendTweak(text) {
+  if (typeof text !== "string") return null;
+  var hex = text.trim().toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(hex)) return null;
+  var tweak = BigInt("0x" + hex);
+  if (tweak === P256_ZERO || tweak >= P256_N) return null;
+  return hex;
+}
+
+/* The tweak for one payment: a labelled hash of the
+   shared secret alone, so it is domain-separated from
+   tool 29's destination and tool 18's fingerprint of the
+   same secret — same input, different question, unrelated
+   output. A secret that is not exactly 32 bytes is null. */
+function oneTimeSpendTweak(secretHex) {
+  var hex = parseSharedSecret(secretHex);
+  if (hex === null) return Promise.resolve(null);
+  return sha256Hex(SPENDKEY_PREFIX + "\n" + hex)
+    .then(function (hash) {
+      if (hash === null) return null;
+      return spendTweakFromHash(hash);
+    });
+}
+
+/* The sender's half of the spend pattern, synchronous
+   once the tweak exists: one-time point = recipient point
+   + tweak×G, returned as a 91-byte SPKI key in exactly
+   tool 18's format. Malformed keys or tweaks are null. */
+function oneTimePublicKeyForTweak(recipientPublicKeyHex, tweakHex) {
+  var point = parseP256Point(recipientPublicKeyHex);
+  var tweak = parseSpendTweak(tweakHex);
+  if (point === null || tweak === null) return null;
+  var tweaked = p256PointAdd(point, p256PointMultiply(BigInt("0x" + tweak), { x: P256_GX, y: P256_GY }));
+  return formatP256PublicKey(tweaked);
+}
+
+function base64UrlToHex(text) {
+  if (typeof text !== "string" || !text) return null;
+  try {
+    var b64 = text.replace(/-/g, "+").replace(/_/g, "/");
+    while (b64.length % 4 !== 0) b64 += "=";
+    var binary = atob(b64);
+    var out = "";
+    for (var i = 0; i < binary.length; i++) {
+      var h = binary.charCodeAt(i).toString(16);
+      out += h.length === 1 ? "0" + h : h;
+    }
+    return out;
+  } catch (e) {
+    return null;
+  }
+}
+
+/* The two facts inside a tool-18 private key that the
+   recipient's half needs — its scalar and its point —
+   read back out through the platform's own JWK export
+   rather than by guessing at DER offsets: the scalar is
+   the secret d, the point is x‖y. A public key offered as
+   a private key, a short key or junk never imports, so
+   it is null. */
+function agreementPrivateParts(privateKeyHex) {
+  return importAgreementKey(privateKeyHex, AGREE_PRIVATE_KEY_BYTES, "pkcs8", ["deriveBits"])
+    .then(function (key) {
+      if (!key) return null;
+      var cryptoObj = agreeCrypto();
+      if (!cryptoObj) return null;
+      return cryptoObj.subtle.exportKey("jwk", key)
+        .then(function (jwk) {
+          var scalar = base64UrlToHex(jwk.d);
+          var x = base64UrlToHex(jwk.x);
+          var y = base64UrlToHex(jwk.y);
+          if (!scalar || !x || !y) return null;
+          if (!/^[0-9a-f]{64}$/.test(scalar) || !/^[0-9a-f]{64}$/.test(x) || !/^[0-9a-f]{64}$/.test(y)) return null;
+          return { scalarHex: scalar, pointHex: "04" + x + y };
+        }, function () { return null; });
+    });
+}
+
+/* Replace the run of hex at a found position, by position
+   — never a pattern replace, so a value that happens to
+   appear twice is spliced where it was actually found. */
+function spliceHex(hex, index, length, replacement) {
+  return hex.slice(0, index) + replacement + hex.slice(index + length);
+}
+
+/* The recipient's half, once the tweak exists: the
+   one-time scalar is (their scalar + tweak) mod n, and
+   the one-time private key is their own PKCS#8 line with
+   exactly two runs spliced — the scalar, and the public
+   point embedded beside it — each found by searching for
+   the values the platform itself exported, so no DER
+   offset is ever assumed. The rebuilt line is then
+   re-imported and its exported scalar and point compared
+   against what was intended; a line that does not check
+   out is null, never a plausible wrong key. A sum that
+   lands on zero is null (it would spend nothing). */
+function oneTimePrivateKeyForTweak(privateKeyHex, tweakHex) {
+  var tweak = parseSpendTweak(tweakHex);
+  if (tweak === null) return Promise.resolve(null);
+  var canonical = parseKeyHex(privateKeyHex, AGREE_PRIVATE_KEY_BYTES);
+  if (!canonical) return Promise.resolve(null);
+  var pkcs8Hex = shareBytesToHex(canonical);
+  return agreementPrivateParts(privateKeyHex).then(function (parts) {
+    if (!parts) return null;
+    var recipientPoint = parseP256Point(SPENDKEY_SPKI_PREFIX_HEX + parts.pointHex);
+    if (recipientPoint === null) return null;
+    var oneScalar = (BigInt("0x" + parts.scalarHex) + BigInt("0x" + tweak)) % P256_N;
+    if (oneScalar === P256_ZERO) return null;
+    var onePoint = p256PointAdd(recipientPoint, p256PointMultiply(BigInt("0x" + tweak), { x: P256_GX, y: P256_GY }));
+    if (onePoint === null) return null;
+    var onePointHex = "04" + p256IntToHex(onePoint.x) + p256IntToHex(onePoint.y);
+    var scalarIndex = pkcs8Hex.indexOf(parts.scalarHex);
+    var pointIndex = pkcs8Hex.indexOf(parts.pointHex);
+    if (scalarIndex < 0 || pointIndex < 0) return null;
+    var rebuilt = spliceHex(pkcs8Hex, pointIndex, parts.pointHex.length, onePointHex);
+    rebuilt = spliceHex(rebuilt, scalarIndex, parts.scalarHex.length, p256IntToHex(oneScalar));
+    if (parseKeyHex(rebuilt, AGREE_PRIVATE_KEY_BYTES) === null) return null;
+    return agreementPrivateParts(rebuilt).then(function (check) {
+      if (!check) return null;
+      if (check.scalarHex !== p256IntToHex(oneScalar) || check.pointHex !== onePointHex) return null;
+      return rebuilt;
+    });
+  });
+}
+
+/* The sender's whole job: validate the published key,
+   make a fresh one-payment pair (tool 18), derive the
+   secret, and publish the one-time public key the payment
+   goes to. The ephemeral private key is never stored,
+   shown or sent — like tool 29's, it has exactly one job.
+   A private key offered as the recipient key, a short key
+   or junk is null before any pair is made. */
+function makeOneTimeSpendKey(recipientPublicKeyHex) {
+  if (parseP256Point(recipientPublicKeyHex) === null) return Promise.resolve(null);
+  return generateAgreementKeyPair().then(function (eph) {
+    if (!eph) return null;
+    return deriveSharedSecret(eph.privateKey, recipientPublicKeyHex)
+      .then(function (secret) {
+        if (secret === null) return null;
+        return oneTimeSpendTweak(secret).then(function (tweak) {
+          if (tweak === null) return null;
+          var pub = oneTimePublicKeyForTweak(recipientPublicKeyHex, tweak);
+          if (pub === null) return null;
+          return { ephemeralPublicKey: eph.publicKey, oneTimePublicKey: pub };
+        });
+      });
+  });
+}
+
+/* The recipient's whole job: the same secret from the
+   other side — their private key, the one-payment public
+   key that travelled with the payment — then the tweak,
+   then the matching private key. Malformed keys are null
+   (deriveSharedSecret validates both lengths). */
+function claimOneTimeSpendKey(privateKeyHex, ephemeralPublicKeyHex) {
+  return deriveSharedSecret(privateKeyHex, ephemeralPublicKeyHex)
+    .then(function (secret) {
+      if (secret === null) return null;
+      return oneTimeSpendTweak(secret).then(function (tweak) {
+        if (tweak === null) return null;
+        return oneTimePrivateKeyForTweak(privateKeyHex, tweak);
+      });
+    });
+}
+
+/* The verdict: true only when this private key's own
+   point is exactly the claimed one-time public key — the
+   pair really is a pair. Well-formed keys that do not
+   match are false, never null; a malformed key on either
+   side is null, never false: "not a pair" and "cannot be
+   checked" must never blur, the same rule as tools 28
+   and 29. */
+function matchOneTimeSpendKey(oneTimePrivateKeyHex, oneTimePublicKeyHex) {
+  var claimed = parseP256Point(oneTimePublicKeyHex);
+  if (claimed === null) return Promise.resolve(null);
+  return agreementPrivateParts(oneTimePrivateKeyHex).then(function (parts) {
+    if (!parts) return null;
+    return parts.pointHex === "04" + p256IntToHex(claimed.x) + p256IntToHex(claimed.y);
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -2876,7 +3225,13 @@ if (typeof module !== "undefined" && module.exports) {
                      ONETIME_PREFIX, ONETIME_DESTINATION_BYTES,
                      parseOneTimeDestination, oneTimeDestinationForSecret,
                      makeOneTimeDestination, scanOneTimeDestination,
-                     checkOneTimeDestination };
+                     checkOneTimeDestination,
+                     SPENDKEY_PREFIX, SPENDKEY_SPKI_PREFIX_HEX,
+                     parseP256Point, formatP256PublicKey,
+                     spendTweakFromHash, parseSpendTweak, oneTimeSpendTweak,
+                     oneTimePublicKeyForTweak, oneTimePrivateKeyForTweak,
+                     makeOneTimeSpendKey, claimOneTimeSpendKey,
+                     matchOneTimeSpendKey };
 }
 
 if (typeof document !== "undefined") {
@@ -4297,6 +4652,81 @@ if (typeof document !== "undefined") {
             "a different destination. This payment was made to a different recipient " +
             "key, or paired with a different one-payment key — it is not a payment " +
             "this key can claim.";
+        }
+      });
+    });
+
+    /* --- the key that can spend it — one-time spend keys --- */
+    document.getElementById("spendkey-make").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var ephOut = document.getElementById("spendkey-eph-out");
+      var pubOut = document.getElementById("spendkey-onetime-out");
+      var status = document.getElementById("spendkey-result");
+      status.textContent = "Deriving a one-time public key on the curve locally…";
+      makeOneTimeSpendKey(document.getElementById("spendkey-pub").value).then(function (made) {
+        if (made === null) {
+          ephOut.value = "";
+          pubOut.value = "";
+          status.textContent = "That derives no key: paste the recipient's public " +
+            "key exactly as tool 18 made it (182 hex characters, 91 bytes), and a " +
+            "real point on the curve. A private key (276 hex characters) is never " +
+            "the recipient input here — one-time keys are made TO a public key. " +
+            "Nothing was computed from the wrong thing.";
+          return;
+        }
+        ephOut.value = made.ephemeralPublicKey;
+        pubOut.value = made.oneTimePublicKey;
+        status.textContent = "✓ Derived locally, on the curve. The payment goes to " +
+          "the one-time public key; send the one-payment public key alongside it — " +
+          "it is not a secret, it is how the recipient derives the matching private " +
+          "key. A fresh pair for every payment: reuse is what this tool exists to avoid.";
+      });
+    });
+    document.getElementById("spendkey-claim").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("spendkey-claim-out");
+      var status = document.getElementById("spendkey-claim-result");
+      status.textContent = "Deriving your one-time private key locally…";
+      claimOneTimeSpendKey(document.getElementById("spendkey-claim-priv").value,
+        document.getElementById("spendkey-claim-eph").value).then(function (priv) {
+        if (priv === null) {
+          out.value = "";
+          status.textContent = "That derives no key: paste your private key exactly " +
+            "as tool 18 made it (276 hex characters, 138 bytes) and the one-payment " +
+            "public key that travelled with the payment (182 hex characters, " +
+            "91 bytes). Nothing was computed from the wrong thing.";
+          return;
+        }
+        out.value = priv;
+        status.textContent = "✓ Derived locally. This is the private half of the " +
+          "one-time public key the payment used — the key that can spend it. It is " +
+          "a secret in exactly the way your ordinary private key is: never share " +
+          "it, never paste it anywhere else, and treat this practise key as the " +
+          "lesson, not as a wallet.";
+      });
+    });
+    document.getElementById("spendkey-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("spendkey-check-result");
+      status.textContent = "Checking the pair locally…";
+      matchOneTimeSpendKey(document.getElementById("spendkey-check-priv").value,
+        document.getElementById("spendkey-check-pub").value).then(function (ok) {
+        if (ok === null) {
+          status.textContent = "That cannot be checked: paste a whole one-time " +
+            "private key exactly as the claim form made it (276 hex characters, " +
+            "138 bytes) and a whole one-time public key (182 hex characters, " +
+            "91 bytes, a real point on the curve). A half-typed key gets no " +
+            "verdict at all, rather than a wrong one.";
+          return;
+        }
+        if (ok) {
+          status.textContent = "✓ A matching pair: this private key's own point is " +
+            "exactly that public key. Whoever holds it holds the spend key for " +
+            "that one payment — and no other.";
+        } else {
+          status.textContent = "⚠ Not a pair: this private key belongs to a " +
+            "different public key. It spends a different payment — or none — and " +
+            "no amount of re-checking makes it fit this one.";
         }
       });
     });

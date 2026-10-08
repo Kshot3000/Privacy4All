@@ -477,6 +477,34 @@ renewable resource that pays for shielded transactions.
   still leak. Never paste a real wallet key or a
   production private key into any web page,
   including this one.
+- **The key that can spend it — one-time spend keys** —
+  the spend half of stealth addressing that tool 29
+  names as its gap, built with real P-256 curve
+  arithmetic computed locally in plain BigInt code:
+  the tool-18 shared secret is hashed once under the
+  `privacy4all-spendkey-v1` label and read as a tweak
+  under the curve order; the sender adds tweak×G to
+  the recipient's published point to make the
+  one-time public key, and the recipient adds the
+  same tweak to their private scalar — (r + t)×G is
+  the same point, so the derived one-time private
+  key (a 138-byte PKCS#8 key in tool 18's format)
+  matches it exactly, and a checker returns `true`,
+  `false`, or `null` for malformed keys, so "not a
+  pair" and "cannot be checked" never blur. Honestly
+  labelled a teaching implementation, not an audited
+  wallet: the key is not an address on any chain and
+  nothing moves funds — real stealth schemes run on
+  their own curves and encodings with different
+  tweak hashes; whoever holds the recipient's
+  ordinary private key plus the one-payment public
+  key can derive the spend key, by design; and the
+  affine curve code is written to be read and
+  checked line by line, not for speed or
+  side-channel resistance — production wallets use
+  audited, constant-time libraries. Never paste a
+  real wallet key or a production private key into
+  any web page, including this one.
 
 ## Guides
 
