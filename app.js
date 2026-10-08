@@ -3328,6 +3328,231 @@ function claimWatchedSpendKey(viewPrivateKeyHex, spendPrivateKeyHex, ephemeralPu
     });
 }
 
+/* ---------- 32. Prove you know the key — Schnorr proof of knowledge ----------
+
+   Tool 5 simulates the zero-knowledge pattern and says
+   so, in so many words: "a teaching simulation, not a
+   cryptographic proof". This tool runs a real one — the
+   Schnorr identification protocol, the classic proof of
+   knowledge that modern zero-knowledge systems grow
+   from, computed locally on the same P-256 curve and
+   with the same plain BigInt arithmetic as tool 30.
+   The prover holds a private key (a tool 17 signing key
+   or a tool 18 agreement key — both are the same
+   138-byte P-256 shape) and wants to convince a verifier
+   they hold it, revealing nothing about the key itself.
+   Three moves, and the ORDER is the security:
+
+   1. Commit. The prover picks a fresh secret nonce k,
+      publishes the commitment R = k×G, and keeps k in a
+      prover-only state line (p4a-zkproof-v1). Nothing
+      about the private key is in R — it is one more
+      public key, for a key nobody will ever use again.
+   2. Challenge. Only AFTER the commitment is fixed does
+      the verifier pick a fresh, unpredictable challenge
+      number c. A challenge of zero is refused: with
+      c = 0 the answer is the nonce itself and proves
+      nothing about the key.
+   3. Respond. The prover answers s = k + c·x (mod n),
+      where x is the private scalar. The verifier checks
+      s×G = R + c×Y against the public key Y. The
+      equation balances only if the answer was built
+      from the private number behind Y and the nonce
+      behind R — and s itself is safe to show, because
+      one equation in the two unknowns k and x gives
+      neither away.
+
+   The two ways this breaks are stated as plainly in the
+   page text, and both are pinned by tests. If the
+   prover sees the challenge BEFORE fixing the
+   commitment, they can work backwards (pick s, set
+   R = s×G − c×Y) and "prove" knowledge of a key they
+   do not hold — the commitment coming first is not
+   ceremony, it is the proof. And a nonce must answer
+   exactly one challenge: two answers from one
+   commitment, s1 − s2 = (c1 − c2)·x, hand anyone the
+   private scalar itself — so one state line, one
+   challenge, then it is thrown away.
+
+   A finished proof is not a signature: it signs no
+   message, authorises nothing, and proves knowledge of
+   a private key, not a legal name — and an old answer
+   replayed against a verifier's NEW challenge fails,
+   which is the freshness a signature does not give.
+   The verifier's verdict keeps the house split: true
+   for a balancing proof, false (never null) for
+   well-formed pieces that do not balance, null for
+   malformed pieces — "it failed" and "that cannot even
+   be checked" never blur. Honestly labelled: this is a
+   teaching implementation, not an audited wallet, not
+   one of Midnight's Compact circuit proofs, and this
+   one page plays both sides, so it demonstrates the
+   maths, not a live exchange. Never paste a real wallet
+   key or a production private key into any web page,
+   including this one — practise with throwaway keys
+   from tools 17 and 18. */
+var ZKPROOF_STATE_FORMAT = "p4a-zkproof-v1";
+
+/* A proof scalar — a nonce, a challenge, a private
+   number — is a whole 64-hex value in [1, n−1]. Zero is
+   refused for all three: a zero nonce commits to
+   nothing, a zero challenge proves nothing, and zero
+   is not a private key. The order itself is refused:
+   it is the identity in disguise. */
+function parseProofScalar(text) {
+  if (typeof text !== "string") return null;
+  var hex = text.trim().toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(hex)) return null;
+  var value = BigInt("0x" + hex);
+  if (value === P256_ZERO || value >= P256_N) return null;
+  return hex;
+}
+
+/* A response may honestly be zero (with probability
+   about 2^-256), so its gate is [0, n−1]: a whole
+   64-hex value under the order, zero allowed. */
+function parseProofResponse(text) {
+  if (typeof text !== "string") return null;
+  var hex = text.trim().toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(hex)) return null;
+  if (BigInt("0x" + hex) >= P256_N) return null;
+  return hex;
+}
+
+/* A fresh scalar from the platform's own randomness,
+   reduced under the order and never zero — the same
+   source tools 11 and 16 draw from. No randomness, no
+   scalar: null, never a predictable number. */
+function randomProofScalar() {
+  var cryptoObj = (typeof globalThis !== "undefined" && globalThis.crypto) || null;
+  if (!cryptoObj || typeof cryptoObj.getRandomValues !== "function") return null;
+  for (var attempt = 0; attempt < 8; attempt++) {
+    var bytes = new Uint8Array(32);
+    cryptoObj.getRandomValues(bytes);
+    var value = BigInt("0x" + shareBytesToHex(bytes)) % P256_N;
+    if (value !== P256_ZERO) return p256IntToHex(value);
+  }
+  return null;
+}
+
+/* The commitment for one nonce: R = k×G, as a 91-byte
+   SPKI public key in exactly the hub's usual format.
+   Synchronous and deterministic, so tests can pin it
+   against Node's own curve arithmetic. */
+function proofCommitmentForNonce(nonceHex) {
+  var nonce = parseProofScalar(nonceHex);
+  if (nonce === null) return null;
+  var point = p256PointMultiply(BigInt("0x" + nonce), { x: P256_GX, y: P256_GY });
+  return formatP256PublicKey(point);
+}
+
+/* The prover-only state line: the format tag, the
+   nonce, and the commitment it belongs to, so a state
+   can never be quietly paired with a different
+   commitment at answer time. Malformed pieces are
+   null — a state that does not check out carries
+   nothing. */
+function formatProofState(nonceHex, commitmentHex) {
+  var nonce = parseProofScalar(nonceHex);
+  var point = parseP256Point(commitmentHex);
+  if (nonce === null || point === null) return null;
+  return ZKPROOF_STATE_FORMAT + ":" + nonce + ":" + formatP256PublicKey(point);
+}
+
+function parseProofState(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 3 || parts[0] !== ZKPROOF_STATE_FORMAT) return null;
+  var nonce = parseProofScalar(parts[1]);
+  var point = parseP256Point(parts[2]);
+  if (nonce === null || point === null) return null;
+  return { nonce: nonce, commitment: formatP256PublicKey(point) };
+}
+
+/* Move 1, the prover's start: validate the private key
+   by reading its own parts back through the platform
+   (a public key offered as a private key, a short key
+   or junk never imports, so it is null before any nonce
+   exists), then draw a fresh nonce, commit to it, and
+   hand back the public commitment and the secret state
+   line. The state holds the nonce — never the private
+   key, which is asked again at answer time and never
+   stored anywhere. */
+function makeProofCommitment(privateKeyHex) {
+  return agreementPrivateParts(privateKeyHex).then(function (parts) {
+    if (!parts) return null;
+    var nonce = randomProofScalar();
+    if (nonce === null) return null;
+    var commitment = proofCommitmentForNonce(nonce);
+    var state = formatProofState(nonce, commitment);
+    if (commitment === null || state === null) return null;
+    return { commitment: commitment, state: state };
+  });
+}
+
+/* Move 2, the verifier's whole job: a fresh challenge,
+   drawn only once a commitment is fixed in front of
+   them. Unpredictability is the entire contribution —
+   a challenge the prover could have guessed is a
+   challenge they could have worked backwards from. */
+function generateProofChallenge() {
+  return randomProofScalar();
+}
+
+/* Move 3's arithmetic, synchronous once the three
+   numbers exist: s = (k + c·x) mod n. A response of
+   exactly zero is refused as null rather than handed
+   over — it would mean the answer carries no trace of
+   either secret, and it arises with probability about
+   2^-256, so refusing costs nothing real. */
+function proofResponseForScalar(scalarHex, nonceHex, challengeHex) {
+  var scalar = parseProofScalar(scalarHex);
+  var nonce = parseProofScalar(nonceHex);
+  var challenge = parseProofScalar(challengeHex);
+  if (scalar === null || nonce === null || challenge === null) return null;
+  var s = (BigInt("0x" + nonce) + BigInt("0x" + challenge) * BigInt("0x" + scalar)) % P256_N;
+  if (s === P256_ZERO) return null;
+  return p256IntToHex(s);
+}
+
+/* Move 3, the prover's answer: the state supplies the
+   nonce, the private key supplies the scalar, the
+   verifier's challenge binds them. A state or
+   challenge that does not parse is null before the key
+   is even read. */
+function respondToProofChallenge(privateKeyHex, stateText, challengeHex) {
+  var state = parseProofState(stateText);
+  var challenge = parseProofScalar(challengeHex);
+  if (state === null || challenge === null) return Promise.resolve(null);
+  return agreementPrivateParts(privateKeyHex).then(function (parts) {
+    if (!parts) return null;
+    return proofResponseForScalar(parts.scalarHex, state.nonce, challenge);
+  });
+}
+
+/* The verifier's verdict: s×G against R + c×Y, point
+   for point. True only when the equation balances;
+   false — never null — for well-formed pieces that do
+   not balance (the wrong key, the wrong challenge, a
+   replayed answer, a stranger's response); null for
+   any malformed piece, so "not proved" and "cannot be
+   checked" never blur. A zero response can balance
+   only against the point at infinity, which no
+   well-formed right-hand side here can be, so it is
+   simply false. */
+function verifyProof(publicKeyHex, commitmentHex, challengeHex, responseHex) {
+  var pubPoint = parseP256Point(publicKeyHex);
+  var commitPoint = parseP256Point(commitmentHex);
+  var challenge = parseProofScalar(challengeHex);
+  var response = parseProofResponse(responseHex);
+  if (pubPoint === null || commitPoint === null || challenge === null || response === null) return null;
+  var lhs = p256PointMultiply(BigInt("0x" + response), { x: P256_GX, y: P256_GY });
+  if (lhs === null) return false;
+  var rhs = p256PointAdd(commitPoint, p256PointMultiply(BigInt("0x" + challenge), pubPoint));
+  if (rhs === null) return false;
+  return lhs.x === rhs.x && lhs.y === rhs.y;
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -3406,7 +3631,13 @@ if (typeof module !== "undefined" && module.exports) {
                      VIEWKEY_SCAN_PREFIX, VIEWKEY_SPEND_PREFIX,
                      watchedDestinationForSecret, watchedSpendTweak,
                      makeWatchedPayment, scanWatchedPayment,
-                     checkWatchedPayment, claimWatchedSpendKey };
+                     checkWatchedPayment, claimWatchedSpendKey,
+                     ZKPROOF_STATE_FORMAT,
+                     parseProofScalar, parseProofResponse,
+                     proofCommitmentForNonce, formatProofState,
+                     parseProofState, makeProofCommitment,
+                     generateProofChallenge, proofResponseForScalar,
+                     respondToProofChallenge, verifyProof };
 }
 
 if (typeof document !== "undefined") {
@@ -5012,6 +5243,105 @@ if (typeof document !== "undefined") {
           "pair checker, against the one-time public key from the forms " +
           "above, and watch it match.";
       });
+    });
+
+    /* --- prove you know the key (Schnorr proof of knowledge) --- */
+    document.getElementById("zkproof-commit").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var commitOut = document.getElementById("zkproof-commitment-out");
+      var stateOut = document.getElementById("zkproof-state-out");
+      var status = document.getElementById("zkproof-commit-result");
+      commitOut.value = "";
+      stateOut.value = "";
+      status.textContent = "Making the commitment locally…";
+      makeProofCommitment(document.getElementById("zkproof-priv").value).then(function (made) {
+        if (!made) {
+          status.textContent = "That cannot start a proof: paste a whole " +
+            "private key — exactly 276 hex characters, 138 bytes, from tool " +
+            "17 or tool 18. A public key proves nothing here; the whole " +
+            "point is holding the private half.";
+          return;
+        }
+        commitOut.value = made.commitment;
+        stateOut.value = made.state;
+        status.textContent = "Committed. Send the commitment — and only " +
+          "the commitment — to whoever is checking you, and keep the " +
+          "prover state secret: it holds the one-time nonce. The state " +
+          "answers exactly one challenge; after answering, throw it away " +
+          "and start again for the next proof.";
+      });
+    });
+
+    document.getElementById("zkproof-challenge").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("zkproof-challenge-out");
+      var status = document.getElementById("zkproof-challenge-result");
+      var challenge = generateProofChallenge();
+      if (challenge === null) {
+        out.value = "";
+        status.textContent = "No challenge could be drawn — this browser " +
+          "offered no randomness, and a predictable challenge would prove " +
+          "nothing.";
+        return;
+      }
+      out.value = challenge;
+      status.textContent = "Drawn fresh, after the commitment was fixed — " +
+        "that order is what makes the answer a proof. Send this challenge " +
+        "to the prover exactly as drawn; never reuse one, and never draw " +
+        "it before the commitment exists.";
+    });
+
+    document.getElementById("zkproof-respond").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("zkproof-response-out");
+      var status = document.getElementById("zkproof-respond-result");
+      out.value = "";
+      status.textContent = "Answering the challenge locally…";
+      respondToProofChallenge(document.getElementById("zkproof-respond-priv").value,
+        document.getElementById("zkproof-respond-state").value,
+        document.getElementById("zkproof-respond-challenge").value).then(function (response) {
+        if (!response) {
+          status.textContent = "That cannot be answered: paste the whole " +
+            "private key, the whole prover state from step 1, and the " +
+            "verifier's challenge exactly as drawn (64 hex characters, " +
+            "never zero). A mistyped piece gets no answer at all, rather " +
+            "than a wrong one.";
+          return;
+        }
+        out.value = response;
+        status.textContent = "Answered. The response is safe to send — " +
+          "one answer reveals neither the nonce nor the key. But this " +
+          "state has now answered its one challenge: never answer a " +
+          "second challenge with it. Two answers from one commitment " +
+          "would let anyone work out the private key itself.";
+      });
+    });
+
+    document.getElementById("zkproof-verify").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("zkproof-verify-result");
+      var ok = verifyProof(document.getElementById("zkproof-verify-pub").value,
+        document.getElementById("zkproof-verify-commitment").value,
+        document.getElementById("zkproof-verify-challenge").value,
+        document.getElementById("zkproof-verify-response").value);
+      if (ok === null) {
+        status.textContent = "That cannot be checked: the public key and " +
+          "the commitment must be whole keys (exactly 91 bytes each), the " +
+          "challenge a whole 64-hex number that is not zero, and the " +
+          "response a whole 64-hex number. A half-typed piece gets no " +
+          "verdict at all, rather than a wrong one.";
+        return;
+      }
+      status.textContent = ok
+        ? "✓ Proved: the equation balances — whoever answered holds the " +
+          "private key behind that public key, and answered this " +
+          "commitment against this challenge. Nothing about the key " +
+          "itself was revealed, and this answer proves nothing against " +
+          "any other challenge."
+        : "⚠ Not proved: the pieces are well-formed, but the equation " +
+          "does not balance. The answer was not built from the private " +
+          "key behind that public key and the nonce behind that " +
+          "commitment — or it answers a different challenge.";
     });
 
     /* --- copy donation address --- */

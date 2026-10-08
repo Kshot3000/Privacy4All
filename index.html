@@ -219,7 +219,7 @@
 
       <form class="tool" id="zk-prover">
         <h3>5 · Prove it, don’t show it — ZK claim simulator</h3>
-        <p>Pick a claim, type the private value only you should know, and set the threshold. The simulator shows exactly what a verifier learns from a Midnight zero-knowledge proof — the claim, and whether it holds — and what stays hidden. It is a teaching simulation, not a cryptographic proof: the comparison runs locally on this device and your value never leaves this page.</p>
+        <p>Pick a claim, type the private value only you should know, and set the threshold. The simulator shows exactly what a verifier learns from a Midnight zero-knowledge proof — the claim, and whether it holds — and what stays hidden. It is a teaching simulation, not a cryptographic proof: the comparison runs locally on this device and your value never leaves this page. Tool 32 below runs a real cryptographic proof — of key knowledge rather than of a claim — with the actual curve arithmetic.</p>
         <label for="claim">Claim to prove</label>
         <select id="claim">
           <option value="age">I am old enough</option>
@@ -931,6 +931,50 @@
           <p id="viewkey-claim-result" role="status" aria-live="polite"></p>
         </form>
       </div>
+      <div class="tool" id="zk-proof">
+        <h3>32 · Prove you know the key — a zero-knowledge proof of knowledge</h3>
+        <p>Tool 5 above simulates the zero-knowledge pattern and says so in so many words — a teaching simulation, not a cryptographic proof. This tool runs a real one: the Schnorr identification protocol, the classic proof of knowledge that modern zero-knowledge systems grow from, computed locally on the same P-256 curve as tools 17, 18 and 30. Say you need to convince someone you hold the private key behind a published public key — without revealing the key, and without signing anything (tool 17's signatures bind a message and can be shown around forever; a proof answers one fresh question, once). It takes three moves, and the order is the security. First, the commitment must be fixed before the challenge is chosen: you pick a fresh secret nonce, publish only its public half as the commitment, and keep the nonce in a prover-only state line. Second, the verifier — only now — draws a fresh, unpredictable challenge number; a challenge of zero is refused, because with zero the answer is just the nonce and proves nothing about the key. Third, you answer with a single number blended from the nonce, the challenge and your private key, and the verifier checks one curve equation against your public key: it balances only if the answer was genuinely built from the private number, yet the answer itself reveals neither secret — one equation, two unknowns. The two ways it breaks are plain: a prover who sees the challenge first can work backwards and fake the whole proof for a key they do not hold, which is why the commitment coming first is the proof and not ceremony; and answering two challenges with the same commitment leaks the private key itself — two answers differ by a multiple of it that anyone can divide out — so one state answers exactly one challenge and is then thrown away. A completed proof is not a signature: it signs no message and authorises nothing, and it proves knowledge of the private key, not a legal name — the key could be anyone's, borrowed or stolen; what is proved is that the answerer holds it, against this challenge, now — an old answer replayed against a new challenge simply fails. The honest limits: this one page plays both sides, so it demonstrates the maths, not a live exchange — across a real exchange the ordering is enforced by who speaks when; this is the identification protocol in the open, not one of Midnight's Compact circuit proofs, which hide whole computations rather than one key; and like tool 30 the curve code is a teaching implementation — affine arithmetic written to be read and checked line by line, not an audited wallet and not side-channel resistant. Never paste a real wallet key or a production private key into any web page, including this one — practise with throwaway keys from tools 17 and 18.</p>
+        <form id="zkproof-commit">
+          <label for="zkproof-priv">Prover step 1 — your private key, as hex (exactly 138 bytes — a tool 17 signing key or a tool 18 agreement key; it never leaves this page, and it is never stored in the state)</label>
+          <textarea id="zkproof-priv" rows="2" spellcheck="false" placeholder="Paste your private key hex here"></textarea>
+          <button type="submit" class="btn primary">Make the commitment locally</button>
+          <label for="zkproof-commitment-out">The commitment — public; send this to the verifier first, before any challenge exists</label>
+          <textarea id="zkproof-commitment-out" rows="2" readonly spellcheck="false"></textarea>
+          <label for="zkproof-state-out">The prover state — secret; it holds the one-time nonce. Keep it, answer one challenge with it, then throw it away</label>
+          <textarea id="zkproof-state-out" rows="2" readonly spellcheck="false"></textarea>
+          <p id="zkproof-commit-result" role="status" aria-live="polite"></p>
+        </form>
+        <form id="zkproof-challenge">
+          <button type="submit" class="btn primary">Verifier step — draw a fresh challenge locally</button>
+          <label for="zkproof-challenge-out">The challenge — drawn only after the commitment is fixed; send it to the prover exactly as drawn, and never reuse one</label>
+          <textarea id="zkproof-challenge-out" rows="2" readonly spellcheck="false"></textarea>
+          <p id="zkproof-challenge-result" role="status" aria-live="polite"></p>
+        </form>
+        <form id="zkproof-respond">
+          <label for="zkproof-respond-priv">Prover step 2 — your private key again, as hex (exactly 138 bytes — asked again because the state deliberately never stored it)</label>
+          <textarea id="zkproof-respond-priv" rows="2" spellcheck="false" placeholder="Paste your private key hex here"></textarea>
+          <label for="zkproof-respond-state">Your prover state from step 1 (the p4a-zkproof-v1 line — secret; it pairs with exactly one commitment)</label>
+          <textarea id="zkproof-respond-state" rows="2" spellcheck="false" placeholder="Paste the prover state here"></textarea>
+          <label for="zkproof-respond-challenge">The verifier's challenge (64 hex characters, never zero — drawn after your commitment was fixed)</label>
+          <textarea id="zkproof-respond-challenge" rows="2" spellcheck="false" placeholder="Paste the challenge hex here"></textarea>
+          <button type="submit" class="btn primary">Answer the challenge locally</button>
+          <label for="zkproof-response-out">The response — safe to send; it reveals neither the nonce nor the key, and it answers this one challenge only</label>
+          <textarea id="zkproof-response-out" rows="2" readonly spellcheck="false"></textarea>
+          <p id="zkproof-respond-result" role="status" aria-live="polite"></p>
+        </form>
+        <form id="zkproof-verify">
+          <label for="zkproof-verify-pub">Verifier check — their public key, as hex (exactly 91 bytes — the published key the proof is about)</label>
+          <textarea id="zkproof-verify-pub" rows="2" spellcheck="false" placeholder="Paste their public key hex here"></textarea>
+          <label for="zkproof-verify-commitment">The commitment you received first (exactly 91 bytes — fixed before you drew the challenge)</label>
+          <textarea id="zkproof-verify-commitment" rows="2" spellcheck="false" placeholder="Paste the commitment hex here"></textarea>
+          <label for="zkproof-verify-challenge">The challenge you drew (64 hex characters)</label>
+          <textarea id="zkproof-verify-challenge" rows="2" spellcheck="false" placeholder="Paste the challenge hex here"></textarea>
+          <label for="zkproof-verify-response">The response you received (64 hex characters)</label>
+          <textarea id="zkproof-verify-response" rows="2" spellcheck="false" placeholder="Paste the response hex here"></textarea>
+          <button type="submit" class="btn primary">Check the proof locally</button>
+          <p id="zkproof-verify-result" role="status" aria-live="polite"></p>
+        </form>
+      </div>
     </div>
   </section>
 
@@ -961,6 +1005,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=29"></script>
+<script src="app.js?v=30"></script>
 </body>
 </html>

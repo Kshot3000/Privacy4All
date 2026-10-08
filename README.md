@@ -531,6 +531,35 @@ renewable resource that pays for shielded transactions.
   see nothing. Never paste a real wallet key or a
   production private key into any web page,
   including this one.
+- **Prove you know the key — a zero-knowledge proof
+  of knowledge** — the real proof tool 5's simulator
+  points at: the Schnorr identification protocol on
+  the hub's P-256 curve. The prover commits to a
+  fresh secret nonce (state format
+  `p4a-zkproof-v1`), the verifier draws a fresh
+  challenge only after the commitment is fixed, and
+  the answer `s = k + c·x mod n` is checked as
+  `s×G = R + c×Y` against the published key — the
+  equation balances only for whoever holds the
+  private key, and the answer reveals neither it nor
+  the nonce. A verifier's verdict returns `true`,
+  `false`, or `null` for malformed pieces, so "not
+  proved" and "cannot be checked" never blur.
+  Honestly labelled a teaching implementation, not
+  an audited wallet and not one of Midnight's
+  Compact circuit proofs: the commitment coming
+  first is the proof, not ceremony (a prover who
+  sees the challenge first can work backwards and
+  fake it); answering two challenges with the same
+  commitment leaks the private key itself, so one
+  state answers exactly one challenge; a completed
+  proof is not a signature — it signs no message,
+  authorises nothing, and proves knowledge of a key,
+  not a legal name; and this one page plays both
+  sides, so it demonstrates the maths, not a live
+  exchange. Never paste a real wallet key or a
+  production private key into any web page,
+  including this one.
 
 ## Guides
 
