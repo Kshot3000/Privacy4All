@@ -560,6 +560,33 @@ renewable resource that pays for shielded transactions.
   exchange. Never paste a real wallet key or a
   production private key into any web page,
   including this one.
+- **A proof that signs itself — a Schnorr
+  signature** — tool 32's proof with the verifier
+  taken out of the room: the Fiat–Shamir transform
+  replaces the hand-drawn challenge with a hash —
+  SHA-256 under the label `privacy4all-schnorr-v1`
+  of the commitment and the message together,
+  reduced under the curve order — so the signer
+  computes the challenge alone and publishes the
+  commitment and the answer as one signature line
+  (format `p4a-schnorr-v1`), and anyone can rehash
+  and check `s×G = R + e×Y` against the published
+  key at any later time. A verifier's verdict
+  returns `true`, `false`, or `null` for malformed
+  pieces, so "not signed" and "cannot be checked"
+  never blur. Honestly labelled a real Schnorr
+  signature but not the signature format any chain
+  or wallet checks — tool 17's ECDSA remains the
+  signature a P-256 wallet would produce, and real
+  Schnorr deployments such as BIP-340 use their own
+  curves, encodings and hash constructions: a
+  signature binds a message and can be shown around
+  forever, which trades tool 32's freshness for
+  transferability; and one nonce behind two
+  signatures leaks the private key itself, so a
+  fresh nonce is drawn for every signature. Never
+  paste a real wallet key or a production private
+  key into any web page, including this one.
 
 ## Guides
 

@@ -3553,6 +3553,177 @@ function verifyProof(publicKeyHex, commitmentHex, challengeHex, responseHex) {
   return lhs.x === rhs.x && lhs.y === rhs.y;
 }
 
+/* ---------- 33. A proof that signs itself — Fiat–Shamir Schnorr signatures ----------
+
+   Tool 32's proof needs a verifier in the room: they
+   draw the challenge, by hand, after the commitment is
+   fixed — and that live exchange is exactly what makes
+   it a proof rather than a signature. This tool takes
+   the verifier out of the room. The Fiat–Shamir
+   transform replaces the drawn challenge with a hash:
+   e = SHA-256, under the label privacy4all-schnorr-v1,
+   of the commitment and the message together, reduced
+   under the curve order. The commitment still comes
+   first — it is an input to the hash, so the challenge
+   cannot exist before it — but now nobody has to draw
+   anything: the signer computes the challenge
+   themselves, answers it exactly as tool 32 does
+   (s = k + e·x mod n, reusing that tool's arithmetic
+   unchanged), and publishes the commitment and the
+   answer as one signature line (p4a-schnorr-v1).
+   Anyone, anywhere, at any later time, recomputes the
+   same hash from the message and checks the same
+   equation, s×G = R + e×Y. That is what a signature
+   is: tool 32's proof, made non-interactive.
+
+   What changes, and what does not. A signature binds
+   a message — that binding is the whole point, and it
+   is also the loss tool 32's page text warns about:
+   a signature can be shown around forever, so it
+   proves the key signed THAT message, to anyone, not
+   that the holder is present answering you now.
+   Freshness is gone; transferability is the feature.
+   The nonce rule does not soften: one nonce behind
+   two signatures hands anyone the private scalar,
+   s1 − s2 = (e1 − e2)·x, exactly as in tool 32 — the
+   tests pin the recovery against this tool's own
+   pieces. And a challenge hashed from too little
+   would be no challenge at all: the label keeps this
+   hash from ever colliding with another tool's use of
+   the same pieces, and the commitment inside the
+   hash is what stops a signer from choosing the
+   answer first and working backwards, the forgery
+   tool 32 demonstrates.
+
+   The verifier's verdict keeps the house split: true
+   for a balancing signature, false — never null — for
+   well-formed pieces that do not balance (a changed
+   message, a nudged answer, the wrong key), null for
+   malformed pieces. Honestly labelled: this is a
+   real Schnorr signature computed and checked
+   locally, but it is NOT the signature format any
+   chain or wallet checks — tool 17's ECDSA remains
+   the signature a P-256 wallet would produce, real
+   Schnorr deployments (Bitcoin's BIP-340 among them)
+   use their own curves, encodings and hash
+   constructions, and nothing here is an audited
+   wallet or side-channel resistant. Never paste a
+   real wallet key or a production private key into
+   any web page, including this one — practise with
+   throwaway keys from tools 17 and 18. */
+var SCHNORR_FORMAT = "p4a-schnorr-v1";
+var SCHNORR_CHALLENGE_PREFIX = "privacy4all-schnorr-v1";
+var SCHNORR_MAX_MESSAGE_CHARS = 2000;
+
+/* The signed thing must be a real message: a whole,
+   non-blank string under the same ceiling tool 17
+   signs under. Anything else is null before any key
+   is read. */
+function validSchnorrMessage(message) {
+  return typeof message === "string" && message.trim() !== "" &&
+    message.length <= SCHNORR_MAX_MESSAGE_CHARS;
+}
+
+/* The challenge nobody draws: SHA-256 over the label,
+   the commitment (canonicalised, so the hash names
+   the point and not one spelling of it) and the
+   message, reduced under the order. A reduced digest
+   of zero is refused as null — with e = 0 the answer
+   would be the nonce itself and would sign nothing;
+   the signer simply draws a fresh nonce and tries
+   again, an event with probability about 2^-256. */
+function schnorrChallenge(commitmentHex, message) {
+  var point = parseP256Point(commitmentHex);
+  if (point === null || !validSchnorrMessage(message)) return Promise.resolve(null);
+  var canonical = formatP256PublicKey(point);
+  return sha256Hex(SCHNORR_CHALLENGE_PREFIX + "\n" + canonical + "\n" + message)
+    .then(function (digest) {
+      if (digest === null) return null;
+      var value = BigInt("0x" + digest) % P256_N;
+      if (value === P256_ZERO) return null;
+      return p256IntToHex(value);
+    });
+}
+
+/* The signature line: the format tag, the commitment
+   (a whole 91-byte public key) and the response (a
+   whole 64-hex scalar, zero allowed — an honest zero
+   arises with probability about 2^-256 and the parser
+   must not call it malformed). Pieces that do not
+   check out are null, never a half-built line. */
+function formatSchnorrSignature(commitmentHex, responseHex) {
+  var point = parseP256Point(commitmentHex);
+  var response = parseProofResponse(responseHex);
+  if (point === null || response === null) return null;
+  return SCHNORR_FORMAT + ":" + formatP256PublicKey(point) + ":" + response;
+}
+
+function parseSchnorrSignature(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 3 || parts[0] !== SCHNORR_FORMAT) return null;
+  var point = parseP256Point(parts[1]);
+  var response = parseProofResponse(parts[2]);
+  if (point === null || response === null) return null;
+  return { commitment: formatP256PublicKey(point), response: response };
+}
+
+/* Signing: draw a fresh nonce, commit to it, hash the
+   challenge out of the commitment and the message,
+   and answer with tool 32's own arithmetic. A zero
+   challenge or a zero answer — each a 2^-256 event —
+   draws a fresh nonce and retries rather than handing
+   over a signature that signs nothing. */
+function signSchnorrMessage(privateKeyHex, message) {
+  if (!validSchnorrMessage(message)) return Promise.resolve(null);
+  return agreementPrivateParts(privateKeyHex).then(function (parts) {
+    if (!parts) return null;
+    var attempt = function (triesLeft) {
+      var nonce = randomProofScalar();
+      if (nonce === null) return Promise.resolve(null);
+      var commitment = proofCommitmentForNonce(nonce);
+      if (commitment === null) return Promise.resolve(null);
+      return schnorrChallenge(commitment, message).then(function (challenge) {
+        if (challenge === null) {
+          return triesLeft > 1 ? attempt(triesLeft - 1) : null;
+        }
+        var response = proofResponseForScalar(parts.scalarHex, nonce, challenge);
+        if (response === null) {
+          return triesLeft > 1 ? attempt(triesLeft - 1) : null;
+        }
+        return formatSchnorrSignature(commitment, response);
+      });
+    };
+    return attempt(8);
+  });
+}
+
+/* Verifying: recompute the challenge from the message
+   and the signature's own commitment, then check tool
+   32's equation, s×G = R + e×Y. True only when it
+   balances; false — never null — for well-formed
+   pieces that do not balance (a message changed after
+   signing, an answer nudged by one, a stranger's key,
+   a commitment swapped in from another signature);
+   null for any malformed piece, so "not signed" and
+   "cannot be checked" never blur. */
+function verifySchnorrSignature(publicKeyHex, message, signatureText) {
+  var parsed = parseSchnorrSignature(signatureText);
+  var pubPoint = parseP256Point(publicKeyHex);
+  if (parsed === null || pubPoint === null || !validSchnorrMessage(message)) {
+    return Promise.resolve(null);
+  }
+  return schnorrChallenge(parsed.commitment, message).then(function (challenge) {
+    if (challenge === null) return null;
+    var lhs = p256PointMultiply(BigInt("0x" + parsed.response), { x: P256_GX, y: P256_GY });
+    if (lhs === null) return false;
+    var commitPoint = parseP256Point(parsed.commitment);
+    var rhs = p256PointAdd(commitPoint, p256PointMultiply(BigInt("0x" + challenge), pubPoint));
+    if (rhs === null) return false;
+    return lhs.x === rhs.x && lhs.y === rhs.y;
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -3637,7 +3808,12 @@ if (typeof module !== "undefined" && module.exports) {
                      proofCommitmentForNonce, formatProofState,
                      parseProofState, makeProofCommitment,
                      generateProofChallenge, proofResponseForScalar,
-                     respondToProofChallenge, verifyProof };
+                     respondToProofChallenge, verifyProof,
+                     SCHNORR_FORMAT, SCHNORR_CHALLENGE_PREFIX,
+                     SCHNORR_MAX_MESSAGE_CHARS,
+                     validSchnorrMessage, schnorrChallenge,
+                     formatSchnorrSignature, parseSchnorrSignature,
+                     signSchnorrMessage, verifySchnorrSignature };
 }
 
 if (typeof document !== "undefined") {
@@ -5342,6 +5518,61 @@ if (typeof document !== "undefined") {
           "does not balance. The answer was not built from the private " +
           "key behind that public key and the nonce behind that " +
           "commitment — or it answers a different challenge.";
+    });
+
+    document.getElementById("schnorr-sign").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("schnorr-sig-out");
+      var status = document.getElementById("schnorr-sign-result");
+      out.value = "";
+      status.textContent = "Signing locally…";
+      signSchnorrMessage(document.getElementById("schnorr-priv").value,
+        document.getElementById("schnorr-message").value).then(function (sig) {
+        if (!sig) {
+          status.textContent = "That cannot be signed: paste a whole " +
+            "private key — exactly 276 hex characters, 138 bytes, from tool " +
+            "17 or tool 18 — and a message that is not blank and is at " +
+            "most 2,000 characters. A public key signs nothing; the whole " +
+            "point is holding the private half.";
+          return;
+        }
+        out.value = sig;
+        status.textContent = "Signed. The line carries the commitment " +
+          "and the answer — never the key, never the nonce. Anyone with " +
+          "your public key and the exact message can check it, forever, " +
+          "with nobody in the room: that is what makes it a signature " +
+          "rather than tool 32's one-time proof. Sign the same message " +
+          "again and you get a different line — a fresh nonce every " +
+          "time, because one nonce behind two signatures would hand " +
+          "anyone your private key.";
+      });
+    });
+
+    document.getElementById("schnorr-verify").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("schnorr-verify-result");
+      status.textContent = "Checking locally…";
+      verifySchnorrSignature(document.getElementById("schnorr-verify-pub").value,
+        document.getElementById("schnorr-verify-message").value,
+        document.getElementById("schnorr-verify-sig").value).then(function (ok) {
+        if (ok === null) {
+          status.textContent = "That cannot be checked: the public key " +
+            "must be a whole key (exactly 91 bytes), the message must be " +
+            "the exact signed text (not blank, at most 2,000 characters), " +
+            "and the signature one whole p4a-schnorr-v1 line. A half-typed " +
+            "piece gets no verdict at all, rather than a wrong one.";
+          return;
+        }
+        status.textContent = ok
+          ? "✓ Signed: the equation balances — whoever produced that " +
+            "line held the private key behind this public key and signed " +
+            "this exact message. Change one character of the message and " +
+            "it fails."
+          : "⚠ Not signed: the pieces are well-formed, but the equation " +
+            "does not balance. The line was not produced from the " +
+            "private key behind that public key over this message — or " +
+            "the message has been changed since it was signed.";
+      });
     });
 
     /* --- copy donation address --- */
