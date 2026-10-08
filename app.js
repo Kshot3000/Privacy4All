@@ -1842,6 +1842,86 @@ function openRatchetMessage(stateText, sealed) {
   });
 }
 
+/* ---------- 23. Heal the chain — a fresh agreement restarts the ratchet ---------- */
+/* Tool 22 is honest about its own limit: the symmetric chain
+   protects the past, but a leaked current state opens every
+   message after it — until both sides agree fresh keys. Real
+   messengers heal automatically with a second, asymmetric
+   ratchet; this tool is that healing step, done by hand, in
+   its simplest form. Both holders of one direction's chain
+   make fresh tool-18 agreement pairs and swap the public keys
+   openly (public keys need no secrecy — but they still need
+   to really be each other's, which is tool 18's fingerprint
+   lesson). Each side then runs ECDH to a fresh shared secret
+   that only the two new private keys can produce, and mixes
+   it with the chain key both sides already hold: HKDF with
+   the fresh secret as the input keying material and the
+   current chain key as the salt, under its own info label.
+   The salt is what binds the heal to THIS chain: knowing
+   only the leaked chain key is not enough (no fresh secret),
+   and knowing only the fresh secret is not enough either
+   (no chain key) — the healed key exists nowhere until the
+   two ingredients meet on a holder's own device. That is
+   post-compromise security for what comes next: someone
+   holding the leaked state cannot follow the chain past the
+   heal, because following takes a private key they never
+   had. The healed state is a brand-new chain at position 0 —
+   position restarts on purpose, because this is a new chain,
+   not a continuation: pre-heal seals do not open under it
+   (their keys are in the past the ratchet already erased),
+   and post-heal seals do not open under the old state.
+   Both sides must heal from exactly the same current state:
+   healing is per direction-chain, and if the two copies of
+   the state have diverged, the healed keys diverge too and
+   seals simply fail — closed, never wrong-but-plausible.
+   The honest limits are the other half of the lesson:
+   healing protects only what comes after it — it does not
+   unlock the past, resurrect deleted states, or help at all
+   while a leak is still live on a compromised device; and
+   one manual heal is a teaching simplification of a step
+   real messengers run on every reply. Honest label: teaching
+   implementation, not an audited messaging app. States and
+   keys exist only in this page; never paste a real wallet
+   key, a production session key or a live chain state into
+   any web page, including this one — practise with
+   throwaway keys from tools 18–19. */
+var HEAL_INFO = "privacy4all-heal-v1 chain";
+
+function healHkdf(secretHex, chainKeyHex) {
+  var cryptoObj = agreeCrypto();
+  if (!cryptoObj) return Promise.resolve(null);
+  return cryptoObj.subtle.importKey("raw", hexToBytes(secretHex), "HKDF", false, ["deriveBits"])
+    .then(function (base) {
+      return cryptoObj.subtle.deriveBits(
+        { name: "HKDF", hash: "SHA-256", salt: hexToBytes(chainKeyHex),
+          info: secretToBytes(HEAL_INFO) },
+        base, DERIVE_KEY_BYTES * 8)
+        .then(function (bits) {
+          var bytes = new Uint8Array(bits);
+          if (bytes.length !== DERIVE_KEY_BYTES) return null;
+          return shareBytesToHex(bytes);
+        }, function () { return null; });
+    }, function () { return null; });
+}
+
+/* Returns the healed chain state — a p4a-chain-v1 line at
+   position 0 whose key neither side could have computed
+   from the old state alone — or null for a malformed state
+   or malformed/swapped keys. Both directions of the heal
+   land on the same state: healChainState(S, myPriv, theirPub)
+   === healChainState(S, theirPriv, myPub). */
+function healChainState(stateText, privateKeyHex, peerPublicKeyHex) {
+  var state = parseChainState(stateText);
+  if (state === null) return Promise.resolve(null);
+  return deriveSharedSecret(privateKeyHex, peerPublicKeyHex).then(function (fresh) {
+    if (fresh === null) return null;
+    return healHkdf(fresh, state.chainKey).then(function (healedKey) {
+      if (healedKey === null) return null;
+      return formatChainState(0, healedKey);
+    });
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -1886,7 +1966,8 @@ if (typeof module !== "undefined" && module.exports) {
                      RATCHET_NEXT_INFO, RATCHET_MAX_INDEX,
                      parseChainState, formatChainState,
                      startChainState, ratchetStep,
-                     sealRatchetMessage, openRatchetMessage };
+                     sealRatchetMessage, openRatchetMessage,
+                     HEAL_INFO, healChainState };
 }
 
 if (typeof document !== "undefined") {
@@ -2907,6 +2988,53 @@ if (typeof document !== "undefined") {
           "has moved on. Replace your saved state with the NEXT state below: " +
           "the one you pasted can never open this message again, which is " +
           "exactly what protects it if your state leaks later.";
+      });
+    });
+
+    /* --- heal the chain: a fresh agreement restarts the ratchet --- */
+    document.getElementById("heal-keys").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var pubOut = document.getElementById("heal-pub-out");
+      var privOut = document.getElementById("heal-priv-out");
+      var status = document.getElementById("heal-keys-result");
+      status.textContent = "Making your fresh agreement pair locally…";
+      generateAgreementKeyPair().then(function (pair) {
+        if (!pair) {
+          pubOut.value = "";
+          privOut.value = "";
+          status.textContent = "This browser could not make keys locally. Nothing was sent anywhere — try a current browser.";
+          return;
+        }
+        pubOut.value = pair.publicKey;
+        privOut.value = pair.privateKey;
+        document.getElementById("heal-priv-in").value = pair.privateKey;
+        status.textContent = "Your fresh pair is made locally — nothing was stored or sent. Send the public " +
+          "key to the other holder of this chain (public keys travel openly; check it is really theirs " +
+          "the tool-18 way) and keep the private key to yourself: it is half of what makes the heal " +
+          "unfollowable. Your private key was copied into the heal box below.";
+      });
+    });
+    document.getElementById("chain-heal").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("heal-out");
+      var status = document.getElementById("heal-result");
+      status.textContent = "Healing the chain locally…";
+      healChainState(document.getElementById("heal-state").value,
+        document.getElementById("heal-priv-in").value,
+        document.getElementById("heal-peer-pub").value).then(function (healed) {
+        if (healed === null) {
+          out.value = "";
+          status.textContent = "That cannot heal: paste your current chain state (a whole p4a-chain-v1 " +
+            "line), your fresh private agreement key, and the other side's fresh public key. A malformed " +
+            "state, a swapped key or a signing key heals nothing — and nothing was changed.";
+          return;
+        }
+        out.value = healed;
+        status.textContent = "Healed — a new chain at position 0. Replace your saved state with this line " +
+          "and let the old state go: anyone holding only the old state cannot follow you here, because " +
+          "following takes a fresh private key they never had. The other side must heal from exactly " +
+          "the same pre-heal state, with their own fresh pair, or their chain lands somewhere else and " +
+          "seals will simply fail until you both heal from the same state.";
       });
     });
 

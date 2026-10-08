@@ -309,6 +309,27 @@ renewable resource that pays for shielded transactions.
   running unbounded, and a failed open advances nothing.
   Never paste a real wallet key or a production session
   key into any web page, including this one.
+- **Heal the chain — a fresh agreement restarts the
+  ratchet** — builds the recovery tool 22 names for a
+  leaked chain state: a simplified version of the
+  asymmetric ratchet real messengers run automatically.
+  Both holders of a direction's chain make fresh tool-18
+  agreement pairs, swap the public keys openly, and mix
+  the fresh ECDH secret with the current chain key
+  through HKDF — the secret as the input, the chain key
+  as the salt, under its own `privacy4all-heal-v1` label —
+  landing on a new `p4a-chain-v1` chain at position 0
+  that someone holding only the leaked state cannot
+  follow, because following takes a fresh private key
+  they never had. Honestly labelled a teaching
+  implementation, not an audited messaging app: healing
+  protects only what comes after it, it does not unlock
+  the past or help while a leak is still live, both
+  sides must heal from exactly the same current state
+  or their healed chains diverge and seals fail closed,
+  and real messengers run this step on every reply.
+  Never paste a real wallet key or a production session
+  key into any web page, including this one.
 
 ## Guides
 

@@ -593,7 +593,7 @@
       </div>
       <div class="tool" id="ratchet-message">
         <h3>22 · One key per message — the ratchet</h3>
-        <p>Tool 20 names the price of one key for everything: whoever it leaks to reads everything locked with it, past and future. This tool builds the fix real messengers use — a ratchet — in its simplest symmetric form: one fresh key per message, and the key moves on the moment it has been used. A chain state is one line, <code>p4a-chain-v1:&lt;position&gt;:&lt;chain key&gt;</code>, starting from a tool-19 session key at position 0. Each step runs HKDF (tool 19's machinery) twice over the chain key with two different labels: one output is this message's own key, sealing through tool 20's exact format, and the other is the next chain key. HKDF runs one way only, so there is no way to recompute an earlier message key from a later state — overwrite an old state and its messages are gone for good, even to someone who later gets your current state. That is forward secrecy for the past. The honest limits are the other half of the lesson: this chain protects the past only — a leaked current state opens every message after it, until both sides agree fresh keys with tools 18–19 and start a new chain; messages open strictly in order, because this simple chain keeps no skipped-message keys; each direction needs its own chain, started from a different tool-19 purpose or salt; and a chain stops at a labelled cap of 1,000,000 messages rather than running unbounded. A failed open advances nothing, so an early message can be retried when its turn comes. Honestly labelled: this is a teaching implementation, not an audited messaging app — real messengers add a second, asymmetric ratchet on top, which is what heals a chain after a leak. Never paste a real wallet key or a production session key into any web page, including this one — practise with throwaway keys from tools 18–19.</p>
+        <p>Tool 20 names the price of one key for everything: whoever it leaks to reads everything locked with it, past and future. This tool builds the fix real messengers use — a ratchet — in its simplest symmetric form: one fresh key per message, and the key moves on the moment it has been used. A chain state is one line, <code>p4a-chain-v1:&lt;position&gt;:&lt;chain key&gt;</code>, starting from a tool-19 session key at position 0. Each step runs HKDF (tool 19's machinery) twice over the chain key with two different labels: one output is this message's own key, sealing through tool 20's exact format, and the other is the next chain key. HKDF runs one way only, so there is no way to recompute an earlier message key from a later state — overwrite an old state and its messages are gone for good, even to someone who later gets your current state. That is forward secrecy for the past. The honest limits are the other half of the lesson: this chain protects the past only — a leaked current state opens every message after it, until both sides agree fresh keys with tools 18–19 and start a new chain; messages open strictly in order, because this simple chain keeps no skipped-message keys; each direction needs its own chain, started from a different tool-19 purpose or salt; and a chain stops at a labelled cap of 1,000,000 messages rather than running unbounded. A failed open advances nothing, so an early message can be retried when its turn comes. Honestly labelled: this is a teaching implementation, not an audited messaging app — real messengers add a second, asymmetric ratchet on top, which is what heals a chain after a leak — tool 23 below builds a simplified version of that healing step, done by hand. Never paste a real wallet key or a production session key into any web page, including this one — practise with throwaway keys from tools 18–19.</p>
         <form id="ratchet-start">
           <label for="ratchet-start-in">Session key, as hex (exactly 32 bytes — tool 19's output; both sides start from the same one)</label>
           <textarea id="ratchet-start-in" rows="2" spellcheck="false" placeholder="Paste the derived key hex here"></textarea>
@@ -627,6 +627,30 @@
           <p id="ratchet-open-result" role="status" aria-live="polite"></p>
         </form>
       </div>
+      <div class="tool" id="chain-heal-tool">
+        <h3>23 · Heal the chain — a fresh agreement restarts the ratchet</h3>
+        <p>Tool 22's chain protects the past and says so plainly: a leaked current state opens every message after it, until both sides agree fresh keys. This tool is that recovery, done by hand — a simplified version of the second, asymmetric ratchet real messengers run automatically. Both holders of one direction's chain make brand-new agreement pairs with tool 18 and swap the public keys openly — public keys need no secrecy, though they still need to really be each other's (tool 18's fingerprint check). Each side mixes the fresh shared secret — which only the two new private keys can produce — with the chain key they both already hold: the secret goes into HKDF as the input, the current chain key as the salt, under its own label. The result is a new chain at position 0 that someone holding only the leaked state cannot follow them to: they have the old chain key, but without a new private key they cannot compute the fresh secret, and the healed key exists nowhere until both ingredients meet. The honest limits: healing protects only what comes after it — it does not unlock the past, reopen deleted messages, or help while a leak is still live on a compromised device; both sides must heal from exactly the same current state, or their healed chains differ and seals simply fail; and one manual heal is a teaching simplification of a step real apps do on every reply. Honestly labelled: this is a teaching implementation, not an audited messaging app. Never paste a real wallet key or a production session key into any web page, including this one — practise with throwaway keys from tools 18–19.</p>
+        <form id="heal-keys">
+          <button type="submit" class="btn primary">Make my fresh agreement pair locally</button>
+          <label for="heal-pub-out">Your fresh public key — send this to the other holder of the chain; it travels openly</label>
+          <textarea id="heal-pub-out" rows="3" readonly spellcheck="false"></textarea>
+          <label for="heal-priv-out">Your fresh private key — yours alone; it is half of what makes the heal unfollowable</label>
+          <textarea id="heal-priv-out" rows="3" readonly spellcheck="false"></textarea>
+          <p id="heal-keys-result" role="status" aria-live="polite"></p>
+        </form>
+        <form id="chain-heal">
+          <label for="heal-state">Your current chain state (the latest p4a-chain-v1 line for this direction — the other side must heal from exactly this same state)</label>
+          <textarea id="heal-state" rows="2" spellcheck="false" placeholder="p4a-chain-v1:0:…"></textarea>
+          <label for="heal-priv-in">Your fresh private agreement key (from the pair you just made, or tool 18)</label>
+          <textarea id="heal-priv-in" rows="3" spellcheck="false" placeholder="Paste your fresh private key hex here"></textarea>
+          <label for="heal-peer-pub">Their fresh public agreement key (the new one they just sent you — not the key from your original agreement)</label>
+          <textarea id="heal-peer-pub" rows="3" spellcheck="false" placeholder="Paste their fresh public key hex here"></textarea>
+          <button type="submit" class="btn primary">Heal the chain locally</button>
+          <label for="heal-out">Your healed chain state — a new chain at position 0; replace the old state with this and let the old one go</label>
+          <textarea id="heal-out" rows="2" readonly spellcheck="false"></textarea>
+          <p id="heal-result" role="status" aria-live="polite"></p>
+        </form>
+      </div>
     </div>
   </section>
 
@@ -657,6 +681,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=20"></script>
+<script src="app.js?v=21"></script>
 </body>
 </html>
