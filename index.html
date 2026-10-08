@@ -562,6 +562,35 @@
           <p id="keyopen-result" role="status" aria-live="polite"></p>
         </form>
       </div>
+
+      <div class="tool" id="auth-sealed-message">
+        <h3>21 · Know it's really from them — sign it, then seal it</h3>
+        <p>Tool 20's seal has a gap worth naming plainly: AES-GCM proves the key, not the person. Anyone who holds the session key can seal a message in anyone's name, and whoever opens it cannot tell — the seal checks out, the words look right, and the sender is whoever the opener assumes. This tool closes the gap the way real messengers do: the signature goes inside the seal. The sender signs the message with their tool-17 signing key first, then seals message and signature together with the session key. The opener opens the seal, then checks the signature against the sender's public key — and the two answers stay separate: a message can open perfectly and still fail the signature check, in which case the words are shown but flagged, because private is not the same as from them. Honestly labelled limits: this is a teaching implementation, not an audited messaging app. The signature proves the signing key, not a legal name, and it only means anything if the public key really is the sender's — get it from them somewhere a swap would be visible, the tool-18 lesson. Never paste a real wallet's private key into any web page, including this one — practise with throwaway keys from tools 17–19.</p>
+        <form id="authseal-make">
+          <label for="authseal-message">Message to sign and seal</label>
+          <textarea id="authseal-message" rows="3" spellcheck="false" placeholder="e.g. the blue locker, Friday, nine — and yes, this one is really from me"></textarea>
+          <label for="authseal-priv">Your signing private key, as hex (from tool 17's key maker — this signs; it never leaves the page)</label>
+          <textarea id="authseal-priv" rows="2" spellcheck="false" placeholder="Paste your signing private key hex here"></textarea>
+          <label for="authseal-key">Session key, as hex (exactly 32 bytes — tool 19's output, messaging purpose)</label>
+          <textarea id="authseal-key" rows="2" spellcheck="false" placeholder="Paste the derived key hex here"></textarea>
+          <button type="submit" class="btn primary">Sign it, then seal it, locally</button>
+          <label for="authseal-out">Your signed, sealed message — the signature is inside; the sealed text alone shows neither the words nor who signed</label>
+          <textarea id="authseal-out" rows="3" readonly spellcheck="false"></textarea>
+          <p id="authseal-result" role="status" aria-live="polite"></p>
+        </form>
+        <form id="authseal-open">
+          <label for="authopen-sealed">Signed, sealed message to open</label>
+          <textarea id="authopen-sealed" rows="3" spellcheck="false" placeholder="p4a-authsealed-v1:…"></textarea>
+          <label for="authopen-key">The session key it was sealed with, as hex (exactly 32 bytes)</label>
+          <textarea id="authopen-key" rows="2" spellcheck="false" placeholder="Paste the derived key hex here"></textarea>
+          <label for="authopen-pub">The sender's public signing key, as hex (from tool 17 — the part they can share openly)</label>
+          <textarea id="authopen-pub" rows="2" spellcheck="false" placeholder="Paste the sender's public signing key hex here"></textarea>
+          <button type="submit" class="btn primary">Open it and check the signature locally</button>
+          <label for="authopen-out">The opened message — check the verdict below before you trust whose it is</label>
+          <textarea id="authopen-out" rows="3" readonly spellcheck="false"></textarea>
+          <p id="authopen-result" role="status" aria-live="polite"></p>
+        </form>
+      </div>
     </div>
   </section>
 
@@ -592,6 +621,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=18"></script>
+<script src="app.js?v=19"></script>
 </body>
 </html>

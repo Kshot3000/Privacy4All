@@ -1601,6 +1601,110 @@ function openWithSessionKey(sealed, keyText) {
   });
 }
 
+/* ---------- 21. Know it's really from them — sign it, then seal it ---------- */
+/* Tool 20's seal proves one thing only: whoever opened the
+   message holds the same session key as whoever locked it. It
+   does NOT prove which person locked it — anyone who holds the
+   shared session key can seal a message in anyone's name, and
+   the opener cannot tell the difference. AES-GCM proves the
+   key, not the person. This tool closes that gap the way real
+   messengers do: sign first, then seal. The sender signs the
+   message with their tool-17 signing key, and the signature
+   rides INSIDE the seal next to the message, as a small
+   versioned JSON envelope (p4a-signed-v1). The opener opens the
+   seal, then checks the signature against the sender's public
+   key. The two results stay separate on purpose: a message can
+   open perfectly and still fail the signature check — private,
+   but not from who it claims to be from — and that case returns
+   the message with verified === false instead of hiding it, so
+   the distinction is visible rather than papered over.
+   Malformed input is null, distinct from a failed check, the
+   same convention as the rest of the suite: a bad session key,
+   a tampered seal, an envelope that is not a signed envelope at
+   all (a plain tool-20 seal included), or a malformed sender
+   public key. The outer line gets its own version,
+   p4a-authsealed-v1, so the two seal formats can never be
+   mistaken for each other. Honest limits: teaching
+   implementation, not an audited messaging app — the signature
+   proves the signing key, not a legal name (tool 17's limit,
+   unchanged), and it only means anything if the public key
+   really is the sender's, which has to be established outside
+   this page (compare it where a swap would be visible, the
+   tool-18 fingerprint lesson). Keys exist only in this page;
+   never paste a real wallet's private key into any web page,
+   including this one — practise with throwaway keys. */
+var AUTHSEAL_FORMAT = "p4a-authsealed-v1";
+var AUTHSEAL_ENVELOPE_FORMAT = "p4a-signed-v1";
+/* The message plus its signature plus the envelope's JSON must
+   fit inside tool 20's 2000-char seal, so the message itself
+   caps lower here. */
+var AUTHSEAL_MAX_MESSAGE_CHARS = 1800;
+
+function parseAuthSealed(text) {
+  if (typeof text !== "string") return null;
+  var m = text.trim().toLowerCase().match(/^p4a-authsealed-v1:([0-9a-f]+):([0-9a-f]+)$/);
+  if (!m) return null;
+  var iv = hexToBytes(m[1]);
+  var cipher = hexToBytes(m[2]);
+  if (!iv || !cipher) return null;
+  if (iv.length !== KEYSEAL_IV_BYTES) return null;
+  if (cipher.length < 17) return null;
+  return { iv: iv, cipher: cipher };
+}
+
+function validAuthMessage(message) {
+  return typeof message === "string" && message.trim() !== "" &&
+    message.length <= AUTHSEAL_MAX_MESSAGE_CHARS;
+}
+
+function parseSignedEnvelope(text) {
+  if (typeof text !== "string") return null;
+  var env;
+  try { env = JSON.parse(text); } catch (e) { return null; }
+  if (!env || typeof env !== "object") return null;
+  if (env.format !== AUTHSEAL_ENVELOPE_FORMAT) return null;
+  if (!validAuthMessage(env.message)) return null;
+  if (!parseSignature(env.signature)) return null;
+  return { message: env.message, signature: env.signature };
+}
+
+function signAndSealMessage(privateKeyHex, message, keyText) {
+  if (!validAuthMessage(message)) return Promise.resolve(null);
+  return signMessage(privateKeyHex, message).then(function (sig) {
+    if (!sig) return null;
+    var inner = JSON.stringify({ format: AUTHSEAL_ENVELOPE_FORMAT,
+                                 message: message, signature: sig });
+    if (inner.length > KEYSEAL_MAX_MESSAGE_CHARS) return null;
+    return sealWithSessionKey(inner, keyText).then(function (sealed) {
+      if (!sealed) return null;
+      return AUTHSEAL_FORMAT + sealed.slice(KEYSEAL_FORMAT.length);
+    });
+  });
+}
+
+/* Returns { message, verified } for a well-formed authenticated
+   seal: verified is true only when the signature inside checks
+   out against senderPublicKeyHex. A message that opens but was
+   signed by a different key comes back with verified === false
+   and its text intact — read it, but not as theirs. Anything
+   malformed, tampered or locked with another key is null. */
+function openAuthenticatedMessage(sealed, keyText, senderPublicKeyHex) {
+  var parsed = parseAuthSealed(sealed);
+  if (!parsed) return Promise.resolve(null);
+  var asKeySealed = KEYSEAL_FORMAT + ":" + shareBytesToHex(parsed.iv) +
+    ":" + shareBytesToHex(parsed.cipher);
+  return openWithSessionKey(asKeySealed, keyText).then(function (inner) {
+    if (inner === null) return null;
+    var env = parseSignedEnvelope(inner);
+    if (!env) return null;
+    return verifySignature(senderPublicKeyHex, env.message, env.signature)
+      .then(function (ok) {
+        if (ok === null) return null;
+        return { message: env.message, verified: ok };
+      });
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -1636,7 +1740,11 @@ if (typeof module !== "undefined" && module.exports) {
                      deriveSessionKey, checkDerivedKey,
                      KEYSEAL_FORMAT, KEYSEAL_KEY_BYTES, KEYSEAL_IV_BYTES,
                      KEYSEAL_MAX_MESSAGE_CHARS, parseKeySealed,
-                     sealWithSessionKey, openWithSessionKey };
+                     sealWithSessionKey, openWithSessionKey,
+                     AUTHSEAL_FORMAT, AUTHSEAL_ENVELOPE_FORMAT,
+                     AUTHSEAL_MAX_MESSAGE_CHARS, parseAuthSealed,
+                     parseSignedEnvelope, signAndSealMessage,
+                     openAuthenticatedMessage };
 }
 
 if (typeof document !== "undefined") {
@@ -2524,6 +2632,63 @@ if (typeof document !== "undefined") {
         status.textContent = "✓ Opened locally — that is exactly the message that was " +
           "locked with this key, unchanged: the GCM tag checked out, which no other " +
           "key and no altered byte can produce.";
+      });
+    });
+
+    /* --- know it's really from them: sign it, then seal it --- */
+    document.getElementById("authseal-make").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("authseal-out");
+      var status = document.getElementById("authseal-result");
+      status.textContent = "Signing, then sealing, locally…";
+      signAndSealMessage(document.getElementById("authseal-priv").value,
+        document.getElementById("authseal-message").value,
+        document.getElementById("authseal-key").value).then(function (sealed) {
+        if (!sealed) {
+          out.value = "";
+          status.textContent = "That cannot seal: write a message, paste your whole " +
+            "signing private key from tool 17's key maker, and a whole 32-byte derived " +
+            "key from tool 19. A signing key is not a session key, and neither box " +
+            "accepts the other's contents.";
+          return;
+        }
+        out.value = sealed;
+        status.textContent = "Signed with your signing key, then sealed with the " +
+          "session key — locally, and nothing left this page. Send the sealed text " +
+          "anywhere. The receiver opens it with the same session key and checks the " +
+          "signature inside against your PUBLIC signing key — which is the part you " +
+          "can share openly, as long as they get it from really you.";
+      });
+    });
+    document.getElementById("authseal-open").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("authopen-out");
+      var status = document.getElementById("authopen-result");
+      status.textContent = "Opening, then checking the signature, locally…";
+      openAuthenticatedMessage(document.getElementById("authopen-sealed").value,
+        document.getElementById("authopen-key").value,
+        document.getElementById("authopen-pub").value).then(function (res) {
+        if (res === null) {
+          out.value = "";
+          status.textContent = "That does not open: either a box is malformed (an " +
+            "authsealed line, a whole 32-byte derived key, a whole public signing " +
+            "key), or the session key is not the one it was sealed with, or the " +
+            "sealed text was changed or cut short — or what is inside is not a " +
+            "signed envelope at all, like a plain tool-20 seal.";
+          return;
+        }
+        out.value = res.message;
+        status.textContent = res.verified
+          ? "✓ Opened — and the signature inside checks out against that public " +
+            "key. This message is exactly what the holder of the matching private " +
+            "signing key signed: private AND from them, as far as the keys go. " +
+            "That is only as strong as your certainty that the public key is " +
+            "really theirs."
+          : "⚠ Opened — it decrypted fine — but the signature inside does NOT " +
+            "check out against that public key. The words are in the box so you " +
+            "can read them, but read them as unauthenticated: someone with the " +
+            "session key sealed this, and it was not signed by the key you " +
+            "checked. Private is not the same as from them.";
       });
     });
 

@@ -271,6 +271,24 @@ renewable resource that pays for shielded transactions.
   or a production session key into any web page, including
   this one — practise with throwaway keys from the agreement
   and derivation tools.
+- **Know it's really from them — sign it, then seal it** —
+  closes the gap tool 20 names: a session-key seal proves the
+  key, not the person, and anyone holding the key can seal a
+  message in anyone's name. Here the sender signs the message
+  with the signing tool's ECDSA key first, and the signature
+  rides inside the AES-GCM seal next to the message, as a
+  small versioned JSON envelope (`p4a-signed-v1`) in a
+  `p4a-authsealed-v1` line. The opener opens the seal, then
+  verifies the signature against the sender's public key — and
+  the two answers stay separate: a message that opens but was
+  signed by a different key comes back with its text and
+  `verified === false`, never silently trusted and never
+  hidden. Honestly labelled a teaching implementation, not an
+  audited messaging app: the signature proves the signing key,
+  not a legal name, and it only means anything if the public
+  key really is the sender's, which has to be established
+  outside this page. Never paste a real wallet's private key
+  into any web page, including this one.
 
 ## Guides
 
