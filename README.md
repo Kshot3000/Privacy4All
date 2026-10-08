@@ -505,6 +505,32 @@ renewable resource that pays for shielded transactions.
   audited, constant-time libraries. Never paste a
   real wallet key or a production private key into
   any web page, including this one.
+- **Eyes without hands — a view key that can watch
+  but never spend** — the split tools 29 and 30 both
+  name as their shared flaw (the scanning key is the
+  spending key), built Monero-style from two tool 18
+  pairs published side by side: senders mix with the
+  view public key, so the view private key alone
+  re-derives each payment's secret, its destination
+  under the `privacy4all-viewscan-v1` label, and its
+  one-time public key — watching is complete — while
+  the spend tweak under the
+  `privacy4all-viewspend-v1` label is added to the
+  spend private scalar the view holder does not
+  have, so claiming a spend key takes both private
+  keys and a checker on destinations returns `true`,
+  `false`, or `null` for malformed input, so "not
+  theirs" and "cannot be checked" never blur.
+  Honestly labelled a teaching implementation, not
+  an audited wallet: nothing is an address on any
+  chain and nothing moves funds; the spend key alone
+  cannot even scan in this construction; and the
+  view key still sees every payment the published
+  pair ever receives, past and future, until the
+  keys rotate — eyes without hands, not eyes that
+  see nothing. Never paste a real wallet key or a
+  production private key into any web page,
+  including this one.
 
 ## Guides
 

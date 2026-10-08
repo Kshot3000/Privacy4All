@@ -3157,6 +3157,177 @@ function matchOneTimeSpendKey(oneTimePrivateKeyHex, oneTimePublicKeyHex) {
   });
 }
 
+/* ---------- 31. Eyes without hands — view keys ---------- */
+/* Tools 29 and 30 share one honest flaw, and both name it:
+   the key that SCANS for payments is the key that SPENDS
+   them. Recognising a payment (tool 29) needs the
+   recipient's private key, and claiming the spend key
+   (tool 30) needs that same key — so a bookkeeper, an
+   auditor, a watch-only wallet on a phone, or a family
+   member who should be able to SEE what arrived can only
+   be helped by handing over the power to take it. Real
+   stealth schemes (Monero-style) split the job in two:
+   a VIEW key pair and a SPEND key pair, published side
+   by side. The agreement secret is made against the
+   VIEW public key, so whoever holds the view private
+   key — and only them — can re-derive the secret from
+   each payment's one-payment public key: they land on
+   the destination (this tool's own label,
+   privacy4all-viewscan-v1) and, because the spend
+   PUBLIC key is public, on the payment's one-time
+   public key too. Watching is complete. Spending is
+   not: the tweak (this tool's second label,
+   privacy4all-viewspend-v1, domain-separated from
+   tool 30's) is added to the SPEND private scalar, and
+   the view holder does not have that scalar — adding
+   the tweak to the view scalar instead derives a
+   well-formed key that matches nothing, which the
+   tests pin. Claiming therefore takes BOTH private
+   keys: view to find the tweak, spend to use it. The
+   split cuts both ways, and that is stated plainly:
+   the spend private key alone cannot even scan in
+   this construction, so losing the view key means
+   losing sight of payments until it is recovered; and
+   the view key is still a secret worth guarding — its
+   holder sees every payment this published pair ever
+   receives, past and future, until the keys rotate.
+   Honest limits: the destination and keys are still
+   not addresses on any chain and nothing here moves
+   or holds funds; this is the derivation pattern on
+   the P-256 curve this hub's practise keys use, and
+   real schemes differ in curves, encodings and hash
+   choices. Teaching implementation, not an audited
+   wallet. Never paste a real wallet key or a
+   production private key into any web page, including
+   this one — practise with throwaway keys from
+   tool 18. */
+var VIEWKEY_SCAN_PREFIX = "privacy4all-viewscan-v1";
+var VIEWKEY_SPEND_PREFIX = "privacy4all-viewspend-v1";
+
+/* The watch-side destination for one payment's secret:
+   a labelled hash of the secret alone, under this
+   tool's own scan label — domain-separated from tool
+   29's destination and tool 18's fingerprint of the
+   same secret. A secret that is not exactly 32 bytes
+   is null, never a destination for the wrong thing. */
+function watchedDestinationForSecret(secretHex) {
+  var hex = parseSharedSecret(secretHex);
+  if (hex === null) return Promise.resolve(null);
+  return sha256Hex(VIEWKEY_SCAN_PREFIX + "\n" + hex);
+}
+
+/* The spend-side tweak for one payment's secret: the
+   same construction as tool 30's tweak, under this
+   tool's own spend label, so a payment made to a
+   view/spend pair never collides with a tool-30
+   payment made from the same secret. A secret that is
+   not exactly 32 bytes is null, never a zero tweak. */
+function watchedSpendTweak(secretHex) {
+  var hex = parseSharedSecret(secretHex);
+  if (hex === null) return Promise.resolve(null);
+  return sha256Hex(VIEWKEY_SPEND_PREFIX + "\n" + hex)
+    .then(function (hash) {
+      if (hash === null) return null;
+      return spendTweakFromHash(hash);
+    });
+}
+
+/* Everything a secret determines for one watched
+   payment: the destination a watcher recognises, and
+   the one-time public key the payment goes to — the
+   second needs only the spend PUBLIC key, which is
+   why watching never needs the spend private key. */
+function watchedPartsFromSecret(secretHex, spendPublicKeyHex) {
+  if (parseP256Point(spendPublicKeyHex) === null) return Promise.resolve(null);
+  return watchedDestinationForSecret(secretHex).then(function (dest) {
+    if (dest === null) return null;
+    return watchedSpendTweak(secretHex).then(function (tweak) {
+      if (tweak === null) return null;
+      var pub = oneTimePublicKeyForTweak(spendPublicKeyHex, tweak);
+      if (pub === null) return null;
+      return { destination: dest, oneTimePublicKey: pub };
+    });
+  });
+}
+
+/* The sender's job: validate BOTH published keys (each
+   a real point on the curve — a private key offered as
+   either is null before any pair is made), make a
+   fresh one-payment pair, and mix its private half
+   with the recipient's VIEW public key. The one-payment
+   private key is never stored, shown or sent. */
+function makeWatchedPayment(viewPublicKeyHex, spendPublicKeyHex) {
+  if (parseP256Point(viewPublicKeyHex) === null ||
+      parseP256Point(spendPublicKeyHex) === null) {
+    return Promise.resolve(null);
+  }
+  return generateAgreementKeyPair().then(function (eph) {
+    if (!eph) return null;
+    return deriveSharedSecret(eph.privateKey, viewPublicKeyHex)
+      .then(function (secret) {
+        if (secret === null) return null;
+        return watchedPartsFromSecret(secret, spendPublicKeyHex)
+          .then(function (parts) {
+            if (parts === null) return null;
+            return { ephemeralPublicKey: eph.publicKey,
+                     destination: parts.destination,
+                     oneTimePublicKey: parts.oneTimePublicKey };
+          });
+      });
+  });
+}
+
+/* The watcher's job: the same secret from the other
+   side — the VIEW private key, the one-payment public
+   key that travelled with the payment — then the same
+   destination and one-time public key the sender made.
+   No spend key is involved on this side at all. A
+   stranger scanning with their own private key lands
+   on a different destination and a different one-time
+   public key: watching says "not mine", never an
+   error, because their inputs were well-formed. */
+function scanWatchedPayment(viewPrivateKeyHex, spendPublicKeyHex, ephemeralPublicKeyHex) {
+  if (parseP256Point(spendPublicKeyHex) === null) return Promise.resolve(null);
+  return deriveSharedSecret(viewPrivateKeyHex, ephemeralPublicKeyHex)
+    .then(function (secret) {
+      if (secret === null) return null;
+      return watchedPartsFromSecret(secret, spendPublicKeyHex);
+    });
+}
+
+/* The verdict: true only when the destination this
+   view key computes from this one-payment key is
+   exactly the destination in question. A malformed
+   claimed destination is null, never false — the same
+   never-blur rule as tools 28, 29 and 30. */
+function checkWatchedPayment(viewPrivateKeyHex, spendPublicKeyHex, ephemeralPublicKeyHex, destinationText) {
+  var expected = parseOneTimeDestination(destinationText);
+  if (expected === null) return Promise.resolve(null);
+  return scanWatchedPayment(viewPrivateKeyHex, spendPublicKeyHex, ephemeralPublicKeyHex)
+    .then(function (parts) {
+      if (parts === null) return null;
+      return parts.destination === expected;
+    });
+}
+
+/* The claim — the one place the spend private key is
+   needed, and it is not enough on its own: the tweak
+   comes from the secret, and the secret comes from
+   the VIEW private key. Both private keys, or no spend
+   key. The view key alone is tried in the tests: the
+   key it derives by standing in for the spend key is
+   well-formed and matches nothing. */
+function claimWatchedSpendKey(viewPrivateKeyHex, spendPrivateKeyHex, ephemeralPublicKeyHex) {
+  return deriveSharedSecret(viewPrivateKeyHex, ephemeralPublicKeyHex)
+    .then(function (secret) {
+      if (secret === null) return null;
+      return watchedSpendTweak(secret).then(function (tweak) {
+        if (tweak === null) return null;
+        return oneTimePrivateKeyForTweak(spendPrivateKeyHex, tweak);
+      });
+    });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -3231,7 +3402,11 @@ if (typeof module !== "undefined" && module.exports) {
                      spendTweakFromHash, parseSpendTweak, oneTimeSpendTweak,
                      oneTimePublicKeyForTweak, oneTimePrivateKeyForTweak,
                      makeOneTimeSpendKey, claimOneTimeSpendKey,
-                     matchOneTimeSpendKey };
+                     matchOneTimeSpendKey,
+                     VIEWKEY_SCAN_PREFIX, VIEWKEY_SPEND_PREFIX,
+                     watchedDestinationForSecret, watchedSpendTweak,
+                     makeWatchedPayment, scanWatchedPayment,
+                     checkWatchedPayment, claimWatchedSpendKey };
 }
 
 if (typeof document !== "undefined") {
@@ -4728,6 +4903,114 @@ if (typeof document !== "undefined") {
             "different public key. It spends a different payment — or none — and " +
             "no amount of re-checking makes it fit this one.";
         }
+      });
+    });
+
+    /* --- view keys: watch, never spend --- */
+    document.getElementById("viewkey-make").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var ephOut = document.getElementById("viewkey-eph-out");
+      var destOut = document.getElementById("viewkey-dest-out");
+      var pubOut = document.getElementById("viewkey-onetime-out");
+      var status = document.getElementById("viewkey-result");
+      ephOut.value = ""; destOut.value = ""; pubOut.value = "";
+      status.textContent = "Making a watched payment locally…";
+      makeWatchedPayment(document.getElementById("viewkey-view-pub").value,
+        document.getElementById("viewkey-spend-pub").value).then(function (made) {
+        if (!made) {
+          status.textContent = "That needs two whole public keys, each exactly " +
+            "as tool 18 makes them (182 hex characters, 91 bytes, a real point " +
+            "on the curve) — one view key, one spend key. A private key pasted " +
+            "as a public key is refused, not used.";
+          return;
+        }
+        ephOut.value = made.ephemeralPublicKey;
+        destOut.value = made.destination;
+        pubOut.value = made.oneTimePublicKey;
+        status.textContent = "Done locally. The one-payment public key travels " +
+          "with the payment in plain view. Anyone holding the view private key " +
+          "can recognise this destination and name this one-time public key — " +
+          "and that is all they can do. The spend key was never touched.";
+      });
+    });
+
+    document.getElementById("viewkey-scan").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var destOut = document.getElementById("viewkey-scan-dest-out");
+      var pubOut = document.getElementById("viewkey-scan-onetime-out");
+      var status = document.getElementById("viewkey-scan-result");
+      destOut.value = ""; pubOut.value = "";
+      status.textContent = "Watching locally…";
+      scanWatchedPayment(document.getElementById("viewkey-scan-priv").value,
+        document.getElementById("viewkey-scan-spend-pub").value,
+        document.getElementById("viewkey-scan-eph").value).then(function (parts) {
+        if (!parts) {
+          status.textContent = "That cannot be watched: paste your whole view " +
+            "private key (276 hex characters, 138 bytes), the recipient's whole " +
+            "spend public key (182 hex characters, 91 bytes, a real point on " +
+            "the curve) and the whole one-payment public key that travelled " +
+            "with the payment.";
+          return;
+        }
+        destOut.value = parts.destination;
+        pubOut.value = parts.oneTimePublicKey;
+        status.textContent = "Watched locally — with the view key alone. If " +
+          "that destination is the payment's destination, the payment is " +
+          "theirs, and the one-time public key above is the key it went to. " +
+          "Nothing here can spend it: no spend key was asked for or used.";
+      });
+    });
+
+    document.getElementById("viewkey-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("viewkey-check-result");
+      status.textContent = "Checking the destination locally…";
+      checkWatchedPayment(document.getElementById("viewkey-check-priv").value,
+        document.getElementById("viewkey-check-spend-pub").value,
+        document.getElementById("viewkey-check-eph").value,
+        document.getElementById("viewkey-check-dest").value).then(function (ok) {
+        if (ok === null) {
+          status.textContent = "That cannot be checked: the destination must " +
+            "be a whole destination (64 hex characters), and the keys must be " +
+            "whole keys exactly as the other forms use them. A half-typed " +
+            "destination gets no verdict at all, rather than a wrong one.";
+          return;
+        }
+        if (ok) {
+          status.textContent = "✓ Theirs: this view key recognises exactly " +
+            "that destination from that one-payment key. Watching worked — " +
+            "and watching is all the view key can do.";
+        } else {
+          status.textContent = "⚠ Not theirs: this view key computes a " +
+            "different destination from that one-payment key. The payment " +
+            "went to a different published pair — or to nobody here.";
+        }
+      });
+    });
+
+    document.getElementById("viewkey-claim").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("viewkey-claim-out");
+      var status = document.getElementById("viewkey-claim-result");
+      out.value = "";
+      status.textContent = "Claiming the spend key locally…";
+      claimWatchedSpendKey(document.getElementById("viewkey-claim-view-priv").value,
+        document.getElementById("viewkey-claim-spend-priv").value,
+        document.getElementById("viewkey-claim-eph").value).then(function (priv) {
+        if (!priv) {
+          status.textContent = "That cannot be claimed: paste both whole " +
+            "private keys — the view key AND the spend key, each 276 hex " +
+            "characters, 138 bytes — and the whole one-payment public key " +
+            "that travelled with the payment. One key on its own is refused: " +
+            "that refusal is this tool's whole point.";
+          return;
+        }
+        out.value = priv;
+        status.textContent = "Done locally — and it took both keys: the view " +
+          "key found the tweak, the spend key used it. That private key " +
+          "spends this one payment and no other. Paste it into tool 30's " +
+          "pair checker, against the one-time public key from the forms " +
+          "above, and watch it match.";
       });
     });
 

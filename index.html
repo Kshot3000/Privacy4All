@@ -844,7 +844,7 @@
 
       <div class="tool" id="spend-key">
         <h3>30 · The key that can spend it — one-time spend keys</h3>
-        <p>Tool 29 ends on a gap it names itself: it models the recognition half of stealth addressing, where the recipient can spot a payment as theirs, but real schemes — Monero-style, EIP-5564-style — also derive a one-time public key on the curve, so the recipient also derives the matching one-time private key that spends. This tool builds that spend half, with real P-256 curve arithmetic computed locally — plain integer maths on the curve's published parameters, no library and nothing sent anywhere. The shared secret (tool 18) is hashed once under this tool's own label, <code>privacy4all-spendkey-v1</code>; that digest, read as a number under the curve order, is the tweak. The sender adds tweak×G to the recipient's published point — that sum is the one-time public key. The recipient adds the same tweak to their private number instead, and the curve's own arithmetic does the rest: (r + t)×G is r×G + t×G, the same point, so the tweaked private key matches the one-time public key exactly — and nobody else can derive either side, because the tweak needs the secret and the secret needs a private key. The keys stay in this hub's formats throughout: the one-time public key is a 91-byte key exactly like tool 18's, and the one-time private key is a 138-byte key rebuilt around the tweaked number, so the other tools here can read it like any practise key. The honest limits: the key is still not an address on any chain and nothing here moves or holds funds — this is the derivation half of the pattern, shown on the P-256 curve this hub's practise keys use (real stealth schemes run on their own curves and encodings, and their exact tweak hashes differ); whoever holds the recipient's ordinary private key plus the one-payment public key can derive the spend key — that is the design — so a copied private key endangers every payment ever sent to it, exactly as tool 29 warned for recognition; and the curve code is written to be read and checked line by line, not for speed or side-channel resistance — production wallets use audited, constant-time libraries. Honestly labelled: this is a teaching implementation, not an audited wallet. Never paste a real wallet key or a production private key into any web page, including this one — practise with throwaway keys from tool 18.</p>
+        <p>Tool 29 ends on a gap it names itself: it models the recognition half of stealth addressing, where the recipient can spot a payment as theirs, but real schemes — Monero-style, EIP-5564-style — also derive a one-time public key on the curve, so the recipient also derives the matching one-time private key that spends. This tool builds that spend half, with real P-256 curve arithmetic computed locally — plain integer maths on the curve's published parameters, no library and nothing sent anywhere. The shared secret (tool 18) is hashed once under this tool's own label, <code>privacy4all-spendkey-v1</code>; that digest, read as a number under the curve order, is the tweak. The sender adds tweak×G to the recipient's published point — that sum is the one-time public key. The recipient adds the same tweak to their private number instead, and the curve's own arithmetic does the rest: (r + t)×G is r×G + t×G, the same point, so the tweaked private key matches the one-time public key exactly — and nobody else can derive either side, because the tweak needs the secret and the secret needs a private key. The keys stay in this hub's formats throughout: the one-time public key is a 91-byte key exactly like tool 18's, and the one-time private key is a 138-byte key rebuilt around the tweaked number, so the other tools here can read it like any practise key. The honest limits: the key is still not an address on any chain and nothing here moves or holds funds — this is the derivation half of the pattern, shown on the P-256 curve this hub's practise keys use (real stealth schemes run on their own curves and encodings, and their exact tweak hashes differ); whoever holds the recipient's ordinary private key plus the one-payment public key can derive the spend key — that is the design — so a copied private key endangers every payment ever sent to it, exactly as tool 29 warned for recognition; and the curve code is written to be read and checked line by line, not for speed or side-channel resistance — production wallets use audited, constant-time libraries. Tool 31 below answers the other flaw this tool shares with tool 29 — the key that scans being the key that spends — by splitting the published pair in two: a view key that can watch, and a spend key that can spend. Honestly labelled: this is a teaching implementation, not an audited wallet. Never paste a real wallet key or a production private key into any web page, including this one — practise with throwaway keys from tool 18.</p>
         <form id="spendkey-make">
           <label for="spendkey-pub">Their public key, as hex (exactly 91 bytes — tool 18's public key; a public key is safe to share, that is its job)</label>
           <textarea id="spendkey-pub" rows="2" spellcheck="false" placeholder="Paste the recipient's public key hex here"></textarea>
@@ -872,6 +872,63 @@
           <textarea id="spendkey-check-pub" rows="2" spellcheck="false" placeholder="Paste the one-time public key hex here"></textarea>
           <button type="submit" class="btn primary">Check the pair locally</button>
           <p id="spendkey-check-result" role="status" aria-live="polite"></p>
+        </form>
+      </div>
+
+      <div class="tool" id="watch-key">
+        <h3>31 · Eyes without hands — a view key that can watch but never spend</h3>
+        <p>Tools 29 and 30 share one honest flaw, and both name it: the key that scans for payments is the key that spends them. Recognising a payment takes the recipient's private key, and claiming its spend key takes that same key — so a bookkeeper, an auditor, a watch-only wallet on a phone, or a family member who should be able to see what arrived can only be helped by handing over the power to take it. Real stealth schemes — Monero-style — split the job in two, and this tool builds the split: publish a view key pair and a spend key pair side by side (two tool 18 pairs). Senders mix with the view public key, so whoever holds the view private key — and only them — can re-derive every payment's secret, land on its destination under this tool's own label <code>privacy4all-viewscan-v1</code>, and name its one-time public key, because the spend public key is public. Watching is complete. Spending is not: the tweak (this tool's second label, <code>privacy4all-viewspend-v1</code>) is added to the spend private number, and the view holder does not have that number — adding the tweak to the view number instead derives a well-formed key that matches nothing. Claiming a spend key therefore takes both private keys: the view key finds the tweak, the spend key uses it. The split cuts both ways: the spend private key alone cannot even scan in this construction, so losing the view key means losing sight of payments until it is recovered; and the view key is still a secret worth guarding, because its holder sees every payment this published pair ever receives — past and future — until the keys rotate: a view key is eyes without hands, not eyes that see nothing. The honest limits: the destination and the keys are still not an address on any chain and nothing here moves or holds funds — this is the derivation pattern on the P-256 curve this hub's practise keys use, and real schemes differ in curves, encodings and hash choices. Honestly labelled: this is a teaching implementation, not an audited wallet. Never paste a real wallet key or a production private key into any web page, including this one — practise with throwaway keys from tool 18.</p>
+        <form id="viewkey-make">
+          <label for="viewkey-view-pub">Their view public key, as hex (exactly 91 bytes — one of their two published tool 18 public keys; a public key is safe to share, that is its job)</label>
+          <textarea id="viewkey-view-pub" rows="2" spellcheck="false" placeholder="Paste the recipient's view public key hex here"></textarea>
+          <label for="viewkey-spend-pub">Their spend public key, as hex (exactly 91 bytes — the other published tool 18 public key)</label>
+          <textarea id="viewkey-spend-pub" rows="2" spellcheck="false" placeholder="Paste the recipient's spend public key hex here"></textarea>
+          <button type="submit" class="btn primary">Make a watched payment locally</button>
+          <label for="viewkey-eph-out">The one-payment public key — send this alongside the payment; it is not a secret</label>
+          <textarea id="viewkey-eph-out" rows="2" readonly spellcheck="false"></textarea>
+          <label for="viewkey-dest-out">The destination — the identifier for this payment only; only a view-key holder can connect it to the published pair</label>
+          <textarea id="viewkey-dest-out" rows="2" readonly spellcheck="false"></textarea>
+          <label for="viewkey-onetime-out">The one-time public key — the key this payment goes to; a watcher can name it, but cannot spend from it</label>
+          <textarea id="viewkey-onetime-out" rows="2" readonly spellcheck="false"></textarea>
+          <p id="viewkey-result" role="status" aria-live="polite"></p>
+        </form>
+        <form id="viewkey-scan">
+          <label for="viewkey-scan-priv">The view private key, as hex (exactly 138 bytes — the tool 18 private key matching the published view key; it never leaves this page, and it cannot spend)</label>
+          <textarea id="viewkey-scan-priv" rows="2" spellcheck="false" placeholder="Paste the view private key hex here"></textarea>
+          <label for="viewkey-scan-spend-pub">Their spend public key, as hex (exactly 91 bytes — public, so a watcher may hold a copy)</label>
+          <textarea id="viewkey-scan-spend-pub" rows="2" spellcheck="false" placeholder="Paste the spend public key hex here"></textarea>
+          <label for="viewkey-scan-eph">The one-payment public key that travelled with the payment (exactly 91 bytes)</label>
+          <textarea id="viewkey-scan-eph" rows="2" spellcheck="false" placeholder="Paste the one-payment public key hex here"></textarea>
+          <button type="submit" class="btn primary">Watch for the payment locally</button>
+          <label for="viewkey-scan-dest-out">The destination the view key recognises — if the payment used it, the payment is theirs</label>
+          <textarea id="viewkey-scan-dest-out" rows="2" readonly spellcheck="false"></textarea>
+          <label for="viewkey-scan-onetime-out">The one-time public key the payment went to — named by watching alone; spending it needs the spend key</label>
+          <textarea id="viewkey-scan-onetime-out" rows="2" readonly spellcheck="false"></textarea>
+          <p id="viewkey-scan-result" role="status" aria-live="polite"></p>
+        </form>
+        <form id="viewkey-check">
+          <label for="viewkey-check-priv">The view private key, as hex (exactly 138 bytes — the tool 18 private key matching the published view key)</label>
+          <textarea id="viewkey-check-priv" rows="2" spellcheck="false" placeholder="Paste the view private key hex here"></textarea>
+          <label for="viewkey-check-spend-pub">Their spend public key, as hex (exactly 91 bytes)</label>
+          <textarea id="viewkey-check-spend-pub" rows="2" spellcheck="false" placeholder="Paste the spend public key hex here"></textarea>
+          <label for="viewkey-check-eph">The one-payment public key that travelled with the payment (exactly 91 bytes)</label>
+          <textarea id="viewkey-check-eph" rows="2" spellcheck="false" placeholder="Paste the one-payment public key hex here"></textarea>
+          <label for="viewkey-check-dest">The destination to check (64 hex characters)</label>
+          <textarea id="viewkey-check-dest" rows="2" spellcheck="false" placeholder="Paste the destination hex here"></textarea>
+          <button type="submit" class="btn primary">Check this destination locally</button>
+          <p id="viewkey-check-result" role="status" aria-live="polite"></p>
+        </form>
+        <form id="viewkey-claim">
+          <label for="viewkey-claim-view-priv">The view private key, as hex (exactly 138 bytes — it finds the tweak; on its own it spends nothing)</label>
+          <textarea id="viewkey-claim-view-priv" rows="2" spellcheck="false" placeholder="Paste the view private key hex here"></textarea>
+          <label for="viewkey-claim-spend-priv">The spend private key, as hex (exactly 138 bytes — it uses the tweak; on its own it cannot even scan)</label>
+          <textarea id="viewkey-claim-spend-priv" rows="2" spellcheck="false" placeholder="Paste the spend private key hex here"></textarea>
+          <label for="viewkey-claim-eph">The one-payment public key that travelled with the payment (exactly 91 bytes)</label>
+          <textarea id="viewkey-claim-eph" rows="2" spellcheck="false" placeholder="Paste the one-payment public key hex here"></textarea>
+          <button type="submit" class="btn primary">Claim the one-time spend key locally</button>
+          <label for="viewkey-claim-out">The one-time private key — the key that can spend this payment, and no other; it took both keys to make it</label>
+          <textarea id="viewkey-claim-out" rows="2" readonly spellcheck="false"></textarea>
+          <p id="viewkey-claim-result" role="status" aria-live="polite"></p>
         </form>
       </div>
     </div>
@@ -904,6 +961,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=28"></script>
+<script src="app.js?v=29"></script>
 </body>
 </html>
