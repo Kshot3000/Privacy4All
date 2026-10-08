@@ -4029,6 +4029,372 @@ function verifyRingSignature(ringText, message, signatureText) {
   });
 }
 
+/* ---------- 35. Signed twice? It shows — linkable ring signatures ----------
+
+   Tool 34 ends on a deliberate omission, named in its
+   own text: it carries no key image, so two of its
+   signatures by the same signer cannot be linked by
+   the signatures alone — and real deployments, Monero
+   first among them, choose the other way on purpose.
+   This tool makes that other choice: the LSAG form of
+   tool 34's ring, with a key image. The image is a
+   second point bound to the signer's key alone:
+   I = x×Hp(Y), where Hp hashes the signer's public
+   key to a curve point nobody knows the discrete log
+   of — built here by try-and-increment: hash the key
+   under this tool's own label with a counter, read
+   the digest as an x coordinate, keep the first x
+   that lands on the curve (P-256's prime is 3 mod 4,
+   so the square root is one exponentiation), and
+   take the even root so the choice is canonical.
+   Because Hp(Y)'s discrete log is unknown, nobody can
+   compute a member's image from their public key
+   alone and go down the ring matching images to
+   names — the image names nobody. But the same key
+   always produces the same image, whatever the ring,
+   whatever the message, so two signatures carrying
+   the same image came from the same key: linked,
+   without being identified. The chain doubles
+   accordingly: each member's link is now a pair,
+   E_i = z_i×G + c_i×Y_i as before and
+   F_i = z_i×Hp(Y_i) + c_i×I beside it, and each
+   challenge hashes BOTH points with the message
+   under the label privacy4all-linkable-ring-v1. The
+   signer closes the loop exactly as in tool 34 —
+   invent the other answers forwards, answer the
+   final challenge with z_s = k − c_s·x — and the
+   algebra closes on both points at once precisely
+   because I really is x×Hp(Y_s): only the signer's
+   private key can make the F chain come home.
+   What the trade costs, stated plainly: linkability
+   is the privacy given up. In this teaching version
+   the image is tied to the member key itself, so the
+   same signer is linkable across every ring and
+   every message they ever sign here — real Monero
+   ties its image to a one-time key per note, so only
+   spending THE SAME note twice links, a narrower
+   exposure than this page's. And linked is not
+   identified: a matched image proves one key acted
+   twice and still never says which member it was —
+   the anonymity of tool 34 survives inside each
+   single signature; what dies is the deniability
+   that two signatures were strangers. The verdict
+   keeps the house split: true, false — never null —
+   for well-formed pieces whose loop does not close,
+   null for malformed pieces. Honestly labelled: this
+   is a real linkable ring signature computed and
+   checked locally, but it is not the signature
+   format any chain or wallet checks; like tools 32
+   to 34 this is the maths in the open, not one of
+   Midnight's Compact circuit proofs, and not an
+   audited wallet and not side-channel resistant.
+   Never paste a real wallet key or a production
+   private key into any web page, including this one
+   — practise with throwaway keys from tools 17
+   and 18. */
+var LINKRING_FORMAT = "p4a-lring-v1";
+var LINKRING_CHALLENGE_PREFIX = "privacy4all-linkable-ring-v1";
+var LINKRING_HASH_PREFIX = "privacy4all-linkable-hash-v1";
+var LINKRING_MIN_KEYS = 2;
+var LINKRING_MAX_KEYS = 6;
+
+/* Field exponentiation by square-and-multiply — the
+   one piece of field arithmetic tool 30's helpers do
+   not already provide, needed for the square root
+   below. Written in the same five-line spirit as
+   p256Invert, which is this with exponent p−2. */
+function p256Pow(base, exponent) {
+  var b = p256Mod(base);
+  var e = exponent;
+  var result = P256_ONE;
+  while (e > P256_ZERO) {
+    if ((e & P256_ONE) === P256_ONE) result = p256Mod(result * b);
+    b = p256Mod(b * b);
+    e = e >> P256_ONE;
+  }
+  return result;
+}
+
+/* Hash a public key to a curve point whose discrete
+   log nobody knows: try-and-increment over a counter,
+   the digest read as an x coordinate, kept when
+   x³−3x+b is a quadratic residue (checked by taking
+   the root: the field prime is 3 mod 4, so a root of
+   a residue is rhs^((p+1)/4)), with the even root
+   chosen so every caller lands on the same point.
+   Half of all x coordinates qualify, so 256 tries
+   failing is a 2^-256 event. A key that is not a
+   whole P-256 public key is null. */
+function hashToPointP256(publicKeyHex) {
+  var point = parseP256Point(publicKeyHex);
+  if (point === null) return Promise.resolve(null);
+  var canonical = formatP256PublicKey(point);
+  var sqrtExponent = (P256_P + P256_ONE) / BigInt(4);
+  var attempt = function (counter) {
+    if (counter > 255) return Promise.resolve(null);
+    return sha256Hex(LINKRING_HASH_PREFIX + "\n" + canonical + "\n" + counter)
+      .then(function (digest) {
+        if (digest === null) return null;
+        var x = BigInt("0x" + digest) % P256_P;
+        var rhs = p256Mod(x * x * x - P256_THREE * x + P256_B);
+        var y = p256Pow(rhs, sqrtExponent);
+        if (p256Mod(y * y) !== rhs) return attempt(counter + 1);
+        if ((y & P256_ONE) === P256_ONE) y = P256_P - y;
+        return formatP256PublicKey({ x: x, y: y });
+      });
+  };
+  return attempt(0);
+}
+
+/* One link's challenge: SHA-256 over the label, BOTH
+   link points (canonicalised) and the message,
+   reduced under the order; zero refused as in
+   tool 34. */
+function linkableChallenge(message, eHex, fHex) {
+  var ePoint = parseP256Point(eHex);
+  var fPoint = parseP256Point(fHex);
+  if (ePoint === null || fPoint === null || !validSchnorrMessage(message)) {
+    return Promise.resolve(null);
+  }
+  return sha256Hex(LINKRING_CHALLENGE_PREFIX + "\n" +
+      formatP256PublicKey(ePoint) + "\n" + formatP256PublicKey(fPoint) +
+      "\n" + message)
+    .then(function (digest) {
+      if (digest === null) return null;
+      var value = BigInt("0x" + digest) % P256_N;
+      if (value === P256_ZERO) return null;
+      return p256IntToHex(value);
+    });
+}
+
+/* One link of the doubled chain, computed forwards:
+   E = z×G + c×Y and F = z×Hp(Y) + c×I, as canonical
+   points. Either sum landing on the point at
+   infinity — pieces arranged against each other —
+   is null, never a half-link. Synchronous and
+   deterministic, like ringPointFor, so tests can pin
+   it against Node's own curve arithmetic. */
+function linkablePointPair(challengeHex, responseHex, publicKeyHex, hashPointHex, imageHex) {
+  var challenge = parseProofScalar(challengeHex);
+  var response = parseProofResponse(responseHex);
+  var pubPoint = parseP256Point(publicKeyHex);
+  var hashPoint = parseP256Point(hashPointHex);
+  var imagePoint = parseP256Point(imageHex);
+  if (challenge === null || response === null || pubPoint === null ||
+      hashPoint === null || imagePoint === null) return null;
+  var z = BigInt("0x" + response);
+  var c = BigInt("0x" + challenge);
+  var zG = z === P256_ZERO ? null : p256PointMultiply(z, { x: P256_GX, y: P256_GY });
+  var e = p256PointAdd(zG, p256PointMultiply(c, pubPoint));
+  var zH = z === P256_ZERO ? null : p256PointMultiply(z, hashPoint);
+  var f = p256PointAdd(zH, p256PointMultiply(c, imagePoint));
+  if (e === null || f === null) return null;
+  return { e: formatP256PublicKey(e), f: formatP256PublicKey(f) };
+}
+
+/* The key image for one key pair: I = x×Hp(Y). The
+   private key must be the private half of the public
+   key offered — an image for some other pairing is
+   refused as null, never computed. */
+function linkableKeyImage(privateKeyHex, publicKeyHex) {
+  var pubPoint = parseP256Point(publicKeyHex);
+  if (pubPoint === null) return Promise.resolve(null);
+  return agreementPrivateParts(privateKeyHex).then(function (parts) {
+    if (!parts) return null;
+    var sx = BigInt("0x" + parts.pointHex.slice(2, 66));
+    var sy = BigInt("0x" + parts.pointHex.slice(66, 130));
+    if (sx !== pubPoint.x || sy !== pubPoint.y) return null;
+    return hashToPointP256(publicKeyHex).then(function (hashHex) {
+      if (hashHex === null) return null;
+      var image = p256PointMultiply(BigInt("0x" + parts.scalarHex),
+        parseP256Point(hashHex));
+      return image === null ? null : formatP256PublicKey(image);
+    });
+  });
+}
+
+/* The signature line: the format tag, the key image
+   (a point in the same canonical shape as a public
+   key — it is a point, not a key, and spends
+   nothing), the seed challenge, and one answer per
+   ring member, in ring order. */
+function formatLinkableRingSignature(imageHex, seedHex, responses) {
+  var imagePoint = parseP256Point(imageHex);
+  var seed = parseProofScalar(seedHex);
+  if (imagePoint === null || seed === null || !Array.isArray(responses)) return null;
+  if (responses.length < LINKRING_MIN_KEYS || responses.length > LINKRING_MAX_KEYS) return null;
+  var parts = [];
+  for (var i = 0; i < responses.length; i++) {
+    var response = parseProofResponse(responses[i]);
+    if (response === null) return null;
+    parts.push(response);
+  }
+  return LINKRING_FORMAT + ":" + formatP256PublicKey(imagePoint) + ":" +
+    seed + ":" + parts.join(",");
+}
+
+function parseLinkableRingSignature(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 4 || parts[0] !== LINKRING_FORMAT) return null;
+  var imagePoint = parseP256Point(parts[1]);
+  var seed = parseProofScalar(parts[2]);
+  if (imagePoint === null || seed === null) return null;
+  var raw = parts[3].split(",");
+  if (raw.length < LINKRING_MIN_KEYS || raw.length > LINKRING_MAX_KEYS) return null;
+  var responses = [];
+  for (var i = 0; i < raw.length; i++) {
+    var response = parseProofResponse(raw[i]);
+    if (response === null) return null;
+    responses.push(response);
+  }
+  return { image: formatP256PublicKey(imagePoint), seed: seed, responses: responses };
+}
+
+/* The link check itself: two signature lines are
+   linked exactly when they carry the same key image.
+   True or false for two well-formed lines, null when
+   either cannot be parsed — "cannot be compared"
+   never blurs into "not linked". */
+function linkableRingSignaturesLinked(firstText, secondText) {
+  var first = parseLinkableRingSignature(firstText);
+  var second = parseLinkableRingSignature(secondText);
+  if (first === null || second === null) return null;
+  return first.image === second.image;
+}
+
+/* Every member's hash point, gathered in ring order;
+   one unhashable member fails the whole list as
+   null. */
+function linkableHashPoints(keys) {
+  var hashHexes = [];
+  var chain = Promise.resolve(true);
+  var collect = function (i) {
+    chain = chain.then(function (ok) {
+      if (!ok) return false;
+      return hashToPointP256(keys[i]).then(function (hashHex) {
+        if (hashHex === null) return false;
+        hashHexes[i] = hashHex;
+        return true;
+      });
+    });
+  };
+  for (var i = 0; i < keys.length; i++) collect(i);
+  return chain.then(function (ok) { return ok ? hashHexes : null; });
+}
+
+/* Signing: tool 34's walk over a doubled chain. The
+   key image is fixed from the signer's key before
+   the walk starts; the signer's own pair of links is
+   fixed from a fresh nonce; the walk invents each
+   other member's answer and pair forwards until it
+   arrives back at the signer's position carrying
+   the one challenge only they can answer,
+   z_s = k − c_s·x — which closes the F chain too,
+   because I = x×Hp(Y_s) makes z_s×Hp(Y_s) + c_s×I
+   come out to exactly k×Hp(Y_s). */
+function signLinkableRingMessage(privateKeyHex, ringText, message) {
+  var keys = parseRingPublicKeys(ringText);
+  if (keys === null || !validSchnorrMessage(message)) return Promise.resolve(null);
+  return agreementPrivateParts(privateKeyHex).then(function (parts) {
+    if (!parts) return null;
+    var points = [];
+    for (var i = 0; i < keys.length; i++) points.push(parseP256Point(keys[i]));
+    var s = ringSignerIndex(points, parts);
+    if (s < 0) return null;
+    return linkableHashPoints(keys).then(function (hashHexes) {
+      if (hashHexes === null) return null;
+      var x = BigInt("0x" + parts.scalarHex);
+      var imagePoint = p256PointMultiply(x, parseP256Point(hashHexes[s]));
+      if (imagePoint === null) return null;
+      var image = formatP256PublicKey(imagePoint);
+      var n = keys.length;
+      var attempt = function (triesLeft) {
+        var nonce = randomProofScalar();
+        if (nonce === null) return Promise.resolve(null);
+        var k = BigInt("0x" + nonce);
+        var startE = p256PointMultiply(k, { x: P256_GX, y: P256_GY });
+        var startF = p256PointMultiply(k, parseP256Point(hashHexes[s]));
+        if (startE === null || startF === null) return Promise.resolve(null);
+        var c = new Array(n);
+        var z = new Array(n);
+        var walk = linkableChallenge(message, formatP256PublicKey(startE),
+          formatP256PublicKey(startF)).then(function (first) {
+          if (first === null) return null;
+          c[(s + 1) % n] = first;
+          return true;
+        });
+        var chainStep = function (j) {
+          walk = walk.then(function (ok) {
+            if (!ok) return null;
+            var i = (s + j) % n;
+            var invented = randomProofScalar();
+            if (invented === null) return null;
+            z[i] = invented;
+            var pair = linkablePointPair(c[i], invented, keys[i], hashHexes[i], image);
+            if (pair === null) return null;
+            return linkableChallenge(message, pair.e, pair.f).then(function (next) {
+              if (next === null) return null;
+              c[(i + 1) % n] = next;
+              return true;
+            });
+          });
+        };
+        for (var j = 1; j < n; j++) chainStep(j);
+        return walk.then(function (ok) {
+          if (!ok) return triesLeft > 1 ? attempt(triesLeft - 1) : null;
+          var zs = (k - BigInt("0x" + c[s]) * x) % P256_N;
+          if (zs < P256_ZERO) zs += P256_N;
+          z[s] = p256IntToHex(zs);
+          var line = formatLinkableRingSignature(image, c[0], z);
+          if (line === null) return triesLeft > 1 ? attempt(triesLeft - 1) : null;
+          return line;
+        });
+      };
+      return attempt(8);
+    });
+  });
+}
+
+/* Verifying: walk the doubled chain from the seed,
+   recomputing each member's pair from their answer,
+   their key, their hash point and the signature's
+   own key image, and check the walk comes home to
+   the seed exactly. True only when the loop closes
+   on both points at once; false — never null — for
+   well-formed pieces whose loop does not close,
+   including a key image swapped in from another
+   signature; null for any malformed piece. The walk
+   establishes that one ring member's private key was
+   used and that its image is the one in the line —
+   and still cannot say which member. */
+function verifyLinkableRingSignature(ringText, message, signatureText) {
+  var keys = parseRingPublicKeys(ringText);
+  var parsed = parseLinkableRingSignature(signatureText);
+  if (keys === null || parsed === null || !validSchnorrMessage(message)) {
+    return Promise.resolve(null);
+  }
+  if (parsed.responses.length !== keys.length) return Promise.resolve(null);
+  return linkableHashPoints(keys).then(function (hashHexes) {
+    if (hashHexes === null) return null;
+    var walk = Promise.resolve(parsed.seed);
+    var step = function (i) {
+      walk = walk.then(function (current) {
+        if (current === null || current === false) return current;
+        var pair = linkablePointPair(current, parsed.responses[i], keys[i],
+          hashHexes[i], parsed.image);
+        if (pair === null) return false;
+        return linkableChallenge(message, pair.e, pair.f);
+      });
+    };
+    for (var i = 0; i < keys.length; i++) step(i);
+    return walk.then(function (finalChallenge) {
+      if (finalChallenge === null || finalChallenge === false) return finalChallenge;
+      return finalChallenge === parsed.seed;
+    });
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -4123,7 +4489,15 @@ if (typeof module !== "undefined" && module.exports) {
                      RING_MIN_KEYS, RING_MAX_KEYS,
                      parseRingPublicKeys, ringChallenge, ringPointFor,
                      formatRingSignature, parseRingSignature,
-                     signRingMessage, verifyRingSignature };
+                     signRingMessage, verifyRingSignature,
+                     LINKRING_FORMAT, LINKRING_CHALLENGE_PREFIX,
+                     LINKRING_HASH_PREFIX,
+                     LINKRING_MIN_KEYS, LINKRING_MAX_KEYS,
+                     p256Pow, hashToPointP256, linkableChallenge,
+                     linkablePointPair, linkableKeyImage,
+                     formatLinkableRingSignature, parseLinkableRingSignature,
+                     linkableRingSignaturesLinked,
+                     signLinkableRingMessage, verifyLinkableRingSignature };
 }
 
 if (typeof document !== "undefined") {
@@ -5947,6 +6321,93 @@ if (typeof document !== "undefined") {
             "message, the ring, or the line has been changed since " +
             "signing.";
       });
+    });
+
+    /* --- signed twice? it shows (linkable ring signatures) --- */
+    document.getElementById("lring-sign").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("lring-sig-out");
+      var status = document.getElementById("lring-sign-result");
+      out.value = "";
+      status.textContent = "Signing locally…";
+      signLinkableRingMessage(document.getElementById("lring-priv").value,
+        document.getElementById("lring-keys").value,
+        document.getElementById("lring-message").value).then(function (sig) {
+        if (!sig) {
+          status.textContent = "That cannot be signed: the ring must be " +
+            "2 to 6 whole public keys (exactly 91 bytes each, one per " +
+            "line, no duplicates), your private key must be the private " +
+            "half of one of them — a key that is not in the ring cannot " +
+            "sign for it — and the message must not be blank and must be " +
+            "at most 2,000 characters.";
+          return;
+        }
+        out.value = sig;
+        status.textContent = "Signed — as one of the ring, with a key " +
+          "image. The line carries the image, a seed challenge and one " +
+          "answer per member, in ring order; nothing in it says which " +
+          "member you are. But the image is fixed by your key alone: " +
+          "sign anything else, in any ring, and the same image appears " +
+          "again — anyone holding both lines can tell the same key " +
+          "signed twice, and still cannot tell which key it was.";
+      });
+    });
+
+    document.getElementById("lring-verify").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("lring-verify-result");
+      status.textContent = "Checking locally…";
+      verifyLinkableRingSignature(document.getElementById("lring-verify-keys").value,
+        document.getElementById("lring-verify-message").value,
+        document.getElementById("lring-verify-sig").value).then(function (ok) {
+        if (ok === null) {
+          status.textContent = "That cannot be checked: the ring must " +
+            "be 2 to 6 whole public keys (exactly 91 bytes each, one " +
+            "per line, no duplicates), the message must be the exact " +
+            "signed text (not blank, at most 2,000 characters), the " +
+            "signature one whole p4a-lring-v1 line, and the number of " +
+            "answers in it must match the number of keys in the ring. " +
+            "A half-typed piece gets no verdict at all, rather than a " +
+            "wrong one.";
+          return;
+        }
+        status.textContent = ok
+          ? "✓ One of them signed: the doubled chain of challenges " +
+            "closes back on its own seed, on both link points at once — " +
+            "exactly one private key from this ring produced that line " +
+            "over this exact message, and the key image in the line is " +
+            "that key's image. The check still cannot say which member."
+          : "⚠ Not proved: the pieces are well-formed, but the chain " +
+            "does not close. No single member of this ring, in this " +
+            "order, signed this exact message with that line and that " +
+            "key image — or the message, the ring, or the line has " +
+            "been changed since signing.";
+      });
+    });
+
+    document.getElementById("lring-link").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("lring-link-result");
+      status.textContent = "Comparing locally…";
+      var linked = linkableRingSignaturesLinked(
+        document.getElementById("lring-link-a").value,
+        document.getElementById("lring-link-b").value);
+      if (linked === null) {
+        status.textContent = "That cannot be compared: both pieces " +
+          "must be whole p4a-lring-v1 signature lines. A half-typed " +
+          "line gets no verdict at all, rather than a wrong one.";
+        return;
+      }
+      status.textContent = linked
+        ? "✓ Linked: both lines carry the same key image, so the same " +
+          "ring member's key signed both — in whatever rings, over " +
+          "whatever messages. That is all the image can ever say: " +
+          "same key twice, never which key."
+        : "Not linked: the two lines carry different key images, so " +
+          "they were signed by different keys. (Either line could still " +
+          "be unverified or forged — linking compares images, it does " +
+          "not check a signature; run each line through the check " +
+          "above for that.)";
     });
 
     /* --- copy donation address --- */

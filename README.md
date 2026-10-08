@@ -614,6 +614,32 @@ renewable resource that pays for shielded transactions.
   format any chain or wallet checks. Never paste a
   real wallet key or a production private key into
   any web page, including this one.
+- **Signed twice? It shows — a linkable ring
+  signature** — the LSAG form of the ring above: the
+  same Abe–Ohkubo–Suzuki chain doubled, each link a
+  pair `E_i = z_i×G + c_i×Y_i` and
+  `F_i = z_i×Hp(Y_i) + c_i×I`, each challenge SHA-256
+  under the label `privacy4all-linkable-ring-v1` of
+  both points and the message, and every signature
+  carrying a key image `I = x×Hp(Y)` (format
+  `p4a-lring-v1`). `Hp` hashes a public key to a
+  curve point by try-and-increment under the label
+  `privacy4all-linkable-hash-v1` — no known discrete
+  log, so nobody can compute a member's image from
+  their public key alone — yet the same key always
+  yields the same image, in any ring, over any
+  message, so `linkableRingSignaturesLinked` can say
+  whether two lines came from one key: linked,
+  without being identified. The verdict returns
+  `true`, `false`, or `null` for malformed pieces.
+  Honestly labelled: in this teaching version the
+  image is tied to the member key itself, so the
+  same signer is linkable across every ring and
+  message — Monero ties its image to a one-time key
+  per note, a narrower exposure. Not the signature
+  format any chain or wallet checks. Never paste a
+  real wallet key or a production private key into
+  any web page, including this one.
 
 ## Guides
 
