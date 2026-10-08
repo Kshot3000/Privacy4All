@@ -5062,6 +5062,349 @@ function combineThresholdResponses(commitmentSetText, responsesText) {
   return formatSchnorrSignature(set.aggregate, p256IntToHex(total));
 }
 
+/* ---------- 38. No dealer ever saw it — distributed key generation ----------
+
+   Tool 37 ends on a named flaw: a dealer splits the
+   group key, and the dealer sees the whole key at
+   setup. This tool removes the dealer. In a
+   distributed key generation (Pedersen's scheme, with
+   Feldman's verifiable sharing as the check), EVERY
+   holder deals a split of their own random
+   contribution, and the group key is the sum of the
+   contributions — a number that is never computed,
+   by anyone, anywhere in this code: only its public
+   key exists, as the sum of the contributions'
+   public commitments.
+
+   Holder j draws a fresh scalar x_j and, for a quorum
+   of t, fresh coefficients a_j1…a_j(t−1), exactly
+   tool 37's polynomial shape. They broadcast ONE
+   commitment line (p4a-dkgcommit-v1) carrying the
+   Feldman commitments C_jk = a_jk×G — with a_j0 read
+   as x_j itself — and they send each holder i,
+   privately, one share line (p4a-dkgshare-v1)
+   carrying f_j(i), computed by tool 37's own
+   thresholdShareScalar. A commitment reveals nothing
+   about its scalar; what it does is bind the dealer
+   to it, because the recipient can check the share
+   against the commitments: f_j(i)×G must equal
+   Σ_k i^k·C_jk. A share that fails that check is a
+   dealer who dealt inconsistently — false, not a
+   rounding error — and finalizing refuses it.
+
+   Finalizing is addition and nothing else: holder i
+   sums the shares addressed to them, one from every
+   dealer including themselves, and the sum F(i) is
+   a point on the SUMMED polynomial
+   F(t) = Σ_j f_j(t), whose constant term is
+   Σ_j x_j — the group scalar, which exists only as
+   that sum of shares, never as a value anyone held.
+   The final line is formatted as an ordinary tool 37
+   share (p4a-threshshare-v1), so a key generated here
+   signs in tool 37 unchanged, and the group public
+   key is the sum of the dealers' first commitments,
+   Σ_j C_j0 = (Σ_j x_j)×G.
+
+   The honest limits are structural. This page plays
+   every holder on one device, so here the whole
+   round is visible in one place; in real use each
+   holder runs their own device, only commitment
+   lines are broadcast, and share lines travel over
+   private channels — a share line is a secret of
+   the same rank as in tool 37. There is no complaint
+   or dispute round: real protocols add one, where a
+   dealer whose share fails the Feldman check is
+   disqualified by the group and the round restarts
+   without them — here verification and finalizing
+   simply refuse, and restarting is the group's own
+   business off-page. This simplified round also
+   makes no claim to FROST's full proofs: a dealer
+   who waits to see the others' commitments before
+   choosing their own can bias the group key's
+   distribution in ways Gennaro and co-authors
+   showed for Pedersen's original scheme, which is
+   why production protocols add rounds this teaching
+   page does not. And the frame is the house one: a
+   real distributed key generation computed and
+   checked locally, but not the key format any chain
+   or wallet checks, not a Compact circuit proof, and
+   not an audited wallet and not side-channel
+   resistant. Never paste a real wallet key or a
+   production private key into any web page, including
+   this one — this tool needs no existing key at all:
+   every contribution is drawn fresh on the page. */
+var DKG_COMMIT_FORMAT = "p4a-dkgcommit-v1";
+var DKG_SHARE_FORMAT = "p4a-dkgshare-v1";
+
+/* One dealer's Feldman commitments for a contribution
+   polynomial: the public points of the contribution
+   scalar itself and of each coefficient, in order —
+   [x×G, a₁×G, (a₂×G)]. The count is the quorum: a
+   quorum of 2 publishes two points, 3 publishes
+   three. Nothing here reveals a scalar; the points
+   exist so every dealt share can be checked against
+   them at finalizing time. */
+function dkgPolynomialCommitments(scalarHex, coefficientHexes) {
+  var scalar = parseProofScalar(scalarHex);
+  if (scalar === null || !Array.isArray(coefficientHexes) ||
+      coefficientHexes.length < 1 ||
+      coefficientHexes.length > THRESH_MAX_THRESHOLD - 1) {
+    return null;
+  }
+  var points = [proofCommitmentForNonce(scalar)];
+  if (points[0] === null) return null;
+  for (var i = 0; i < coefficientHexes.length; i++) {
+    var coeff = parseProofScalar(coefficientHexes[i]);
+    if (coeff === null) return null;
+    var point = proofCommitmentForNonce(coeff);
+    if (point === null) return null;
+    points.push(point);
+  }
+  return points;
+}
+
+/* A commitment line: the format tag, the quorum, the
+   dealer's index, and the Feldman commitment points
+   in polynomial order — exactly `threshold` points,
+   because the constant point plus one per coefficient
+   is the whole polynomial a verifier needs. This is
+   the line a dealer BROADCASTS: it is public by
+   design and safe to publish anywhere. */
+function formatDkgCommitmentLine(threshold, dealerIndex, commitments) {
+  if (!validThresholdValue(threshold) ||
+      !validThresholdIndexValue(dealerIndex) ||
+      !Array.isArray(commitments) || commitments.length !== threshold) {
+    return null;
+  }
+  var points = [];
+  for (var i = 0; i < commitments.length; i++) {
+    var point = parseP256Point(commitments[i]);
+    if (point === null) return null;
+    points.push(formatP256PublicKey(point));
+  }
+  return DKG_COMMIT_FORMAT + ":" + threshold + ":" + dealerIndex + ":" +
+    points.join(":");
+}
+
+function parseDkgCommitmentLine(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length < 3 || parts[0] !== DKG_COMMIT_FORMAT) return null;
+  if (!/^[2-3]$/.test(parts[1])) return null;
+  var threshold = Number(parts[1]);
+  if (parts.length !== 3 + threshold) return null;
+  var dealer = parseThresholdIndexText(parts[2]);
+  if (dealer === null) return null;
+  var commitments = [];
+  for (var i = 0; i < threshold; i++) {
+    var point = parseP256Point(parts[3 + i]);
+    if (point === null) return null;
+    commitments.push(formatP256PublicKey(point));
+  }
+  return { threshold: threshold, dealer: dealer, commitments: commitments };
+}
+
+/* A dealt share line: the format tag, the quorum, the
+   dealer's index, the RECIPIENT's index, and the
+   share scalar f_dealer(recipient). Unlike the
+   commitment line this is a secret — it travels from
+   the dealer to exactly one holder, privately. A
+   dealer deals to themselves too: their own share of
+   their own polynomial is one of the summands of
+   their final share. */
+function formatDkgShareLine(threshold, dealerIndex, recipientIndex, shareHex) {
+  var share = parseProofScalar(shareHex);
+  if (!validThresholdValue(threshold) ||
+      !validThresholdIndexValue(dealerIndex) ||
+      !validThresholdIndexValue(recipientIndex) || share === null) {
+    return null;
+  }
+  return DKG_SHARE_FORMAT + ":" + threshold + ":" + dealerIndex + ":" +
+    recipientIndex + ":" + share;
+}
+
+function parseDkgShareLine(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 5 || parts[0] !== DKG_SHARE_FORMAT) return null;
+  if (!/^[2-3]$/.test(parts[1])) return null;
+  var dealer = parseThresholdIndexText(parts[2]);
+  var recipient = parseThresholdIndexText(parts[3]);
+  var share = parseProofScalar(parts[4]);
+  if (dealer === null || recipient === null || share === null) return null;
+  return { threshold: Number(parts[1]), dealer: dealer,
+           recipient: recipient, share: share };
+}
+
+/* One holder's whole move as a dealer: draw a fresh
+   contribution scalar and its coefficients, publish
+   the commitment line, and deal one share line to
+   every holder including themselves. The contribution
+   scalar itself is never returned — once the shares
+   are dealt, nobody needs it, and keeping it would
+   keep a road back to a piece of the group key. */
+function generateDkgContribution(threshold, count, dealerIndex) {
+  if (!validThresholdValue(threshold) ||
+      typeof count !== "number" || !isFinite(count) ||
+      Math.floor(count) !== count ||
+      count < threshold || count > THRESH_MAX_COUNT ||
+      !validThresholdIndexValue(dealerIndex) || dealerIndex > count) {
+    return null;
+  }
+  var scalar = randomProofScalar();
+  if (scalar === null) return null;
+  var coeffs = [];
+  for (var c = 0; c < threshold - 1; c++) {
+    var coeff = randomProofScalar();
+    if (coeff === null) return null;
+    coeffs.push(coeff);
+  }
+  var commitments = dkgPolynomialCommitments(scalar, coeffs);
+  var commitmentLine = commitments === null ? null :
+    formatDkgCommitmentLine(threshold, dealerIndex, commitments);
+  if (commitmentLine === null) return null;
+  var shares = [];
+  for (var i = 1; i <= count; i++) {
+    var shareScalar = thresholdShareScalar(scalar, coeffs, i);
+    if (shareScalar === null) return null;
+    var line = formatDkgShareLine(threshold, dealerIndex, i, shareScalar);
+    if (line === null) return null;
+    shares.push(line);
+  }
+  return { dealer: dealerIndex, commitment: commitmentLine, shares: shares };
+}
+
+/* The Feldman check, over parsed lines: a dealt share
+   verifies when share×G equals the commitments
+   weighted by the recipient's powers,
+   Σ_k recipient^k·C_k. True is a share consistent
+   with what its dealer broadcast; false is a
+   well-formed share that does not match those
+   commitments — an inconsistent dealer, not a typo
+   this function can forgive; malformed lines, or a
+   share and a commitment line from different dealers
+   or different quorums, are null. */
+function verifyDkgShareParsed(commitment, share) {
+  if (!commitment || !share) return null;
+  if (commitment.threshold !== share.threshold ||
+      commitment.dealer !== share.dealer) {
+    return null;
+  }
+  var lhs = p256PointMultiply(BigInt("0x" + share.share),
+    { x: P256_GX, y: P256_GY });
+  if (lhs === null) return false;
+  var rhs = null;
+  var power = BigInt(1);
+  var recipient = BigInt(share.recipient);
+  for (var k = 0; k < commitment.commitments.length; k++) {
+    var point = parseP256Point(commitment.commitments[k]);
+    if (point === null) return null;
+    var term = power === BigInt(1) ? point : p256PointMultiply(power, point);
+    if (term === null) return false;
+    rhs = rhs === null ? term : p256PointAdd(rhs, term);
+    if (rhs === null) return false;
+    power = power * recipient;
+  }
+  return formatP256PublicKey(lhs) === formatP256PublicKey(rhs);
+}
+
+function verifyDkgShare(commitmentLineText, shareLineText) {
+  return verifyDkgShareParsed(parseDkgCommitmentLine(commitmentLineText),
+    parseDkgShareLine(shareLineText));
+}
+
+/* The broadcast set, parsed strictly: two to five
+   commitment lines, one common quorum, and the
+   dealers exactly 1..count, each once — a round with
+   a dealer missing is not a round this page will
+   finalize, because the summed polynomial would
+   silently be a different group key than the set of
+   holders agreed to. The group public key falls out
+   of the parse: the sum of every dealer's constant
+   commitment, which is (Σ x_j)×G — computed as
+   points, never as a scalar. */
+function parseDkgCommitmentSet(text) {
+  if (typeof text !== "string") return null;
+  var lines = text.split(/\r?\n/);
+  var byDealer = {};
+  var threshold = null;
+  var count = 0;
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (line === "") continue;
+    var parsed = parseDkgCommitmentLine(line);
+    if (parsed === null || byDealer[parsed.dealer]) return null;
+    if (threshold === null) threshold = parsed.threshold;
+    if (parsed.threshold !== threshold) return null;
+    byDealer[parsed.dealer] = parsed;
+    count++;
+  }
+  if (count < THRESH_MIN_COUNT || count > THRESH_MAX_COUNT ||
+      threshold === null || count < threshold) {
+    return null;
+  }
+  var groupPoint = null;
+  for (var d = 1; d <= count; d++) {
+    if (!byDealer[d]) return null;
+    var constant = parseP256Point(byDealer[d].commitments[0]);
+    if (constant === null) return null;
+    groupPoint = groupPoint === null ? constant :
+      p256PointAdd(groupPoint, constant);
+    if (groupPoint === null) return null;
+  }
+  return { threshold: threshold, count: count, byDealer: byDealer,
+           publicKey: formatP256PublicKey(groupPoint) };
+}
+
+/* Finalizing, for one holder: the broadcast commitment
+   set plus every share line addressed to that holder —
+   exactly one per dealer, each passing its Feldman
+   check against that dealer's own commitments, all
+   addressed to the same recipient. The final share is
+   the plain sum of the dealt shares under the order;
+   a sum of exactly zero is refused rather than handed
+   out as a share that would answer challenges with
+   nothing. The output share line is tool 37's own
+   format, deliberately: a key generated with no
+   dealer signs in tool 37 unchanged. Any share that
+   fails its check, is missing, is duplicated, or is
+   addressed to someone else makes the whole finalize
+   null — a group does not finalize on a partial or
+   inconsistent round. */
+function finalizeDkgShares(commitmentSetText, shareLinesText) {
+  var set = parseDkgCommitmentSet(commitmentSetText);
+  if (set === null || typeof shareLinesText !== "string") return null;
+  var lines = shareLinesText.split(/\r?\n/);
+  var seen = {};
+  var recipient = null;
+  var total = P256_ZERO;
+  var found = 0;
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (line === "") continue;
+    var share = parseDkgShareLine(line);
+    if (share === null || share.threshold !== set.threshold ||
+        !set.byDealer[share.dealer] || seen[share.dealer]) {
+      return null;
+    }
+    if (recipient === null) recipient = share.recipient;
+    if (share.recipient !== recipient) return null;
+    if (verifyDkgShareParsed(set.byDealer[share.dealer], share) !== true) {
+      return null;
+    }
+    seen[share.dealer] = true;
+    total = (total + BigInt("0x" + share.share)) % P256_N;
+    found++;
+  }
+  if (found !== set.count || recipient === null) return null;
+  if (total === P256_ZERO) return null;
+  var shareLine = formatThresholdShare(set.threshold, recipient,
+    p256IntToHex(total));
+  if (shareLine === null) return null;
+  return { publicKey: set.publicKey, recipient: recipient,
+           shareLine: shareLine };
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -5179,7 +5522,13 @@ if (typeof module !== "undefined" && module.exports) {
                      formatThresholdCommitmentLine, parseThresholdCommitmentSet,
                      formatThresholdSignerState, parseThresholdSignerState,
                      makeThresholdCommitment, thresholdPartialResponse,
-                     combineThresholdResponses };
+                     combineThresholdResponses,
+                     DKG_COMMIT_FORMAT, DKG_SHARE_FORMAT,
+                     dkgPolynomialCommitments,
+                     formatDkgCommitmentLine, parseDkgCommitmentLine,
+                     formatDkgShareLine, parseDkgShareLine,
+                     generateDkgContribution, verifyDkgShare,
+                     parseDkgCommitmentSet, finalizeDkgShares };
 }
 
 if (typeof document !== "undefined") {
@@ -7306,6 +7655,95 @@ if (typeof document !== "undefined") {
         "against the GROUP public key and the exact message, and " +
         "it balances — signed by a quorum, under one key, with no " +
         "trace in the line of who held shares or how many it took.";
+    });
+
+    /* --- no dealer ever saw it (distributed key generation) --- */
+    document.getElementById("dkg-contribute").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var commitOut = document.getElementById("dkg-commitment-out");
+      var sharesOut = document.getElementById("dkg-shares-out");
+      var status = document.getElementById("dkg-contribute-result");
+      commitOut.value = "";
+      sharesOut.value = "";
+      var made = generateDkgContribution(
+        Number(document.getElementById("dkg-threshold").value),
+        Number(document.getElementById("dkg-count").value),
+        Number(document.getElementById("dkg-dealer").value));
+      if (!made) {
+        status.textContent = "That contribution cannot be made: " +
+          "the quorum must be 2 or 3, the holder count must be at " +
+          "least the quorum and at most 5, your holder number must " +
+          "be one of the holders, and this browser must offer " +
+          "randomness to draw the contribution from.";
+        return;
+      }
+      commitOut.value = made.commitment;
+      sharesOut.value = made.shares.join("\n");
+      status.textContent = "Contribution made, holder " + made.dealer +
+        ". Broadcast the commitment line where every holder can " +
+        "reach it — it is public, and it binds you to the shares " +
+        "you dealt without revealing any of them. Send each share " +
+        "line to exactly its own holder, privately: the line's " +
+        "fourth field is the holder it belongs to, and a share is " +
+        "a secret. Your contribution scalar itself was never shown " +
+        "and is not stored — once every holder finalizes, no copy " +
+        "of it exists anywhere, which is the point.";
+    });
+
+    document.getElementById("dkg-verify").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("dkg-verify-result");
+      var verdict = verifyDkgShare(document.getElementById("dkg-verify-commitment").value,
+        document.getElementById("dkg-verify-share").value);
+      if (verdict === null) {
+        status.textContent = "That cannot be checked: the " +
+          "commitment line and the share line must each be one " +
+          "whole line, from the same dealer and for the same " +
+          "quorum — a share is only ever checked against its own " +
+          "dealer's commitments.";
+        return;
+      }
+      status.textContent = verdict ?
+        "Consistent. That share is exactly the share its dealer " +
+          "committed to dealing you: share × G equals the dealer's " +
+          "broadcast commitments weighted by your holder powers. " +
+          "The dealer dealt honestly — at least to you." :
+        "INCONSISTENT. That well-formed share does not match its " +
+          "dealer's broadcast commitments: the dealer dealt a " +
+          "different polynomial than the one they committed to. " +
+          "Do not finalize with it — in a real protocol this is " +
+          "the evidence a dispute round disqualifies a dealer on.";
+    });
+
+    document.getElementById("dkg-finalize").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var pubOut = document.getElementById("dkg-finalize-pub-out");
+      var shareOut = document.getElementById("dkg-finalize-share-out");
+      var status = document.getElementById("dkg-finalize-result");
+      pubOut.value = "";
+      shareOut.value = "";
+      var done = finalizeDkgShares(document.getElementById("dkg-finalize-commitments").value,
+        document.getElementById("dkg-finalize-shares").value);
+      if (!done) {
+        status.textContent = "That cannot be finalized: the " +
+          "commitment set must hold one whole line per dealer — " +
+          "holders 1 through the holder count, each once, one " +
+          "quorum — and the share lines must be exactly one per " +
+          "dealer, all addressed to you, and every one must pass " +
+          "its Feldman check against its dealer's commitments. A " +
+          "group does not finalize on a partial or inconsistent " +
+          "round.";
+        return;
+      }
+      pubOut.value = done.publicKey;
+      shareOut.value = done.shareLine;
+      status.textContent = "Finalized, holder " + done.recipient +
+        ". Your share line is an ordinary tool 37 share: guard it " +
+        "exactly like one, and sign with it in tool 37 against " +
+        "the group public key above. The group key itself was " +
+        "never computed by anyone — not by you, not by any " +
+        "dealer: what exists is its public key, and one share " +
+        "per holder.";
     });
 
     /* --- copy donation address --- */

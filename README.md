@@ -702,6 +702,39 @@ renewable resource that pays for shielded transactions.
   format any chain or wallet checks. Never paste
   a real wallet key or a production private key
   into any web page, including this one.
+- **No dealer ever saw it — distributed key
+  generation** — the fix for tool 37's named flaw,
+  Pedersen's distributed key generation with
+  Feldman's verifiable sharing as the check: there
+  is no group key to split, so every holder deals a
+  split of their own fresh random contribution
+  instead. Each broadcasts one commitment line
+  (`p4a-dkgcommit-v1`) carrying the Feldman
+  commitments `C_jk = a_jk×G` and sends each holder
+  one private share line (`p4a-dkgshare-v1`)
+  carrying `f_j(i)`, computed by tool 37's own
+  polynomial arithmetic. A recipient checks a dealt
+  share against the broadcast commitments —
+  `share × G` must equal `Σ_k i^k·C_jk` — and a
+  share that fails is a dealer who dealt a
+  different polynomial than the one they committed
+  to. Finalizing is addition only: holder i sums
+  the shares addressed to them, and the sum is a
+  share of the summed polynomial, whose constant
+  term — the group scalar — is never computed by
+  anyone; only its public key exists, as the sum
+  of the dealers' constant commitments. The
+  finalized line is an ordinary
+  `p4a-threshshare-v1` share, so a dealerless key
+  signs in tool 37 unchanged. Honestly labelled: a
+  simplified teaching round — this page plays
+  every holder on one device, there is no
+  complaint/dispute round (verification and
+  finalizing simply refuse), and no claim to
+  FROST's full security proofs. Not the key format
+  any chain or wallet checks. It needs no existing
+  key at all — every contribution is drawn fresh
+  on the page.
 
 ## Guides
 
