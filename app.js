@@ -5405,6 +5405,265 @@ function finalizeDkgShares(commitmentSetText, shareLinesText) {
            shareLine: shareLine };
 }
 
+/* ---------- 39. A signature that waits for a secret — adaptor signatures ----------
+
+   Every signature on this page is finished the moment
+   it is made: tool 33's line either verifies or it
+   does not, and nothing that happens afterwards can
+   change that. Some agreements need the opposite
+   shape — a signature that is complete except for one
+   missing number, so that revealing that number
+   finishes the signature, and finishing the signature
+   reveals the number. That is an adaptor signature,
+   run here locally on tool 33's own Schnorr scheme.
+   The missing number is an ordinary proof scalar t,
+   the adaptor secret; what the world sees of it is
+   only its point T = t×G, the adaptor point, which
+   reveals nothing about t. The signer makes a
+   pre-signature: draw a nonce k, commit to it as
+   usual at R = k×G, then shift the commitment by the
+   adaptor point, R̂ = R + T, and draw tool 33's
+   challenge over the SHIFTED commitment and the
+   message. The answer s′ = k + e·x is tool 32's
+   arithmetic unchanged — but it answers for R, while
+   the challenge was drawn over R̂, so the line
+   (R̂, s′) is not a signature: tool 33's verifier
+   checks it and says false, because s′×G = R + e×Y,
+   one adaptor point short of the R̂ + e×Y a finished
+   signature needs. Anyone holding T can check the
+   pre-signature is genuine — s′×G must equal
+   (R̂ − T) + e×Y — so both sides can confirm, before
+   anything is revealed, that exactly one number is
+   missing and it is the number whose point is T.
+   Adapting is adding that number: s = s′ + t, and
+   the line (R̂, s) is an ordinary p4a-schnorr-v1
+   signature that tool 33's verifier accepts, because
+   s×G = s′×G + T = R̂ + e×Y exactly. Extraction is
+   the same addition read backwards: anyone holding
+   both the pre-signature and the adapted signature
+   computes t = s − s′ and recovers the adaptor secret
+   itself — that symmetry is the mechanism, not a
+   side effect. Agree a secret's point with a stranger,
+   take their pre-signature locked to it, and the
+   moment either side publishes an adapted signature
+   the other side can extract the secret and adapt
+   their own — which is why real systems build atomic
+   swaps and payment locks out of exactly this shape:
+   two signatures on two chains, one secret, both
+   complete or neither does.
+
+   The honest limits are plain. The pre-signature is
+   worthless until adapted — it verifies as nothing,
+   spends nothing, and proves only that its maker knew
+   the signing key and aimed it at this adaptor point.
+   The adaptor point has to really be the point of the
+   secret the agreement is about: a swapped point
+   locks the signature to a stranger's secret, and
+   adapting with any other number produces a line tool
+   33's verifier rejects — check the point the way
+   tool 28 checks a key, over a channel you already
+   trust, before relying on a pre-signature.
+   Publication is the reveal: an adapted signature
+   shown to anyone who holds the pre-signature hands
+   them the secret, so there is no adapting "privately"
+   to one verifier — adapt to one holder of the
+   pre-signature and you have adapted for all of them.
+   And the nonce discipline of tools 32 and 33 is
+   inherited whole: one nonce behind two pre-signatures
+   with different challenges leaks the signing key the
+   same way. Honestly labelled: this is a real adaptor
+   signature computed and checked locally, but it is
+   not the signature format any chain or wallet checks;
+   it is the maths in the open, not one of Midnight's
+   Compact circuit proofs; and like tool 30 the curve
+   code is a teaching implementation — affine
+   arithmetic written to be read and checked line by
+   line, not an audited wallet and not side-channel
+   resistant. Never paste a real wallet key or a
+   production private key into any web page, including
+   this one — practise with throwaway keys from tools
+   17 and 18. */
+var ADAPTOR_FORMAT = "p4a-adaptor-v1";
+
+/* A point's reflection through the x-axis: the same x,
+   the negated y. Subtracting a point is adding its
+   reflection, and the pre-signature check below is the
+   one place on this page that needs it. A point with
+   y = 0 would be its own reflection; P-256 has no such
+   point (its order is odd), so no input that parses
+   can produce one. */
+function p256PointNegate(point) {
+  if (point === null) return null;
+  return { x: point.x, y: p256Mod(P256_P - point.y) };
+}
+
+/* The adaptor point for one secret: T = t×G, computed
+   by tool 32's own commitment arithmetic, because a
+   nonce commitment and an adaptor point are the same
+   object — a scalar's public shadow. A secret that is
+   not a whole scalar in [1, n−1] is null. */
+function adaptorPointForSecret(secretHex) {
+  return proofCommitmentForNonce(secretHex);
+}
+
+/* A fresh adaptor secret and its point, drawn the way
+   every secret on this page is drawn. The secret is a
+   number of private-key rank: whoever holds it can
+   finish any signature locked to its point, and
+   whoever sees an adapted signature beside its
+   pre-signature can take it — it is shown once, here,
+   and stored nowhere. */
+function generateAdaptorSecret() {
+  var secret = randomProofScalar();
+  if (secret === null) return null;
+  var point = adaptorPointForSecret(secret);
+  if (point === null) return null;
+  return { secret: secret, point: point };
+}
+
+/* The pre-signature line: the format tag, the ADAPTED
+   commitment R̂ (a whole 91-byte public key) and the
+   pre-response s′ (a whole 64-hex scalar, zero allowed
+   by the parser for the same 2^-256 reason as tool
+   33's). The unshifted R never appears: it is
+   recoverable from R̂ and the adaptor point, and
+   publishing it separately would only invite pairing
+   the line with the wrong point. */
+function formatAdaptorSignature(commitmentHex, responseHex) {
+  var point = parseP256Point(commitmentHex);
+  var response = parseProofResponse(responseHex);
+  if (point === null || response === null) return null;
+  return ADAPTOR_FORMAT + ":" + formatP256PublicKey(point) + ":" + response;
+}
+
+function parseAdaptorSignature(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 3 || parts[0] !== ADAPTOR_FORMAT) return null;
+  var point = parseP256Point(parts[1]);
+  var response = parseProofResponse(parts[2]);
+  if (point === null || response === null) return null;
+  return { commitment: formatP256PublicKey(point), response: response };
+}
+
+/* Making a pre-signature: validate the signer's key by
+   reading its own parts back through the platform (as
+   in tool 32, a public key offered as a private key
+   never imports), draw a fresh nonce, shift its
+   commitment by the adaptor point, draw tool 33's
+   challenge over the shifted commitment, and answer
+   with tool 32's arithmetic. A shifted commitment that
+   lands on the point at infinity — the nonce point
+   exactly cancelling the adaptor point, a 2^-256
+   event — or a zero challenge or answer simply draws
+   a fresh nonce and tries again, exactly as tool 33's
+   signer does. */
+function createAdaptorSignature(privateKeyHex, message, adaptorPointHex) {
+  var adaptorPoint = parseP256Point(adaptorPointHex);
+  if (adaptorPoint === null || !validSchnorrMessage(message)) {
+    return Promise.resolve(null);
+  }
+  return agreementPrivateParts(privateKeyHex).then(function (parts) {
+    if (!parts) return null;
+    var attempt = function (triesLeft) {
+      var nonce = randomProofScalar();
+      if (nonce === null) return Promise.resolve(null);
+      var commitment = proofCommitmentForNonce(nonce);
+      if (commitment === null) return Promise.resolve(null);
+      var shifted = p256PointAdd(parseP256Point(commitment), adaptorPoint);
+      var shiftedHex = formatP256PublicKey(shifted);
+      if (shiftedHex === null) {
+        return triesLeft > 1 ? attempt(triesLeft - 1) : Promise.resolve(null);
+      }
+      return schnorrChallenge(shiftedHex, message).then(function (challenge) {
+        if (challenge === null) {
+          return triesLeft > 1 ? attempt(triesLeft - 1) : null;
+        }
+        var response = proofResponseForScalar(parts.scalarHex, nonce, challenge);
+        if (response === null) {
+          return triesLeft > 1 ? attempt(triesLeft - 1) : null;
+        }
+        return formatAdaptorSignature(shiftedHex, response);
+      });
+    };
+    return attempt(8);
+  });
+}
+
+/* Checking a pre-signature: recompute the challenge
+   from the message and the line's own adapted
+   commitment, unshift the commitment with the adaptor
+   point it claims to be locked to, and check tool 32's
+   equation against what remains, s′×G = (R̂ − T) + e×Y.
+   True only when it balances; false — never null —
+   for well-formed pieces that do not balance (a
+   pre-response nudged by one, a different message, a
+   stranger's key, the wrong adaptor point — including
+   the point of the very secret that would adapt it,
+   offered one step too early); null for any malformed
+   piece, so "not a genuine pre-signature" and "cannot
+   be checked" never blur. */
+function verifyAdaptorSignature(publicKeyHex, message, adaptorPointHex, adaptorText) {
+  var parsed = parseAdaptorSignature(adaptorText);
+  var pubPoint = parseP256Point(publicKeyHex);
+  var adaptorPoint = parseP256Point(adaptorPointHex);
+  if (parsed === null || pubPoint === null || adaptorPoint === null ||
+      !validSchnorrMessage(message)) {
+    return Promise.resolve(null);
+  }
+  return schnorrChallenge(parsed.commitment, message).then(function (challenge) {
+    if (challenge === null) return null;
+    var lhs = p256PointMultiply(BigInt("0x" + parsed.response), { x: P256_GX, y: P256_GY });
+    if (lhs === null) return false;
+    var unshifted = p256PointAdd(parseP256Point(parsed.commitment),
+      p256PointNegate(adaptorPoint));
+    var rhs = p256PointAdd(unshifted,
+      p256PointMultiply(BigInt("0x" + challenge), pubPoint));
+    if (rhs === null) return false;
+    return lhs.x === rhs.x && lhs.y === rhs.y;
+  });
+}
+
+/* Adapting: add the adaptor secret to the pre-response
+   under the order, and the line that comes out is tool
+   33's own format, deliberately — a finished adaptor
+   signature is an ordinary signature, checkable in
+   tool 33 by anyone, with nothing in it saying it ever
+   waited for anything. A secret that is not a whole
+   scalar, or a line that does not parse, is null; a
+   WRONG secret still adapts to a well-formed line —
+   one tool 33's verifier will reject — because this
+   function cannot know which secret the point was
+   made from, and says so rather than pretend. */
+function adaptAdaptorSignature(adaptorText, secretHex) {
+  var parsed = parseAdaptorSignature(adaptorText);
+  var secret = parseProofScalar(secretHex);
+  if (parsed === null || secret === null) return null;
+  var adapted = (BigInt("0x" + parsed.response) + BigInt("0x" + secret)) % P256_N;
+  return formatSchnorrSignature(parsed.commitment, p256IntToHex(adapted));
+}
+
+/* Extraction: the adapted response minus the
+   pre-response, under the order — the adaptor secret
+   itself. The two lines must carry the same adapted
+   commitment: a finished signature from any other
+   pre-signature differs by more than the secret, and
+   subtracting across them would hand back a plausible
+   number that is nothing. Identical responses mean
+   the "adapted" line is the pre-signature restated —
+   a difference of zero is refused as null, never
+   handed out as a secret. */
+function extractAdaptorSecret(adaptorText, adaptedText) {
+  var pre = parseAdaptorSignature(adaptorText);
+  var fin = parseSchnorrSignature(adaptedText);
+  if (pre === null || fin === null) return null;
+  if (pre.commitment !== fin.commitment) return null;
+  var secret = (BigInt("0x" + fin.response) - BigInt("0x" + pre.response)) % P256_N;
+  if (secret < P256_ZERO) secret += P256_N;
+  if (secret === P256_ZERO) return null;
+  return p256IntToHex(secret);
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -5528,7 +5787,12 @@ if (typeof module !== "undefined" && module.exports) {
                      formatDkgCommitmentLine, parseDkgCommitmentLine,
                      formatDkgShareLine, parseDkgShareLine,
                      generateDkgContribution, verifyDkgShare,
-                     parseDkgCommitmentSet, finalizeDkgShares };
+                     parseDkgCommitmentSet, finalizeDkgShares,
+                     ADAPTOR_FORMAT,
+                     adaptorPointForSecret, generateAdaptorSecret,
+                     formatAdaptorSignature, parseAdaptorSignature,
+                     createAdaptorSignature, verifyAdaptorSignature,
+                     adaptAdaptorSignature, extractAdaptorSecret };
 }
 
 if (typeof document !== "undefined") {
@@ -7744,6 +8008,132 @@ if (typeof document !== "undefined") {
         "never computed by anyone — not by you, not by any " +
         "dealer: what exists is its public key, and one share " +
         "per holder.";
+    });
+
+    /* --- a signature that waits for a secret (adaptor signatures) --- */
+    document.getElementById("adaptor-make").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var secretOut = document.getElementById("adaptor-secret-out");
+      var pointOut = document.getElementById("adaptor-point-out");
+      var status = document.getElementById("adaptor-make-result");
+      secretOut.value = "";
+      pointOut.value = "";
+      var made = generateAdaptorSecret();
+      if (!made) {
+        status.textContent = "That secret cannot be drawn: this " +
+          "browser must offer randomness to draw it from.";
+        return;
+      }
+      secretOut.value = made.secret;
+      pointOut.value = made.point;
+      status.textContent = "Secret drawn. Publish the adaptor " +
+        "point anywhere — it reveals nothing about the secret — " +
+        "and guard the secret itself exactly like a private key: " +
+        "whoever holds it can finish any signature locked to the " +
+        "point, and it is stored nowhere on this page.";
+    });
+
+    document.getElementById("adaptor-create").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("adaptor-out");
+      var status = document.getElementById("adaptor-create-result");
+      out.value = "";
+      status.textContent = "Making the pre-signature, locally…";
+      createAdaptorSignature(document.getElementById("adaptor-priv").value,
+        document.getElementById("adaptor-message").value,
+        document.getElementById("adaptor-point-in").value).then(function (line) {
+        if (!line) {
+          status.textContent = "That pre-signature cannot be made: " +
+            "the signing key must be one whole 138-byte tool 17 or " +
+            "tool 18 private key, the adaptor point one whole " +
+            "91-byte public key, and the message between 1 and " +
+            "2,000 characters.";
+          return;
+        }
+        out.value = line;
+        status.textContent = "Pre-signature made. On its own it " +
+          "verifies as nothing — check it in the verify form below " +
+          "against your public key, the exact message and the " +
+          "adaptor point, and it balances only as a pre-signature: " +
+          "exactly one number short of a signature, and that " +
+          "number is the adaptor secret.";
+      });
+    });
+
+    document.getElementById("adaptor-verify").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("adaptor-verify-result");
+      status.textContent = "Checking the pre-signature, locally…";
+      verifyAdaptorSignature(document.getElementById("adaptor-verify-pub").value,
+        document.getElementById("adaptor-verify-message").value,
+        document.getElementById("adaptor-verify-point").value,
+        document.getElementById("adaptor-verify-in").value).then(function (verdict) {
+        if (verdict === null) {
+          status.textContent = "That cannot be checked: the public " +
+            "key and the adaptor point must each be one whole " +
+            "91-byte public key, the message between 1 and 2,000 " +
+            "characters, and the line one whole p4a-adaptor-v1 " +
+            "pre-signature.";
+          return;
+        }
+        status.textContent = verdict ?
+          "Genuine. That pre-signature is exactly one number short " +
+            "of a signature under that key, over that exact " +
+            "message, locked to that adaptor point: whoever " +
+            "reveals the secret behind the point finishes it, and " +
+            "nobody else can." :
+          "NOT GENUINE. That well-formed line does not balance as " +
+            "a pre-signature for that key, that message and that " +
+            "adaptor point — do not rely on it completing when " +
+            "the secret shows.";
+      });
+    });
+
+    document.getElementById("adaptor-adapt").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("adaptor-adapt-out");
+      var status = document.getElementById("adaptor-adapt-result");
+      out.value = "";
+      var line = adaptAdaptorSignature(document.getElementById("adaptor-adapt-in").value,
+        document.getElementById("adaptor-adapt-secret").value);
+      if (!line) {
+        status.textContent = "That cannot be adapted: the line " +
+          "must be one whole p4a-adaptor-v1 pre-signature and the " +
+          "secret one whole 64-hex number.";
+        return;
+      }
+      out.value = line;
+      status.textContent = "Adapted. If that was the secret whose " +
+        "point the pre-signature was locked to, this is now an " +
+        "ordinary signature: check it in tool 33's verify form " +
+        "against the signer's public key and the exact message. " +
+        "A different secret adapts to a line that same verifier " +
+        "rejects — and anyone holding the pre-signature can now " +
+        "extract the secret you used from the two lines, which " +
+        "is the point of the shape.";
+    });
+
+    document.getElementById("adaptor-extract").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("adaptor-extract-out");
+      var status = document.getElementById("adaptor-extract-result");
+      out.value = "";
+      var secret = extractAdaptorSecret(document.getElementById("adaptor-extract-pre").value,
+        document.getElementById("adaptor-extract-final").value);
+      if (!secret) {
+        status.textContent = "Nothing can be extracted: the first " +
+          "line must be one whole p4a-adaptor-v1 pre-signature, " +
+          "the second one whole p4a-schnorr-v1 signature adapted " +
+          "from it — the same adapted commitment in both — and " +
+          "their answers must actually differ.";
+        return;
+      }
+      out.value = secret;
+      status.textContent = "Extracted. That is the adaptor secret " +
+        "itself, recovered from the two lines alone: check it in " +
+        "the first form of tool 39 — its point is the adaptor " +
+        "point the pre-signature was locked to — and use it to " +
+        "adapt any other pre-signature locked to the same point.";
     });
 
     /* --- copy donation address --- */

@@ -735,6 +735,36 @@ renewable resource that pays for shielded transactions.
   any chain or wallet checks. It needs no existing
   key at all — every contribution is drawn fresh
   on the page.
+- **A signature that waits for a secret — adaptor
+  signatures** — a signature that is complete
+  except for one missing number, built on tool
+  33's Schnorr scheme. The missing number is an
+  adaptor secret `t`; only its point `T = t×G` is
+  published. The signer pre-signs by shifting
+  their nonce commitment by the point —
+  `R̂ = R + T` — and drawing tool 33's challenge
+  over the shifted commitment; the answer `s′`
+  (`p4a-adaptor-v1`) sits exactly one adaptor
+  point short of balancing, so tool 33's verifier
+  rejects the line as it stands, while anyone
+  holding `T` can check it is a genuine
+  pre-signature: `s′×G = (R̂ − T) + e×Y`. Adapting
+  is one addition, `s = s′ + t`, and the result
+  is an ordinary `p4a-schnorr-v1` signature;
+  extraction is the same addition read backwards,
+  `t = s − s′`, so publishing an adapted signature
+  hands the secret to every holder of the
+  pre-signature — the symmetry real systems build
+  atomic swaps out of: two signatures on two
+  chains, one secret, both complete or neither
+  does. Honestly labelled: the pre-signature is
+  worthless until adapted, a swapped adaptor
+  point locks the signature to a stranger's
+  secret, and publication is the reveal. Not the
+  signature format any chain or wallet checks.
+  Never paste a real wallet key or a production
+  private key into any web page, including this
+  one.
 
 ## Guides
 
