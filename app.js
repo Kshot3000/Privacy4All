@@ -8462,6 +8462,170 @@ function finishPsiIntersection(stateText, itemsText, replyText) {
   return psiIntersectionFor(state.scalar, itemsText, replyText);
 }
 
+/* ---------- 48. Just the number, not the names — PSI, cardinality only ----------
+
+   Tool 47 ends by naming a trust it takes: its
+   double-blinded half comes back in the request's
+   own order, and that order is what lets the
+   initiator NAME the shared entries — a responder
+   who shuffled that half could scramble which
+   entries get named. Sometimes naming is more than
+   the question needs. Two groups planning a joint
+   event may need only "how many people are on both
+   lists?" — for a room size, a quorum check, a
+   go/no-go — and every name beyond that number is
+   disclosure nobody asked for. This tool runs the
+   same exchange and deliberately learns less from
+   it: a count, and nothing that can name an entry.
+
+   The difference is one deliberate shuffle and one
+   deliberate omission. The responder here shuffles
+   BOTH halves of the reply — their own blinded
+   points, as in tool 47, and the double-blinded
+   points too — so the reply carries no position
+   information at all: no point on it can be tied
+   back to a position on the request. And the
+   finish here never receives the initiator's list:
+   it needs only the kept state and the reply. It
+   raises the responder's blinded points by a into
+   the same candidate set tool 47 builds, then
+   counts how many of the double-blinded points
+   stand in it. A count is a set question, so it is
+   order-free by construction — the scrambling move
+   that threatens tool 47's naming cannot change a
+   number here, because there is no position left
+   to scramble. What the finish returns is a number
+   and only a number: its output cannot contain an
+   entry name, because no entry name ever reaches
+   it — that is the promise kept in the page's own
+   structure, the way tool 46's opening keeps its
+   promise by having no code path to the other
+   slot.
+
+   What each side learns, stated as plainly as tool
+   47 states it. The initiator learns the count and
+   the SIZE of the responder's list, and nothing
+   else: not one shared entry is named, and an
+   unmatched point is as untestable here as there.
+   The responder learns the size of the initiator's
+   list and nothing else at all, exactly as before.
+   The honest limits are plain. A count can itself
+   be the sensitive fact: a count equal to your
+   whole list says every entry matched, a count of
+   zero says none did, and on a list of one a count
+   of one IS the name, worn as a number — small
+   lists leak through counts the way tool 45's
+   small sets leak by their size. This is still the
+   semi-honest core: a responder must still build
+   the double-blinded points from the request and
+   their own list, and nothing here proves they
+   did — but order, the one thing tool 47 had to
+   take on trust, is no longer trusted or needed.
+   Set sizes and the fact and timing of the
+   exchange leak, as they do for tool 47. The state
+   line holds a and is kept the way tool 47 says:
+   with a copy of the reply it recomputes the count
+   — and here, truly nothing beyond the count. The
+   frame is the house one: a real cardinality
+   computed locally, but the lines are this hub's
+   own spellings over P-256 teaching arithmetic —
+   the same p4a-psib-v1 / p4a-psid-v1 /
+   p4a-psistate-v1 lines as tool 47, told apart by
+   their shuffled order and by what the finish asks
+   for — not a format any chain or wallet checks,
+   not one of Midnight's Compact circuit proofs,
+   and the curve code is the same teaching
+   implementation as tool 30's, not an audited
+   library and not side-channel resistant. Never
+   paste a real wallet key or a production private
+   key into any web page, including this one. */
+
+/* The responder's move for a count, from pieces:
+   the request line, their own list, and a
+   caller-chosen scalar in, the two-line reply out.
+   Identical arithmetic to psiAnswerFor — the
+   request's points double-blinded, their own points
+   blinded — with ONE difference that is the whole
+   tool: the double-blinded half is shuffled before
+   it travels, so its order names nothing. Their own
+   half is shuffled too, as in tool 47. A reply from
+   this function is therefore a valid reply in
+   spelling but NOT in meaning for tool 47's finish,
+   which reads positions this reply has deliberately
+   destroyed. */
+function psiCardinalityAnswerFor(requestText, itemsText, scalarHex) {
+  var requestPoints = parsePsiBlinded(requestText);
+  var items = parsePsiItems(itemsText);
+  var scalar = parseProofScalar(scalarHex);
+  if (requestPoints === null || items === null || scalar === null) {
+    return Promise.resolve(null);
+  }
+  var doublePoints = [];
+  for (var i = 0; i < requestPoints.length; i++) {
+    var doubled = psiBlindPointHex(scalar, requestPoints[i]);
+    if (doubled === null) return Promise.resolve(null);
+    doublePoints.push(doubled);
+  }
+  return psiBlindItems(items, scalar).then(function (ownPoints) {
+    if (ownPoints === null) return null;
+    var shuffledDouble = shufflePsiPoints(doublePoints);
+    var shuffledOwn = shufflePsiPoints(ownPoints);
+    if (shuffledDouble === null || shuffledOwn === null) return null;
+    return formatPsiReply(shuffledDouble, shuffledOwn);
+  });
+}
+
+/* The responder's move for a count, whole: draw a
+   fresh scalar and answer. The responder keeps
+   nothing, as in tool 47. */
+function answerPsiCardinality(requestText, itemsText) {
+  var scalar = randomProofScalar();
+  if (scalar === null) return Promise.resolve(null);
+  return psiCardinalityAnswerFor(requestText, itemsText, scalar);
+}
+
+/* The count, from pieces: the initiator's scalar
+   and the reply in, a number out — the number of
+   the reply's double-blinded points that stand
+   among the responder's blinded points raised by
+   the scalar. No list is taken, so no entry can be
+   named by anything this function returns: zero is
+   a real answer (no overlap), never null; null is
+   reserved for inputs this page cannot judge — a
+   malformed reply, a zero or over-order scalar,
+   non-strings. Deliberately, there is no check
+   tying the reply's double-blinded count to a list
+   length: the initiator's list is not an input
+   here, and in the semi-honest frame the responder
+   answers the request they were sent, which fixed
+   that count when it was made. */
+function psiCardinalityFor(scalarHex, replyText) {
+  var scalar = parseProofScalar(scalarHex);
+  var reply = parsePsiReply(replyText);
+  if (scalar === null || reply === null) {
+    return Promise.resolve(null);
+  }
+  var candidates = {};
+  for (var i = 0; i < reply.blindedPoints.length; i++) {
+    var raised = psiBlindPointHex(scalar, reply.blindedPoints[i]);
+    if (raised === null) return Promise.resolve(null);
+    candidates[raised] = true;
+  }
+  var count = 0;
+  for (var j = 0; j < reply.doublePoints.length; j++) {
+    if (candidates[reply.doublePoints[j]]) count++;
+  }
+  return Promise.resolve(count);
+}
+
+/* The count, whole: the kept state line supplies
+   the scalar, and the rest is psiCardinalityFor. */
+function finishPsiCardinality(stateText, replyText) {
+  var state = parsePsiState(stateText);
+  if (state === null) return Promise.resolve(null);
+  return psiCardinalityFor(state.scalar, replyText);
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -8635,7 +8799,9 @@ if (typeof module !== "undefined" && module.exports) {
                      formatPsiState, parsePsiState, formatPsiReply,
                      parsePsiReply, psiRequestFor, makePsiRequest,
                      psiAnswerFor, answerPsiRequest, psiIntersectionFor,
-                     finishPsiIntersection };
+                     finishPsiIntersection,
+                     psiCardinalityAnswerFor, answerPsiCardinality,
+                     psiCardinalityFor, finishPsiCardinality };
 }
 
 if (typeof document !== "undefined") {
@@ -11551,6 +11717,60 @@ if (typeof document !== "undefined") {
             "named above. Everything else on their list stays a " +
             "point you cannot name, and they learned nothing at " +
             "all — not even this.";
+      });
+    });
+
+    document.getElementById("psicard-answer").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("psicard-answer-result");
+      status.textContent = "Working\u2026";
+      answerPsiCardinality(document.getElementById("psicard-answer-request").value,
+        document.getElementById("psicard-answer-items").value).then(function (reply) {
+        if (reply === null) {
+          status.textContent = "No reply was made: the request " +
+            "must be a whole p4a-psib-v1 line and your list one " +
+            "to eight entries, each a non-blank line of at most " +
+            "40 characters, with no repeats once normalised.";
+          return;
+        }
+        document.getElementById("psicard-answer-out").value = reply;
+        status.textContent = "Answered for a count — and notice " +
+          "what changed from tool 47: BOTH lines went back " +
+          "shuffled, so no point on this reply sits at the " +
+          "position of the entry it came from. There is no order " +
+          "left here for anyone to read names off. Send both " +
+          "lines back, together.";
+      });
+    });
+
+    document.getElementById("psicard-finish").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("psicard-finish-result");
+      var out = document.getElementById("psicard-finish-out");
+      status.textContent = "Working\u2026";
+      finishPsiCardinality(document.getElementById("psicard-finish-state").value,
+        document.getElementById("psicard-finish-reply").value).then(function (count) {
+        if (count === null) {
+          out.value = "";
+          status.textContent = "Cannot count this: the state " +
+            "must be a whole p4a-psistate-v1 line and the reply " +
+            "a whole two-line answer from the cardinality form " +
+            "above — a reply to a different request counts " +
+            "nothing here.";
+          return;
+        }
+        out.value = String(count);
+        status.textContent = count === 0 ?
+          "Zero shared entries — and that number, plus the size " +
+            "of their list, is all this exchange told you. No " +
+            "entry was named to get it: this form never even " +
+            "asked for your list." :
+          count + (count === 1 ? " entry stands" : " entries stand") +
+            " on both lists — counted, not named. Which " +
+            (count === 1 ? "one it is" : "ones they are") +
+            " this exchange does not say, and from these inputs " +
+            "it cannot be recovered: no position survived the " +
+            "shuffle, and this form never held your list.";
       });
     });
 

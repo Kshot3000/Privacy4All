@@ -1006,7 +1006,37 @@ renewable resource that pays for shielded transactions.
   and entries are normalised (trimmed,
   lower-cased, whitespace collapsed) before any
   maths. Not a Compact circuit proof, and not a
-  format any chain or wallet checks.
+  format any chain or wallet checks. Tool 48
+  runs this same exchange for a count only.
+- **Just the number, not the names — private set
+  intersection, cardinality only** — tool 47's
+  exchange, deliberately learning less: sometimes
+  only "how many entries are on both lists?" is
+  the question — a room size, a quorum check —
+  and every name beyond that number is disclosure
+  nobody asked for. The initiator starts exactly
+  as in tool 47 (a `p4a-psib-v1` request, a kept
+  `p4a-psistate-v1` line); the responder here
+  shuffles BOTH halves of the reply — their own
+  blinded points and the double-blinded
+  `p4a-psid-v1` points too — so the reply carries
+  no position information at all, and the finish
+  never receives the initiator's list: it raises
+  the responder's points by `a`, counts how many
+  double-blinded points stand among them, and
+  returns a number and only a number. A count is
+  order-free by construction, so the reordering
+  tool 47 takes on trust cannot change it.
+  Honestly labelled: a count can itself leak —
+  a count equal to your whole list, or a count
+  of one on a list of one, is a name worn as a
+  number — set sizes and the exchange itself
+  still leak, the core is still semi-honest, and
+  the privacy lives in this answer form's
+  shuffle, not in the counting: a tool-47 reply
+  counted here still carried its positions. Not
+  a Compact circuit proof, and not a format any
+  chain or wallet checks.
 
 ## Guides
 
