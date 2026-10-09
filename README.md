@@ -1432,7 +1432,52 @@ renewable resource that pays for shielded transactions.
   the joint setup removes the dealer, not
   the quorum's power. Not a Compact circuit
   proof, and not a format any chain or
-  wallet checks.
+  wallet checks. Tool 60 below runs the
+  complaint round this entry names as
+  missing.
+
+- **Name the bad dealer — a complaint round
+  for the jointly made counting key** — the
+  round tools 38 and 59 both leave off-page:
+  what the group does about a dealer whose
+  share fails its Feldman check. A trustee
+  dealt a failing share — or no share at
+  all — publishes a `p4a-jtcomplaint-v1`
+  line naming the dealer and themselves; it
+  carries no share and no secret. The
+  dealer answers in public by broadcasting
+  the very share line they claim to have
+  dealt, and anyone can run the Feldman
+  check on it: a share that checks out
+  dismisses the complaint and leaves the
+  dealer qualified; a share that fails, or
+  silence, disqualifies the dealer on
+  evidence anyone can recompute. The
+  outcome is one `p4a-jtqualified-v1` line
+  partitioning the round into qualified and
+  disqualified trustees. If nobody stands
+  disqualified the round stands untouched —
+  the key and trustees lines are tool 59's
+  own derivations and its finalize runs
+  unchanged. If a dealer stands
+  disqualified, NO key is derived from the
+  broken round (its shares were evaluations
+  at the old trustee numbers of abandoned
+  polynomials); the qualified trustees
+  re-deal fresh in tool 59 under a
+  renumbering that comes back with the
+  verdict, and if too few remain for the
+  quorum the tool says so instead of
+  papering over it. Honestly labelled: the
+  answer deadline is the group's own rule
+  (a page holds no clock), a false
+  complaint cannot stick but costs an
+  accusation to force a verdict, exclusion
+  from the restarted round is the whole
+  sanction, and the Pedersen bias caveat of
+  tools 38 and 59 stands whole. Not a
+  Compact circuit proof, and not a format
+  any chain or wallet checks.
 
 ## Guides
 

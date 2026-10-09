@@ -12790,6 +12790,404 @@ function finalizeJointTallyShare(commitmentsText, shareLinesText) {
            recipient: recipient, shareLine: shareLine };
 }
 
+/* ---------- 60. Name the bad dealer — a complaint
+   round for the jointly made counting key ----------
+
+   Tools 38 and 59 both end on the same named gap,
+   stated plainly in both: there is no complaint or
+   dispute round. A share that fails its Feldman
+   check is simply refused at finalizing, and what
+   the group does about the dealer who dealt it is
+   the group's own business off-page. Real
+   distributed key generation — Gennaro, Jarecki,
+   Krawczyk and Rabin's rounds over Pedersen's
+   scheme — gives that moment a public shape, and
+   this tool runs it for tool 59's counting key.
+
+   A complaint is a public accusation and nothing
+   more: a trustee who was dealt a share that fails
+   its Feldman check against the dealer's broadcast
+   commitments — or who was dealt no share at all —
+   publishes a complaint line naming the dealer and
+   themselves. The line carries no share and no
+   secret: one dealt share is one point on the
+   dealer's polynomial, worthless under the quorum,
+   but this round never needs to print one to file,
+   because the evidence step is the dealer's, not
+   the complainer's. The dealer answers in public
+   by broadcasting the very share line they claim
+   to have dealt. Everyone can run the Feldman
+   check on it, because the commitments are already
+   public: if the broadcast share checks out, the
+   dealer stands qualified and the complaint is
+   dismissed — the complainer mistook, miscopied,
+   or accused falsely, and the round can see which;
+   if the broadcast share fails the check, or the
+   dealer never answers, the dealer is disqualified
+   by evidence anyone can recompute, not by vote.
+
+   The qualified set is then a public fact, spelled
+   as one line: the quorum, the round's trustee
+   count, and the two lists — who stands qualified,
+   who stands disqualified — partitioning the round
+   exactly. And here the round forks, honestly. If
+   nobody stands disqualified, nothing has changed:
+   the counting key and trustees line are tool 59's
+   own derivations, unchanged, and finalizing runs
+   in tool 59 as before — a complaint round that
+   clears everyone costs the round nothing. If a
+   dealer stands disqualified, this tool derives NO
+   key and NO share from the broken round. The
+   dealt shares were evaluations at the old trustee
+   numbers of polynomials the group is abandoning,
+   so quietly dropping one dealer's lines and
+   summing the rest would spell a key for a round
+   that never happened. The qualified trustees
+   re-deal, fresh, in tool 59, renumbered in their
+   original order — the renumbering comes back with
+   the verdict — and if the disqualifications leave
+   fewer trustees than the quorum, there is no
+   restart at that quorum at all: the group must
+   choose a smaller quorum or recruit a trustee,
+   which is governance, and this page says so
+   instead of papering over it.
+
+   The honest limits are plain. This page plays
+   every trustee on one device; in real use the
+   complaint and the answer are broadcasts, and the
+   deadline a dealer must answer by is the group's
+   own rule — silence is judged here the moment the
+   qualified set is published, because a page cannot
+   hold a clock for a group. A complaint is cheap
+   to file and public, so a trustee can force a
+   round to a verdict for the cost of an accusation;
+   what they cannot do is make a false one stick,
+   because the answer settles it in public. A
+   disqualified dealer is named, not punished —
+   exclusion from the restarted round is the whole
+   sanction this arithmetic carries. The bias
+   caveat of tools 38 and 59 stands whole: a dealer
+   who waits on the others' commitments can still
+   bias the restarted key's distribution, and
+   production protocols add rounds this teaching
+   page does not. The frame is the house one: a
+   real complaint round computed and judged
+   locally, spelled in this hub's own
+   p4a-jtcomplaint-v1 and p4a-jtqualified-v1 lines
+   around tools 38, 51, 53 and 59's unchanged
+   formats — not a format any chain or wallet
+   checks, not one of Midnight's Compact circuit
+   proofs. Never paste a real wallet key or a
+   production private key into any web page,
+   including this one; this tool needs no existing
+   key at all. */
+var JT_COMPLAINT_FORMAT = "p4a-jtcomplaint-v1";
+var JT_QUALIFIED_FORMAT = "p4a-jtqualified-v1";
+
+/* A complaint line: the format tag, the round's
+   quorum, the accused dealer's number and the
+   complaining trustee's number. Nothing else
+   travels in it — no share, no secret, not even
+   the grounds: bad share or no share is the
+   complainer's business at filing time, because
+   the dealer's public answer is what settles
+   either one. A trustee cannot complain about
+   themselves: the share a dealer deals themselves
+   never crossed a channel, so there is nothing to
+   dispute. */
+function formatJointTallyComplaint(threshold, dealer, recipient) {
+  if (!validThresholdValue(threshold) ||
+      !validThresholdIndexValue(dealer) ||
+      !validThresholdIndexValue(recipient) ||
+      dealer === recipient) {
+    return null;
+  }
+  return JT_COMPLAINT_FORMAT + ":" + threshold + ":" + dealer +
+    ":" + recipient;
+}
+
+function parseJointTallyComplaint(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 4 || parts[0] !== JT_COMPLAINT_FORMAT) {
+    return null;
+  }
+  if (!/^[2-3]$/.test(parts[1])) return null;
+  var dealer = parseThresholdIndexText(parts[2]);
+  var recipient = parseThresholdIndexText(parts[3]);
+  if (dealer === null || recipient === null ||
+      dealer === recipient) {
+    return null;
+  }
+  return { threshold: Number(parts[1]), dealer: dealer,
+           recipient: recipient };
+}
+
+/* Filing, for one trustee: the broadcast commitment
+   set, the dealer's number, their own number, and
+   the share line they were dealt — or an empty
+   share text when no share ever arrived. A dealt
+   share that passes its Feldman check files
+   NOTHING: the verdict is null, because a complaint
+   with a checking share behind it is not a
+   complaint this round will carry — the trustee
+   holds the evidence of its own falsity. A share
+   that fails the check files on "bad-share"
+   grounds; an absent share files on "missing-
+   share" grounds. A share line addressed to
+   someone else, dealt by someone else, or too
+   broken to parse is null, not a complaint: the
+   accusation must name evidence this round can
+   judge. */
+function fileJointTallyComplaint(commitmentsText, dealerText,
+                                 recipientText, shareText) {
+  var set = parseDkgCommitmentSet(commitmentsText);
+  if (set === null || typeof shareText !== "string") return null;
+  var dealer = parseThresholdIndexText(dealerText);
+  var recipient = parseThresholdIndexText(recipientText);
+  if (dealer === null || recipient === null ||
+      dealer > set.count || recipient > set.count ||
+      dealer === recipient) {
+    return null;
+  }
+  var complaint = formatJointTallyComplaint(set.threshold, dealer,
+    recipient);
+  if (complaint === null) return null;
+  if (shareText.trim() === "") {
+    return { complaint: complaint, dealer: dealer,
+             recipient: recipient, grounds: "missing-share" };
+  }
+  var share = parseDkgShareLine(shareText);
+  if (share === null || share.threshold !== set.threshold ||
+      share.dealer !== dealer || share.recipient !== recipient) {
+    return null;
+  }
+  if (verifyDkgShareParsed(set.byDealer[dealer], share) !== false) {
+    return null;
+  }
+  return { complaint: complaint, dealer: dealer,
+           recipient: recipient, grounds: "bad-share" };
+}
+
+/* Judging one complaint, publicly: the commitment
+   set, the complaint line, and the dealer's
+   broadcast answer — the share line they claim to
+   have dealt, or an empty answer text when the
+   dealer stays silent. The verdict is recomputed
+   from public lines alone: an answer that passes
+   the Feldman check qualifies the dealer and
+   dismisses the complaint ("share-checks-out"); an
+   answer that fails it disqualifies the dealer on
+   evidence ("share-fails-check"); silence
+   disqualifies too ("no-answer"), because a dealer
+   who will not show the share has shown the group
+   everything it needs. An answer naming a
+   different dealer, a different recipient or a
+   different quorum is null — no verdict is drawn
+   from evidence about a different accusation. */
+function resolveJointTallyComplaint(commitmentsText, complaintText,
+                                    responseText) {
+  var set = parseDkgCommitmentSet(commitmentsText);
+  if (set === null || typeof responseText !== "string") {
+    return null;
+  }
+  var complaint = parseJointTallyComplaint(complaintText);
+  if (complaint === null ||
+      complaint.threshold !== set.threshold ||
+      complaint.dealer > set.count ||
+      complaint.recipient > set.count) {
+    return null;
+  }
+  if (responseText.trim() === "") {
+    return { dealer: complaint.dealer,
+             recipient: complaint.recipient, qualified: false,
+             reason: "no-answer" };
+  }
+  var share = parseDkgShareLine(responseText);
+  if (share === null || share.threshold !== complaint.threshold ||
+      share.dealer !== complaint.dealer ||
+      share.recipient !== complaint.recipient) {
+    return null;
+  }
+  var verdict = verifyDkgShareParsed(
+    set.byDealer[complaint.dealer], share);
+  if (verdict === null) return null;
+  if (verdict === true) {
+    return { dealer: complaint.dealer,
+             recipient: complaint.recipient, qualified: true,
+             reason: "share-checks-out" };
+  }
+  return { dealer: complaint.dealer,
+           recipient: complaint.recipient, qualified: false,
+           reason: "share-fails-check" };
+}
+
+/* The qualified-set line: the format tag, the
+   quorum, the round's trustee count, the qualified
+   dealers in rising order and the disqualified in
+   rising order, the two lists partitioning the
+   round's trustees exactly — a dealer on both
+   lists, on neither, or past the count cannot be
+   spelled. An empty list is a dash: a round nobody
+   was disqualified from, and a round that
+   disqualified everyone, both stay spellable,
+   because both are facts a group may have to
+   publish. */
+function formatJointTallyQualifiedLine(threshold, count,
+                                       qualified, disqualified) {
+  if (!validThresholdValue(threshold) ||
+      !validTTallyCountValue(count) ||
+      !Array.isArray(qualified) || !Array.isArray(disqualified)) {
+    return null;
+  }
+  var seen = {};
+  var all = qualified.concat(disqualified);
+  for (var i = 0; i < all.length; i++) {
+    if (!validThresholdIndexValue(all[i]) || all[i] > count ||
+        seen[all[i]]) {
+      return null;
+    }
+    seen[all[i]] = true;
+  }
+  if (all.length !== count) return null;
+  var q = qualified.slice().sort(function (a, b) { return a - b; });
+  var d = disqualified.slice().sort(function (a, b) { return a - b; });
+  return JT_QUALIFIED_FORMAT + ":" + threshold + ":" + count + ":" +
+    (q.length ? q.join(",") : "-") + ":" +
+    (d.length ? d.join(",") : "-");
+}
+
+function parseJointTallyQualifiedLine(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 5 || parts[0] !== JT_QUALIFIED_FORMAT) {
+    return null;
+  }
+  if (!/^[2-3]$/.test(parts[1]) || !/^[2-5]$/.test(parts[2])) {
+    return null;
+  }
+  var threshold = Number(parts[1]);
+  var count = Number(parts[2]);
+  function parseList(part) {
+    if (part === "-") return [];
+    if (!/^[1-5](,[1-5])*$/.test(part)) return null;
+    return part.split(",").map(Number);
+  }
+  var qualified = parseList(parts[3]);
+  var disqualified = parseList(parts[4]);
+  if (qualified === null || disqualified === null) return null;
+  if (formatJointTallyQualifiedLine(threshold, count, qualified,
+      disqualified) !== text.trim()) {
+    return null;
+  }
+  return { threshold: threshold, count: count,
+           qualified: qualified, disqualified: disqualified };
+}
+
+/* Publishing the qualified set: the commitment set,
+   every complaint line filed in the round, and
+   every broadcast answer, in any order — answers
+   are matched to complaints by the dealer and
+   recipient they name, and an answer to no filed
+   complaint, a duplicated complaint, or a
+   duplicated answer refuses the whole publication
+   as null, because a verdict drawn from a partial
+   record is worse than none. Each complaint is
+   judged by the same public check as the resolve
+   form; a dealer with any upheld complaint against
+   them stands disqualified, however their other
+   complaints fell. The fork is the honest one
+   stated in the header: nobody disqualified, and
+   the round stands — the key and trustees lines
+   come back as tool 59's own derivations, ready
+   for its finalize form; a dealer disqualified,
+   and NO key, NO trustees line and NO share is
+   derived from the broken round — what comes back
+   is the qualified list, whether a restart at the
+   same quorum is possible at all (the qualified
+   must still meet it), and, when it is, the
+   renumbering the restarted round deals under:
+   the qualified trustees in their original order,
+   numbered from 1. */
+function qualifiedJointTallySet(commitmentsText, complaintsText,
+                                responsesText) {
+  var set = parseDkgCommitmentSet(commitmentsText);
+  if (set === null || typeof complaintsText !== "string" ||
+      typeof responsesText !== "string") {
+    return null;
+  }
+  var complaints = [];
+  var seenComplaints = {};
+  var complaintLines = complaintsText.split(/\r?\n/);
+  for (var i = 0; i < complaintLines.length; i++) {
+    var complaintLine = complaintLines[i].trim();
+    if (complaintLine === "") continue;
+    var complaint = parseJointTallyComplaint(complaintLine);
+    if (complaint === null ||
+        complaint.threshold !== set.threshold ||
+        complaint.dealer > set.count ||
+        complaint.recipient > set.count) {
+      return null;
+    }
+    var complaintKey = complaint.dealer + ">" + complaint.recipient;
+    if (seenComplaints[complaintKey]) return null;
+    seenComplaints[complaintKey] = true;
+    complaints.push(complaint);
+  }
+  var responses = {};
+  var responseLines = responsesText.split(/\r?\n/);
+  for (var r = 0; r < responseLines.length; r++) {
+    var responseLine = responseLines[r].trim();
+    if (responseLine === "") continue;
+    var response = parseDkgShareLine(responseLine);
+    if (response === null ||
+        response.threshold !== set.threshold) {
+      return null;
+    }
+    var responseKey = response.dealer + ">" + response.recipient;
+    if (!seenComplaints[responseKey] || responses[responseKey]) {
+      return null;
+    }
+    responses[responseKey] = responseLine;
+  }
+  var verdicts = [];
+  var disqualifiedSet = {};
+  for (var c = 0; c < complaints.length; c++) {
+    var each = complaints[c];
+    var answer = responses[each.dealer + ">" + each.recipient] || "";
+    var verdict = resolveJointTallyComplaint(commitmentsText,
+      formatJointTallyComplaint(each.threshold, each.dealer,
+        each.recipient), answer);
+    if (verdict === null) return null;
+    verdicts.push(verdict);
+    if (!verdict.qualified) disqualifiedSet[each.dealer] = true;
+  }
+  var qualified = [];
+  var disqualified = [];
+  for (var d = 1; d <= set.count; d++) {
+    if (disqualifiedSet[d]) disqualified.push(d);
+    else qualified.push(d);
+  }
+  var line = formatJointTallyQualifiedLine(set.threshold, set.count,
+    qualified, disqualified);
+  if (line === null) return null;
+  var viable = qualified.length >= set.threshold;
+  var restart = disqualified.length > 0 && viable;
+  var stands = disqualified.length === 0;
+  return { threshold: set.threshold, count: set.count,
+           qualified: qualified, disqualified: disqualified,
+           verdicts: verdicts, line: line, restart: restart,
+           viable: viable,
+           renumbering: restart ? qualified.map(function (old, idx) {
+             return [old, idx + 1];
+           }) : null,
+           publicKey: stands ?
+             jointTallyKeyForCommitments(commitmentsText) : null,
+           trustees: stands ?
+             jointTallyTrusteesForCommitments(commitmentsText) :
+             null };
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -13041,7 +13439,15 @@ if (typeof module !== "undefined" && module.exports) {
                      jointTallyDealFor, makeJointTallyContribution,
                      jointTallyKeyForCommitments,
                      jointTallyTrusteesForCommitments,
-                     finalizeJointTallyShare };
+                     finalizeJointTallyShare,
+                     JT_COMPLAINT_FORMAT, JT_QUALIFIED_FORMAT,
+                     formatJointTallyComplaint,
+                     parseJointTallyComplaint,
+                     fileJointTallyComplaint,
+                     resolveJointTallyComplaint,
+                     formatJointTallyQualifiedLine,
+                     parseJointTallyQualifiedLine,
+                     qualifiedJointTallySet };
 }
 
 if (typeof document !== "undefined") {
@@ -16904,6 +17310,152 @@ if (typeof document !== "undefined") {
         "— by you, by any dealer, by anyone. Keep the share " +
         "line where you keep private keys: worthless alone, " +
         "and the whole secret in a quorum.";
+    });
+
+    /* --- name the bad dealer (joint tally complaint round) --- */
+    document.getElementById("joint-complaint-file").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("joint-complaint-file-result");
+      var complaintOut = document.getElementById("jc-complaint-out");
+      var filed = fileJointTallyComplaint(
+        document.getElementById("jc-file-commitments").value,
+        document.getElementById("jc-file-dealer").value,
+        document.getElementById("jc-file-recipient").value,
+        document.getElementById("jc-file-share").value);
+      if (filed === null) {
+        complaintOut.value = "";
+        status.textContent = "No complaint filed: the " +
+          "broadcast set must be the whole round, the dealer " +
+          "and your own number two different trustees of it, " +
+          "and any share you paste must be the line that " +
+          "dealer dealt you — a share that passes its Feldman " +
+          "check files nothing, because there is nothing to " +
+          "complain about.";
+        return;
+      }
+      complaintOut.value = filed.complaint;
+      status.textContent = filed.grounds === "bad-share"
+        ? "Complaint filed locally: the share you pasted " +
+          "fails its Feldman check against the dealer's own " +
+          "broadcast commitments, recomputed here. Publish " +
+          "the complaint line — it carries no share and no " +
+          "secret — and the dealer must answer in the next " +
+          "form by broadcasting the share they dealt you."
+        : "Complaint filed locally: no share from this " +
+          "dealer is in evidence, which is itself the " +
+          "grounds. Publish the complaint line — it carries " +
+          "no share and no secret — and the dealer must " +
+          "answer in the next form by broadcasting the share " +
+          "they dealt you, or stand disqualified by silence.";
+    });
+
+    document.getElementById("joint-complaint-resolve").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("joint-complaint-resolve-result");
+      var out = document.getElementById("jc-resolve-out");
+      var verdict = resolveJointTallyComplaint(
+        document.getElementById("jc-resolve-commitments").value,
+        document.getElementById("jc-resolve-complaint").value,
+        document.getElementById("jc-resolve-response").value);
+      if (verdict === null) {
+        out.value = "";
+        status.textContent = "No verdict: the broadcast set " +
+          "must be the whole round, the complaint a whole " +
+          "p4a-jtcomplaint-v1 line from it, and any answer " +
+          "the share line for exactly that dealer and that " +
+          "trustee — evidence about a different accusation " +
+          "judges nothing.";
+        return;
+      }
+      if (verdict.qualified) {
+        out.value = "Dealer " + verdict.dealer + " stands " +
+          "qualified: the broadcast share passes its Feldman " +
+          "check, so the complaint is dismissed.";
+        status.textContent = "Judged locally, from public " +
+          "lines alone: the dealer answered with the very " +
+          "share the commitments demand, so the accusation " +
+          "fails in public — the complainer mistook, " +
+          "miscopied, or accused falsely, and anyone can " +
+          "recompute that. The round continues unchanged.";
+        return;
+      }
+      out.value = "Dealer " + verdict.dealer + " stands " +
+        "disqualified: " + (verdict.reason === "no-answer"
+          ? "the dealer never answered the complaint."
+          : "the dealer's own broadcast answer fails its " +
+            "Feldman check.");
+      status.textContent = verdict.reason === "no-answer"
+        ? "Judged locally, from public lines alone: a dealer " +
+          "who will not show the share has shown the group " +
+          "everything it needs. Publish the outcome in the " +
+          "next form so the whole round's qualified set is " +
+          "one public line."
+        : "Judged locally, from public lines alone: the " +
+          "dealer's answer condemns itself — it is not the " +
+          "share their commitments promise. Publish the " +
+          "outcome in the next form so the whole round's " +
+          "qualified set is one public line.";
+    });
+
+    document.getElementById("joint-qualified-publish").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("joint-qualified-publish-result");
+      var lineOut = document.getElementById("jc-qualified-out");
+      var keyOut = document.getElementById("jc-publish-key-out");
+      var trusteesOut = document.getElementById("jc-publish-trustees-out");
+      var published = qualifiedJointTallySet(
+        document.getElementById("jc-publish-commitments").value,
+        document.getElementById("jc-publish-complaints").value,
+        document.getElementById("jc-publish-responses").value);
+      if (published === null) {
+        lineOut.value = "";
+        keyOut.value = "";
+        trusteesOut.value = "";
+        status.textContent = "No qualified set: the " +
+          "broadcast set must be the whole round, every " +
+          "complaint a whole line from it filed once, and " +
+          "every answer a share line answering one of those " +
+          "complaints — a verdict drawn from a partial " +
+          "record is worse than none.";
+        return;
+      }
+      lineOut.value = published.line;
+      if (published.disqualified.length === 0) {
+        keyOut.value = published.publicKey;
+        trusteesOut.value = published.trustees;
+        status.textContent = "Published locally: nobody " +
+          "stands disqualified, so the round stands exactly " +
+          "as tool 59 dealt it — the counting key and " +
+          "trustees line above are its own derivations, and " +
+          "finalizing runs in tool 59 unchanged. A complaint " +
+          "round that clears everyone costs the round " +
+          "nothing.";
+        return;
+      }
+      keyOut.value = "";
+      trusteesOut.value = "";
+      if (!published.viable) {
+        status.textContent = "Published locally: dealer(s) " +
+          published.disqualified.join(", ") + " stand " +
+          "disqualified, and the qualified trustees — " +
+          published.qualified.join(", ") + " — are fewer " +
+          "than the quorum of " + published.threshold + ", " +
+          "so no restart at that quorum exists. No key is " +
+          "derived from the broken round; the group must " +
+          "choose a smaller quorum or recruit a trustee, " +
+          "which is governance, off this page.";
+        return;
+      }
+      status.textContent = "Published locally: dealer(s) " +
+        published.disqualified.join(", ") + " stand " +
+        "disqualified on public evidence, and NO key is " +
+        "derived from the broken round — its shares were " +
+        "evaluations at the old numbers of polynomials the " +
+        "group is abandoning. The qualified trustees " +
+        "re-deal fresh in tool 59, renumbered in their " +
+        "original order: " + published.renumbering.map(function (pair) {
+          return "trustee " + pair[0] + " deals as trustee " + pair[1];
+        }).join("; ") + ".";
     });
 
     /* --- copy donation address --- */
