@@ -1522,7 +1522,54 @@ renewable resource that pays for shielded transactions.
   shape), or a blinding leaked early; and a
   seal is a hash, not a signature. Not a
   Compact circuit proof, and not a format
-  any chain or wallet checks.
+  any chain or wallet checks. Tool 62 below
+  answers that last limit.
+
+- **Prove you dealt it — sign the dealing** —
+  the answer to tool 61's named limit: a seal
+  binds a dealer by their number, it does not
+  prove who typed it. Before the round, every
+  trustee makes a signing key — a fresh P-256
+  key pair in exactly the shapes tools 18 and
+  33 already use — and publishes the public
+  half as one `p4a-jtsignkey-v1` line under
+  their trustee number. When they deal, they
+  sign their tool 59 `p4a-dkgcommit-v1`
+  commitment line with tool 33's own Schnorr
+  signature, unchanged, over a labelled
+  transcript of the line in its canonical
+  spelling, and publish it as one
+  `p4a-jtsig-v1` line. Anyone can check, from
+  public lines alone, that the signature
+  balances under the published key over
+  exactly that dealing: a signature that
+  verifies proves the key dealt that line,
+  and one lifted onto a changed dealing, a
+  different round or another dealer's line
+  does not balance. If every dealer's
+  signature verifies, the signed round stands
+  — the key and trustees lines are tool 59's
+  own derivations, unchanged, and every
+  dealing in them is attributed. If a dealer
+  never signed, or a signature does not
+  verify, NO key is derived: the unsigned and
+  the badly signed are named separately,
+  because an unsigned dealing is an absence
+  and a failed signature is a fact.
+  Honestly labelled: a signature proves the
+  key dealt it, not who holds the key —
+  custody is a question no page can answer;
+  that the keys were published before the
+  round and belong to the trustees they name
+  is the group's discipline over a trusted
+  channel (the step tool 28's safety number
+  exists for); a signature is transferable
+  evidence forever, tool 33's standing
+  warning; and the private key the tool
+  hands back is a practice key that exists
+  only in the page. Not a Compact circuit
+  proof, and not a format any chain or
+  wallet checks.
 
 ## Guides
 

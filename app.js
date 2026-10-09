@@ -13526,6 +13526,356 @@ function verifySealedJointTallyRound(sealsText, commitmentsText,
   });
 }
 
+/* ---------- 62. Prove you dealt it — sign the dealing ----------
+
+   Tool 61's seal ends on its own named limit,
+   stated plainly on its page: a seal is a hash,
+   not a signature — it binds a dealer by their
+   number in the round, it does not prove who
+   typed it. Anyone who learns a dealer's
+   blinding early, or who simply re-types a
+   commitment line under another dealer's
+   number, produces lines this page's earlier
+   rounds cannot tell from the dealer's own.
+   This tool closes that gap the way production
+   systems close it: every trustee holds a
+   signing key — a long-term P-256 key pair in
+   exactly the shapes tools 18 and 33 already
+   use — publishes the public half under their
+   trustee number before the round, and signs
+   their tool 59 commitment line with tool 33's
+   own Schnorr signature, unchanged. The signed
+   message is this tool's labelled transcript
+   over the commitment line in its canonical
+   spelling, so the signature names the dealing
+   itself, not one dealer's whitespace or
+   casing, and a signature lifted onto a
+   different dealing, a different round or a
+   different dealer's line does not verify.
+
+   The verdicts keep the house split. A
+   signature that balances under the published
+   key is proof the key dealt that line — not
+   proof of who holds the key, which is a
+   question about key custody no page can
+   answer, and the page text says so. A
+   signature that does not balance is false,
+   never null: well-formed pieces, publicly
+   judged, and the dealing is not the one this
+   key signed. Pieces that name different
+   dealers or quorums are null — evidence about
+   a different signature judges nothing. The
+   published fork mirrors tools 60 and 61,
+   honestly: if every dealer's commitment line
+   carries a signature that verifies under
+   their published key, the signed round
+   stands — the counting key and the trustees
+   line are tool 59's own derivations,
+   unchanged. If a dealer never signed, or a
+   signature does not verify, this tool
+   derives NO key from the round: an unsigned
+   or badly signed dealing cannot be attributed
+   to the trustee whose number it carries, so
+   summing it would spell a key partly made of
+   unattributed dealings. The unsigned and the
+   badly signed are named separately, because
+   they are different facts — an absence, and
+   a signature that was offered and failed.
+
+   The honest limits are plain. This page
+   cannot police when a signing key was
+   published: that the key lines really were
+   fixed before the round, and really belong
+   to the trustees they name, is the group's
+   own discipline over a channel it trusts —
+   the same out-of-band step tool 28's safety
+   number exists for. A signature is
+   transferable evidence forever, tool 33's
+   standing warning: it proves the key signed
+   this dealing, to anyone, at any later time,
+   which is the feature here and its cost. The
+   nonce rule of tools 32 and 33 stands whole —
+   one nonce behind two signatures hands over
+   the private scalar — and tool 33's signer
+   draws a fresh nonce per signature, as here.
+   And a practice key shown on a web page is a
+   practice key: the private half this tool
+   hands back exists only in this page and is
+   for this round's teaching dealing, never a
+   wallet key. The frame is the house one: a
+   real Schnorr signature computed and judged
+   locally, spelled in this hub's own
+   p4a-jtsignkey-v1 and p4a-jtsig-v1 lines
+   around tools 18, 33, 59, 60 and 61's
+   unchanged formats — not a format any chain
+   or wallet checks, not one of Midnight's
+   Compact circuit proofs. Never paste a real
+   wallet key or a production private key into
+   any web page, including this one. */
+var JTSIGNKEY_FORMAT = "p4a-jtsignkey-v1";
+var JTSIG_FORMAT = "p4a-jtsig-v1";
+var JTSIG_PREFIX = "privacy4all-jtsig-v1";
+
+/* A signing-key line: the format tag, the
+   round's quorum, the dealer's number and
+   their public key — a whole P-256 point in
+   exactly tool 18's SPKI spelling, canonicalised
+   through its parse, so one key has one line.
+   This line is public by design: it is fixed
+   and published before the round, and it is
+   the only thing a checker ever needs. */
+function formatJointTallySignKey(threshold, dealer, publicKeyHex) {
+  var point = parseP256Point(publicKeyHex);
+  if (!validThresholdValue(threshold) ||
+      !validThresholdIndexValue(dealer) || point === null) {
+    return null;
+  }
+  return JTSIGNKEY_FORMAT + ":" + threshold + ":" + dealer + ":" +
+    formatP256PublicKey(point);
+}
+
+function parseJointTallySignKey(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 4 || parts[0] !== JTSIGNKEY_FORMAT) {
+    return null;
+  }
+  if (!/^[2-3]$/.test(parts[1])) return null;
+  var dealer = parseThresholdIndexText(parts[2]);
+  var point = parseP256Point(parts[3]);
+  if (dealer === null || point === null) return null;
+  return { threshold: Number(parts[1]), dealer: dealer,
+           publicKey: formatP256PublicKey(point) };
+}
+
+/* A signature line: the format tag, the quorum,
+   the dealer's number and tool 33's signature
+   flattened to its two pieces — the nonce
+   commitment point and the response scalar —
+   because the line's own fields are spelled
+   with the same colon the signature line uses.
+   Rebuilt through tool 33's own formatter, the
+   pieces are exactly a p4a-schnorr-v1 line or
+   they are nothing. */
+function formatJointTallySignature(threshold, dealer, signatureText) {
+  var parsed = parseSchnorrSignature(signatureText);
+  if (!validThresholdValue(threshold) ||
+      !validThresholdIndexValue(dealer) || parsed === null) {
+    return null;
+  }
+  return JTSIG_FORMAT + ":" + threshold + ":" + dealer + ":" +
+    parsed.commitment + ":" + parsed.response;
+}
+
+function parseJointTallySignature(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 5 || parts[0] !== JTSIG_FORMAT) {
+    return null;
+  }
+  if (!/^[2-3]$/.test(parts[1])) return null;
+  var dealer = parseThresholdIndexText(parts[2]);
+  var signature = formatSchnorrSignature(parts[3], parts[4]);
+  if (dealer === null || signature === null) return null;
+  var parsed = parseSchnorrSignature(signature);
+  return { threshold: Number(parts[1]), dealer: dealer,
+           commitment: parsed.commitment, response: parsed.response,
+           signature: signature };
+}
+
+/* The signed message: this tool's label over
+   the commitment line in its canonical
+   spelling — re-spelled from its parse, as
+   tool 61's seal digest does — so the signature
+   names the dealing and not one dealer's
+   whitespace or casing. A commitment line that
+   does not parse signs nothing. */
+function jointTallySignedMessage(commitmentText) {
+  var parsed = parseDkgCommitmentLine(commitmentText);
+  if (parsed === null) return null;
+  var canonical = formatDkgCommitmentLine(parsed.threshold,
+    parsed.dealer, parsed.commitments);
+  if (canonical === null) return null;
+  return JTSIG_PREFIX + "\n" + canonical;
+}
+
+/* A trustee's signing key, made fresh: a P-256
+   key pair drawn by the platform in exactly
+   tools 18 and 33's shapes, the public half
+   spelled as the line to publish before the
+   round, the private half handed back once, to
+   keep — it exists only in this page, and it is
+   a practice key for this round, never a
+   wallet key. A fresh key per trustee per
+   round-set, as everywhere on this page: one
+   key reused across rounds would tie those
+   rounds' dealings to one holder wider than
+   one round needs. */
+function makeJointTallySigningKey(thresholdText, dealerText) {
+  var threshold = parseTTallyThreshold(thresholdText);
+  var dealer = parseThresholdIndexText(dealerText);
+  if (threshold === null || dealer === null) {
+    return Promise.resolve(null);
+  }
+  return generateAgreementKeyPair().then(function (pair) {
+    if (pair === null) return null;
+    var signKey = formatJointTallySignKey(threshold, dealer,
+      pair.publicKey);
+    if (signKey === null) return null;
+    return { signKey: signKey, privateKey: pair.privateKey,
+             dealer: dealer, threshold: threshold };
+  });
+}
+
+/* Signing, deterministically in shape: the
+   dealer's private key and their tool 59
+   commitment line in, the signature line out —
+   tool 33's own signer over this tool's
+   labelled message, nonce drawn fresh inside
+   it, exactly as its page prescribes. A key
+   that is not a whole private key, or a line
+   that does not parse, is null: there is
+   nothing attributable to sign. */
+function signJointTallyCommitment(privateKeyHex, commitmentText) {
+  var parsed = parseDkgCommitmentLine(commitmentText);
+  var message = jointTallySignedMessage(commitmentText);
+  if (parsed === null || message === null) {
+    return Promise.resolve(null);
+  }
+  return signSchnorrMessage(privateKeyHex, message)
+    .then(function (signature) {
+      if (signature === null) return null;
+      return formatJointTallySignature(parsed.threshold,
+        parsed.dealer, signature);
+    });
+}
+
+/* Checking one signature, publicly: the
+   published signing-key line, the commitment
+   line and the signature line in, a verdict
+   out. True when tool 33's equation balances
+   under the published key over this tool's
+   message — the key dealt this line. False —
+   never null — when every piece is well-formed
+   and the three lines name the same dealer and
+   quorum, and the signature simply does not
+   balance: it was made by another key, or over
+   another dealing. Null when a piece cannot be
+   parsed, or the lines name different dealers
+   or quorums — evidence about a different
+   signature judges nothing. */
+function checkJointTallySignature(signKeyText, commitmentText,
+                                  signatureText) {
+  var key = parseJointTallySignKey(signKeyText);
+  var parsed = parseDkgCommitmentLine(commitmentText);
+  var signature = parseJointTallySignature(signatureText);
+  var message = jointTallySignedMessage(commitmentText);
+  if (key === null || parsed === null || signature === null ||
+      message === null) {
+    return Promise.resolve(null);
+  }
+  if (key.dealer !== parsed.dealer ||
+      key.threshold !== parsed.threshold ||
+      signature.dealer !== parsed.dealer ||
+      signature.threshold !== parsed.threshold) {
+    return Promise.resolve(null);
+  }
+  return verifySchnorrSignature(key.publicKey, message,
+    signature.signature);
+}
+
+/* Publishing the signed round: every dealer's
+   signing-key line, the whole commitment set
+   and every signature line, in any order —
+   signatures are matched to dealers by the
+   number they name. The record must be whole
+   before it is judged: a signing key missing,
+   duplicated, or naming a dealer or quorum
+   outside the round, a signature answering for
+   no dealer of the round, or a duplicated
+   signature refuses the whole publication as
+   null, because a verdict drawn from a partial
+   record is worse than none. Each signature is
+   judged by the same public check as the check
+   form. The fork is the honest one stated in
+   the header: every signature verifies, and
+   the round stands — the key and trustees
+   lines come back as tool 59's own derivations
+   from the commitments, unchanged; any dealer
+   unsigned or badly signed, and NO key and NO
+   trustees line is derived — what comes back
+   is the two lists, invalid and missing, kept
+   apart because a failed signature and an
+   absent one are different facts. */
+function verifySignedJointTallyRound(signKeysText, commitmentsText,
+                                     signaturesText) {
+  var set = parseDkgCommitmentSet(commitmentsText);
+  if (set === null || typeof signKeysText !== "string" ||
+      typeof signaturesText !== "string") {
+    return Promise.resolve(null);
+  }
+  var keyLines = {};
+  var keyCount = 0;
+  var keyParts = signKeysText.split(/\r?\n/);
+  for (var i = 0; i < keyParts.length; i++) {
+    var keyLine = keyParts[i].trim();
+    if (keyLine === "") continue;
+    var key = parseJointTallySignKey(keyLine);
+    if (key === null || key.threshold !== set.threshold ||
+        key.dealer < 1 || key.dealer > set.count ||
+        keyLines[key.dealer]) {
+      return Promise.resolve(null);
+    }
+    keyLines[key.dealer] = keyLine;
+    keyCount++;
+  }
+  if (keyCount !== set.count) return Promise.resolve(null);
+  var sigLines = {};
+  var sigParts = signaturesText.split(/\r?\n/);
+  for (var s = 0; s < sigParts.length; s++) {
+    var sigLine = sigParts[s].trim();
+    if (sigLine === "") continue;
+    var sig = parseJointTallySignature(sigLine);
+    if (sig === null || sig.threshold !== set.threshold ||
+        sig.dealer < 1 || sig.dealer > set.count ||
+        sigLines[sig.dealer]) {
+      return Promise.resolve(null);
+    }
+    sigLines[sig.dealer] = sigLine;
+  }
+  var invalid = [];
+  var missing = [];
+  var failed = false;
+  var step = function (dealer) {
+    if (dealer > set.count) return Promise.resolve(true);
+    if (!sigLines[dealer]) {
+      missing.push(dealer);
+      return step(dealer + 1);
+    }
+    var commitment = formatDkgCommitmentLine(set.threshold,
+      dealer, set.byDealer[dealer].commitments);
+    return checkJointTallySignature(keyLines[dealer], commitment,
+        sigLines[dealer])
+      .then(function (verdict) {
+        if (verdict === null) { failed = true; return false; }
+        if (verdict === false) invalid.push(dealer);
+        return step(dealer + 1);
+      });
+  };
+  return step(1).then(function () {
+    if (failed) return null;
+    var stands = invalid.length === 0 && missing.length === 0;
+    return { threshold: set.threshold, count: set.count,
+             invalid: invalid, missing: missing,
+             stands: stands,
+             publicKey: stands ?
+               jointTallyKeyForCommitments(commitmentsText) : null,
+             trustees: stands ?
+               jointTallyTrusteesForCommitments(commitmentsText) :
+               null };
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -13792,7 +14142,16 @@ if (typeof module !== "undefined" && module.exports) {
                      jointTallySealDigest,
                      sealJointTallyCommitmentFor, makeJointTallySeal,
                      checkJointTallyReveal,
-                     verifySealedJointTallyRound };
+                     verifySealedJointTallyRound,
+                     JTSIGNKEY_FORMAT, JTSIG_FORMAT, JTSIG_PREFIX,
+                     formatJointTallySignKey, parseJointTallySignKey,
+                     formatJointTallySignature,
+                     parseJointTallySignature,
+                     jointTallySignedMessage,
+                     makeJointTallySigningKey,
+                     signJointTallyCommitment,
+                     checkJointTallySignature,
+                     verifySignedJointTallyRound };
 }
 
 if (typeof document !== "undefined") {
@@ -17929,6 +18288,162 @@ if (typeof document !== "undefined") {
             "re-seals a fresh round, or excludes the named " +
             "dealers and restarts without them, in tool 60's " +
             "shape — governance, off this page.";
+        });
+    });
+
+    /* --- prove you dealt it (signed dealing) --- */
+    document.getElementById("joint-sign-keygen").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("joint-sign-keygen-result");
+      var keyOut = document.getElementById("jsg-signkey-out");
+      var privOut = document.getElementById("jsg-privatekey-out");
+      makeJointTallySigningKey(
+        document.getElementById("jsg-keygen-threshold").value,
+        document.getElementById("jsg-keygen-dealer").value)
+        .then(function (made) {
+          if (made === null) {
+            keyOut.value = "";
+            privOut.value = "";
+            status.textContent = "No signing key made: the " +
+              "quorum must be 2 or 3 and the trustee number a " +
+              "whole number — a key line this round cannot " +
+              "place would attribute nothing.";
+            return;
+          }
+          keyOut.value = made.signKey;
+          privOut.value = made.privateKey;
+          status.textContent = "Signing key made locally: " +
+            "publish the signing-key line to every trustee " +
+            "now, before the round — a key first shown after " +
+            "the dealing proves nothing about who dealt it. " +
+            "Keep the private key line private: it is a " +
+            "practice key that exists only in this page, " +
+            "never a wallet key.";
+        });
+    });
+
+    document.getElementById("joint-sign-sign").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("joint-sign-sign-result");
+      var out = document.getElementById("jsg-sig-out");
+      signJointTallyCommitment(
+        document.getElementById("jsg-sign-private").value,
+        document.getElementById("jsg-sign-commitment").value)
+        .then(function (signed) {
+          if (signed === null) {
+            out.value = "";
+            status.textContent = "Nothing signed: paste your " +
+              "whole private key line and one whole " +
+              "p4a-dkgcommit-v1 commitment line from tool 59 — " +
+              "a signature over a partial line attributes a " +
+              "dealing that never happened.";
+            return;
+          }
+          out.value = signed;
+          status.textContent = "Signed locally: publish the " +
+            "signature line with your commitment line. Anyone " +
+            "with your signing-key line can check that this " +
+            "key dealt exactly this line — and the signature " +
+            "can be shown around forever, which is the point " +
+            "and the cost tool 33 names.";
+        });
+    });
+
+    document.getElementById("joint-sign-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("joint-sign-check-result");
+      var out = document.getElementById("jsg-check-out");
+      checkJointTallySignature(
+        document.getElementById("jsg-check-signkey").value,
+        document.getElementById("jsg-check-commitment").value,
+        document.getElementById("jsg-check-signature").value)
+        .then(function (verdict) {
+          if (verdict === null) {
+            out.value = "";
+            status.textContent = "No verdict: the signing-key " +
+              "line, the commitment line and the signature " +
+              "line must all be whole lines naming the same " +
+              "dealer under the same quorum — evidence about " +
+              "a different signature judges nothing.";
+            return;
+          }
+          if (verdict === true) {
+            out.value = "This signature verifies: the dealing " +
+              "was signed by the key in the signing-key line.";
+            status.textContent = "Checked locally, from " +
+              "public lines alone: the private key behind the " +
+              "published signing key dealt exactly this " +
+              "commitment line. That proves the key dealt it — " +
+              "who holds the key is a custody question no page " +
+              "can answer.";
+            return;
+          }
+          out.value = "This signature does NOT verify under " +
+            "the signing-key line: it was made by another " +
+            "key, or over another dealing.";
+          status.textContent = "Checked locally, from public " +
+            "lines alone: this commitment line cannot be " +
+            "attributed to the trustee whose key this is — " +
+            "the signature offered for it does not balance. " +
+            "Publish the whole round in the next form so the " +
+            "failure is on the record for everyone.";
+        });
+    });
+
+    document.getElementById("joint-sign-publish").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("joint-sign-publish-result");
+      var keyOut = document.getElementById("jsg-publish-key-out");
+      var trusteesOut = document.getElementById("jsg-publish-trustees-out");
+      verifySignedJointTallyRound(
+        document.getElementById("jsg-publish-signkeys").value,
+        document.getElementById("jsg-publish-commitments").value,
+        document.getElementById("jsg-publish-signatures").value)
+        .then(function (published) {
+          if (published === null) {
+            keyOut.value = "";
+            trusteesOut.value = "";
+            status.textContent = "No verdict on the round: " +
+              "the signing-key lines must be exactly one per " +
+              "dealer of the round under its quorum, the " +
+              "commitment lines the whole round, and every " +
+              "signature a whole line for a dealer of it, " +
+              "once — a verdict drawn from a partial record " +
+              "is worse than none.";
+            return;
+          }
+          if (published.stands) {
+            keyOut.value = published.publicKey;
+            trusteesOut.value = published.trustees;
+            status.textContent = "Published locally: every " +
+              "dealer's signature verifies under their " +
+              "published signing key, so the signed round " +
+              "stands — the counting key and trustees line " +
+              "above are tool 59's own derivations from the " +
+              "commitments, and every dealing in them is " +
+              "attributed to the key that dealt it.";
+            return;
+          }
+          keyOut.value = "";
+          trusteesOut.value = "";
+          var bits = [];
+          if (published.invalid.length) {
+            bits.push("dealer(s) " + published.invalid.join(", ") +
+              " offered a signature that does not verify " +
+              "under their published key");
+          }
+          if (published.missing.length) {
+            bits.push("dealer(s) " + published.missing.join(", ") +
+              " never signed");
+          }
+          status.textContent = "Published locally: " +
+            bits.join("; ") + ". NO key is derived from this " +
+            "round — a dealing that cannot be attributed to " +
+            "the trustee whose number it carries is not a " +
+            "dealing this round can sum. The group re-runs " +
+            "the round with signatures in place, or excludes " +
+            "the named dealers, in tool 60's shape — " +
+            "governance, off this page.";
         });
     });
 
