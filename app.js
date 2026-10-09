@@ -9083,6 +9083,382 @@ function finishPsiPayloads(stateText, itemsText, replyText) {
   return psiPayloadsFor(state.scalar, itemsText, replyText);
 }
 
+/* ---------- 50. Fetch one, tell neither — private information retrieval ----------
+
+   Every tool so far hides data, a question about a
+   set, or a message. This one hides a LOOKUP. A
+   small catalogue — a directory, a price list, a
+   table of notes — sits on servers anyone can ask,
+   and the reader wants exactly one row of it.
+   Asking in plain words gives the row away to
+   whoever is asked: the question itself is the
+   private fact, and no encryption of the answer
+   changes that, because the server had to read the
+   question to answer it. This is the two-server
+   shape of private information retrieval, and its
+   arithmetic is the plainest on this page: XOR.
+
+   The reader picks the row they want and a fresh
+   random bit for every row in the catalogue — a
+   mask the length of the catalogue, drawn here
+   from Web Crypto. The first server is asked for
+   the XOR of the rows where the mask has a 1. The
+   second server is asked the same question with
+   one bit flipped: the wanted row's bit. Neither
+   query names the wanted row. A mask is uniform
+   random bits, so a server holding one query holds
+   a coin-flip pattern that could have been drawn
+   for ANY wanted row — the very same first query
+   could pair with a second query asking for any
+   other row — and that is information-theoretic,
+   not a hardness assumption: there is nothing to
+   crack, because the wanted row is not in the
+   query in any form. Each server XORs the rows it
+   was asked for — every row first padded into a
+   block of one common length, a two-byte length
+   header in front, so rows of different lengths
+   can be XORed at all — and returns one block.
+
+   The reader XORs the two answers. Every row the
+   mask selected was XORed twice and cancels; the
+   wanted row was XORed once, by the second server
+   alone, and stands alone in the result. Its
+   length header is read, its bytes are taken, and
+   the padding behind them must be exactly zero —
+   an answer built any other way fails closed
+   rather than decoding into a plausible row.
+
+   What each side learns, stated plainly. Each
+   server learns the size of the catalogue it holds
+   and the size of the longest row (every answer is
+   exactly one padded block), and nothing about
+   which row was wanted — from its own query alone.
+   The reader learns the wanted row and the padded
+   block length, and no other row: every other row
+   is inside both answers or neither, and cancels.
+   The honest limits are plain, and the first is
+   load-bearing: THE TWO SERVERS MUST NOT COMPARE
+   QUERIES. The XOR of the two masks is a single 1
+   standing exactly on the wanted row, so two
+   servers that collude — or one operator running
+   both — learn the wanted row instantly and
+   completely; this shape buys its privacy with
+   non-collusion, and where that cannot be had,
+   real systems turn to single-server schemes
+   built on lattice assumptions, which this page
+   does not pretend to offer. An answer is not
+   authenticated either: a server that answers
+   dishonestly corrupts the result, and while a
+   broken length header or non-zero padding is
+   caught here, a carefully wrong answer could in
+   principle decode as a different plausible row —
+   the reader can catch nonsense, not prove which
+   server lied. The catalogue itself is not hidden
+   and is not meant to be — the servers hold it in
+   the clear, and its contents are the public part;
+   only the choice is private. Set sizes, the row
+   lengths' maximum, and the fact and timing of
+   the lookup leak as stated. The state line holds
+   the wanted row's position and the first mask —
+   with both answers it recomputes the wanted row,
+   and with the second query (which it can rebuild)
+   it names the wanted row outright, so it is kept
+   the way this page keeps state lines: like a
+   private key. The frame is the house one: a real
+   retrieval computed locally from XOR alone, but
+   the lines are this hub's own spellings —
+   p4a-pirq-v1 queries, a p4a-pirstate-v1 state and
+   p4a-pirans-v1 answers — not a format any chain
+   or wallet checks, not one of Midnight's Compact
+   circuit proofs. Never paste a real wallet key
+   or a production private key into any web page,
+   including this one. */
+var PIR_QUERY_FORMAT = "p4a-pirq-v1";
+var PIR_STATE_FORMAT = "p4a-pirstate-v1";
+var PIR_ANSWER_FORMAT = "p4a-pirans-v1";
+var PIR_MIN_ROWS = 2;
+var PIR_MAX_ROWS = 8;
+var PIR_MAX_ROW_CHARS = 120;
+var PIR_MAX_ROW_BYTES = 480;
+var PIR_HEADER_BYTES = 2;
+
+/* The catalogue's rows, as typed: one per line,
+   each trimmed, one to PIR_MAX_ROW_CHARS
+   characters and at most PIR_MAX_ROW_BYTES of
+   UTF-8, trailing blank lines ignored and any
+   other blank line refused — the same row shape
+   as tool 49's notes, because a row here is the
+   same kind of short text. Two to PIR_MAX_ROWS
+   rows: a catalogue of one row has no choice to
+   keep private, and its only lookup names itself.
+   Rows may repeat — two rows can honestly hold
+   the same text, and retrieval is by position. */
+function parsePirRows(text) {
+  var rows = parsePsiPayloads(text);
+  if (rows === null) return null;
+  if (rows.length < PIR_MIN_ROWS || rows.length > PIR_MAX_ROWS) return null;
+  return rows;
+}
+
+/* A query's bits, as an array: the catalogue's
+   length, one bit per row, each exactly 0 or 1.
+   An array offered directly must already be bits;
+   anything else — wrong length, a 2, a string in
+   the array, a non-array — is null. */
+function normalizePirBits(bits) {
+  if (!Array.isArray(bits)) return null;
+  if (bits.length < PIR_MIN_ROWS || bits.length > PIR_MAX_ROWS) return null;
+  var out = [];
+  for (var i = 0; i < bits.length; i++) {
+    if (bits[i] !== 0 && bits[i] !== 1) return null;
+    out.push(bits[i]);
+  }
+  return out;
+}
+
+function pirBitsToString(bits) {
+  var list = normalizePirBits(bits);
+  if (list === null) return null;
+  return list.join("");
+}
+
+function parsePirBitsString(text) {
+  if (typeof text !== "string") return null;
+  var bits = text.trim();
+  if (!/^[01]+$/.test(bits)) return null;
+  var out = [];
+  for (var i = 0; i < bits.length; i++) out.push(bits[i] === "1" ? 1 : 0);
+  return normalizePirBits(out);
+}
+
+/* A query line: the format tag and the bits. The
+   query carries nothing else — no row count apart
+   from its own length, no wanted position, no
+   reader mark of any kind. */
+function formatPirQuery(bits) {
+  var spelled = pirBitsToString(bits);
+  if (spelled === null) return null;
+  return PIR_QUERY_FORMAT + ":" + spelled;
+}
+
+function parsePirQuery(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 2 || parts[0] !== PIR_QUERY_FORMAT) return null;
+  return parsePirBitsString(parts[1]);
+}
+
+/* The reader-only state line: the format tag, the
+   wanted row's zero-based position in canonical
+   decimal, and the FIRST query's mask. The second
+   mask is never stored — it is the first with the
+   wanted bit flipped, and is rebuilt from these
+   two facts whenever it is needed. */
+function formatPirState(wanted, maskBits) {
+  var spelled = pirBitsToString(maskBits);
+  if (spelled === null) return null;
+  if (typeof wanted !== "number" || !isFinite(wanted) ||
+      Math.floor(wanted) !== wanted ||
+      wanted < 0 || wanted >= maskBits.length) return null;
+  return PIR_STATE_FORMAT + ":" + wanted + ":" + spelled;
+}
+
+function parsePirState(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 3 || parts[0] !== PIR_STATE_FORMAT) return null;
+  if (!/^(0|[1-9][0-9]*)$/.test(parts[1])) return null;
+  var mask = parsePirBitsString(parts[2]);
+  if (mask === null) return null;
+  var wanted = Number(parts[1]);
+  if (wanted >= mask.length) return null;
+  return { wanted: wanted, mask: mask };
+}
+
+/* The reader's move, from pieces: a wanted
+   position, a catalogue size and a caller-chosen
+   mask in, the two query lines and the state line
+   out. The second query is the mask with exactly
+   the wanted bit flipped — the one deliberate
+   difference on which the whole retrieval turns,
+   and the reason the two queries must travel to
+   servers that never compare them. */
+function pirQueriesFor(wanted, rowCount, maskBits) {
+  if (typeof wanted !== "number" || typeof rowCount !== "number" ||
+      !isFinite(wanted) || !isFinite(rowCount) ||
+      Math.floor(wanted) !== wanted || Math.floor(rowCount) !== rowCount ||
+      rowCount < PIR_MIN_ROWS || rowCount > PIR_MAX_ROWS ||
+      wanted < 0 || wanted >= rowCount) return null;
+  var mask = normalizePirBits(maskBits);
+  if (mask === null || mask.length !== rowCount) return null;
+  var second = mask.slice();
+  second[wanted] = second[wanted] === 1 ? 0 : 1;
+  var queryA = formatPirQuery(mask);
+  var queryB = formatPirQuery(second);
+  var state = formatPirState(wanted, mask);
+  if (queryA === null || queryB === null || state === null) return null;
+  return { queryA: queryA, queryB: queryB, state: state };
+}
+
+/* The reader's move, whole: draw a fresh mask —
+   one Web Crypto coin flip per row — and build
+   the queries. A fresh mask per lookup: a mask
+   reused across lookups would let the two
+   servers' query pairs be compared lookup to
+   lookup, and the difference pattern would start
+   to talk. */
+function makePirQueries(wanted, rowCount) {
+  if (typeof wanted !== "number" || typeof rowCount !== "number" ||
+      !isFinite(wanted) || !isFinite(rowCount) ||
+      Math.floor(wanted) !== wanted || Math.floor(rowCount) !== rowCount ||
+      rowCount < PIR_MIN_ROWS || rowCount > PIR_MAX_ROWS ||
+      wanted < 0 || wanted >= rowCount) return null;
+  var mask = [];
+  for (var i = 0; i < rowCount; i++) {
+    var bit = psiRandomBelow(2);
+    if (bit === null) return null;
+    mask.push(bit);
+  }
+  return pirQueriesFor(wanted, rowCount, mask);
+}
+
+/* The common block length for a catalogue: the
+   longest row's byte length plus the header.
+   Every row is padded to exactly this, so every
+   answer is exactly this long, and the length an
+   answer carries is the catalogue's maximum, not
+   any one row's. */
+function pirAnswerBlockLength(rows) {
+  if (!Array.isArray(rows)) return null;
+  if (rows.length < PIR_MIN_ROWS || rows.length > PIR_MAX_ROWS) return null;
+  var max = 0;
+  for (var i = 0; i < rows.length; i++) {
+    var row = parsePsiPayload(rows[i]);
+    if (row === null || row !== rows[i]) return null;
+    var length = secretToBytes(row).length;
+    if (length > max) max = length;
+  }
+  return PIR_HEADER_BYTES + max;
+}
+
+/* One row as a block: the two-byte big-endian
+   byte length, the row's bytes, and zero padding
+   to the block length. The header rides INSIDE
+   the XOR, so a server never sees any row's true
+   length — only the common block length. */
+function buildPirRowBlock(rowText, blockLength) {
+  var row = parsePsiPayload(rowText);
+  if (row === null) return null;
+  if (typeof blockLength !== "number" || !isFinite(blockLength) ||
+      Math.floor(blockLength) !== blockLength) return null;
+  var bytes = secretToBytes(row);
+  if (bytes.length < 1 || bytes.length > PIR_MAX_ROW_BYTES) return null;
+  if (blockLength < PIR_HEADER_BYTES + bytes.length ||
+      blockLength > PIR_HEADER_BYTES + PIR_MAX_ROW_BYTES) return null;
+  var block = new Uint8Array(blockLength);
+  block[0] = (bytes.length >> 8) & 0xff;
+  block[1] = bytes.length & 0xff;
+  block.set(bytes, PIR_HEADER_BYTES);
+  return shareBytesToHex(block);
+}
+
+/* An answer line: the format tag and one block of
+   hex. Its byte length is the block length and
+   nothing else about it varies — a fixed shape,
+   so the answer itself names no row either. */
+function formatPirAnswer(blockHex) {
+  if (typeof blockHex !== "string") return null;
+  var hex = blockHex.trim().toLowerCase();
+  if (!/^[0-9a-f]+$/.test(hex) || hex.length % 2 !== 0 ||
+      hex.length < (PIR_HEADER_BYTES + 1) * 2 ||
+      hex.length > (PIR_HEADER_BYTES + PIR_MAX_ROW_BYTES) * 2) return null;
+  return PIR_ANSWER_FORMAT + ":" + hex;
+}
+
+function parsePirAnswer(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 2 || parts[0] !== PIR_ANSWER_FORMAT) return null;
+  var hex = parts[1].trim().toLowerCase();
+  if (!/^[0-9a-f]+$/.test(hex) || hex.length % 2 !== 0 ||
+      hex.length < (PIR_HEADER_BYTES + 1) * 2 ||
+      hex.length > (PIR_HEADER_BYTES + PIR_MAX_ROW_BYTES) * 2) return null;
+  return hex;
+}
+
+/* A server's move: the catalogue as typed and one
+   query line in, one answer line out — the XOR of
+   the blocks of exactly the rows the query's bits
+   select. The server is never told, and from the
+   query cannot tell, which row is wanted: it
+   answers the pattern it was handed. A query
+   whose length is not the catalogue's length is
+   refused whole — it belongs to some other
+   catalogue, and a partial answer to it would be
+   a wrong answer wearing this one's clothes. */
+function pirAnswerFor(rowsText, queryText) {
+  var rows = parsePirRows(rowsText);
+  var query = parsePirQuery(queryText);
+  if (rows === null || query === null) return null;
+  if (query.length !== rows.length) return null;
+  var blockLength = pirAnswerBlockLength(rows);
+  if (blockLength === null) return null;
+  var acc = new Uint8Array(blockLength);
+  for (var i = 0; i < rows.length; i++) {
+    if (query[i] !== 1) continue;
+    var blockHex = buildPirRowBlock(rows[i], blockLength);
+    if (blockHex === null) return null;
+    var block = hexToBytes(blockHex);
+    if (block === null || block.length !== blockLength) return null;
+    for (var j = 0; j < blockLength; j++) acc[j] ^= block[j];
+  }
+  return formatPirAnswer(shareBytesToHex(acc));
+}
+
+/* The finish: the kept state and the two answer
+   lines in, the wanted row out — exactly as it
+   stands in the catalogue. The state is checked
+   first and its wanted position is the only
+   position this function will ever return a row
+   for: the XOR of the answers is the wanted row's
+   block by the arithmetic in the header, the
+   header's length must fit the block, the padding
+   behind the row must be exactly zero, and the
+   bytes must decode to a row this page would
+   catalogue. Two answers of different lengths,
+   junk spellings, a corrupted header or padding,
+   or bytes that are not a row: null, never a
+   best guess. Note what the state is NOT used
+   for: no mask arithmetic happens here at all,
+   because the cancellation already happened in
+   the answers — the state is the receipt that
+   says which row the pair of queries was built
+   to fetch, and the check that this finish is
+   being applied to a retrieval, not to two stray
+   answer lines. */
+function openPirAnswers(stateText, answerAText, answerBText) {
+  var state = parsePirState(stateText);
+  var hexA = parsePirAnswer(answerAText);
+  var hexB = parsePirAnswer(answerBText);
+  if (state === null || hexA === null || hexB === null) return null;
+  if (hexA.length !== hexB.length) return null;
+  var a = hexToBytes(hexA);
+  var b = hexToBytes(hexB);
+  if (a === null || b === null || a.length !== b.length) return null;
+  var block = new Uint8Array(a.length);
+  for (var i = 0; i < a.length; i++) block[i] = a[i] ^ b[i];
+  var length = (block[0] << 8) | block[1];
+  if (length < 1 || length > PIR_MAX_ROW_BYTES ||
+      length > block.length - PIR_HEADER_BYTES) return null;
+  for (var j = PIR_HEADER_BYTES + length; j < block.length; j++) {
+    if (block[j] !== 0) return null;
+  }
+  var text = bytesToSecret(block.subarray(PIR_HEADER_BYTES,
+    PIR_HEADER_BYTES + length));
+  if (text === null) return null;
+  return parsePsiPayload(text);
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -9267,7 +9643,17 @@ if (typeof module !== "undefined" && module.exports) {
                      formatPsiPayloadLine, parsePsiPayloadLine,
                      formatPsiPayloadReply, parsePsiPayloadReply,
                      psiPayloadAnswerFor, answerPsiPayloads,
-                     psiPayloadsFor, finishPsiPayloads };
+                     psiPayloadsFor, finishPsiPayloads,
+                     PIR_QUERY_FORMAT, PIR_STATE_FORMAT,
+                     PIR_ANSWER_FORMAT, PIR_MIN_ROWS, PIR_MAX_ROWS,
+                     PIR_MAX_ROW_CHARS, PIR_MAX_ROW_BYTES, PIR_HEADER_BYTES,
+                     parsePirRows, normalizePirBits, pirBitsToString,
+                     parsePirBitsString, formatPirQuery, parsePirQuery,
+                     formatPirState, parsePirState,
+                     pirQueriesFor, makePirQueries,
+                     pirAnswerBlockLength, buildPirRowBlock,
+                     formatPirAnswer, parsePirAnswer,
+                     pirAnswerFor, openPirAnswers };
 }
 
 if (typeof document !== "undefined") {
@@ -12301,6 +12687,80 @@ if (typeof document !== "undefined") {
             "because the only keys you can unblind belong to " +
             "entries you sent.";
       });
+    });
+
+    /* --- fetch one, tell neither (private information retrieval) --- */
+    document.getElementById("pir-ask").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("pir-ask-result");
+      var made = makePirQueries(
+        Number(document.getElementById("pir-wanted").value) - 1,
+        Number(document.getElementById("pir-row-count").value));
+      if (made === null) {
+        status.textContent = "No queries were made: the catalogue " +
+          "must hold two to eight rows, and the row you want must " +
+          "be one of them — its number in the catalogue, from one.";
+        return;
+      }
+      document.getElementById("pir-query-a-out").value = made.queryA;
+      document.getElementById("pir-query-b-out").value = made.queryB;
+      document.getElementById("pir-state-out").value = made.state;
+      status.textContent = "Two queries, and neither names your " +
+        "row: each is a pattern of coin flips, and they differ in " +
+        "exactly one flip — the row you want. Send the first to " +
+        "one server and the second to another, and never let the " +
+        "two servers compare them: side by side, the difference " +
+        "IS your row's position. Keep the state line where you " +
+        "keep private keys.";
+    });
+
+    document.getElementById("pir-answer").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("pir-answer-result");
+      var out = document.getElementById("pir-answer-out");
+      var answer = pirAnswerFor(document.getElementById("pir-answer-rows").value,
+        document.getElementById("pir-answer-query").value);
+      if (answer === null) {
+        out.value = "";
+        status.textContent = "No answer was made: the catalogue " +
+          "must hold two to eight rows, one per line, at most 120 " +
+          "characters each, and the query a whole p4a-pirq-v1 line " +
+          "with exactly one bit per row in this catalogue.";
+        return;
+      }
+      out.value = answer;
+      status.textContent = "Answered — the rows this query's ones " +
+        "select, folded into one block, and notice what this form " +
+        "never knew: which row the reader wants. Your query was " +
+        "one of a pair, and alone it is a coin-flip pattern that " +
+        "fits any wanted row at all. Send the answer line back.";
+    });
+
+    document.getElementById("pir-open").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("pir-open-result");
+      var out = document.getElementById("pir-open-out");
+      var row = openPirAnswers(document.getElementById("pir-open-state").value,
+        document.getElementById("pir-open-answer-a").value,
+        document.getElementById("pir-open-answer-b").value);
+      if (row === null) {
+        out.value = "";
+        status.textContent = "Cannot open this: the state must be " +
+          "a whole p4a-pirstate-v1 line and the two answers whole " +
+          "p4a-pirans-v1 lines of the same length — answering two " +
+          "different catalogues, one answer swapped, a corrupted " +
+          "length header or padding that is not exactly zero all " +
+          "fail here, rather than decoding into a wrong row " +
+          "presented as the one you wanted.";
+        return;
+      }
+      out.value = row;
+      status.textContent = "Your row — and only your row. Every " +
+        "other row stood in both answers or in neither, and " +
+        "cancelled; neither server ever held a query that named " +
+        "this row, and together — only together — they would " +
+        "have. That is the bargain this tool makes, stated in " +
+        "its text above: privacy bought with non-collusion.";
     });
 
     /* --- copy donation address --- */

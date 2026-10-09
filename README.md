@@ -1074,7 +1074,42 @@ renewable resource that pays for shielded transactions.
   never that the note is true; the core is
   still semi-honest. Not a Compact circuit
   proof, and not a format any chain or wallet
-  checks.
+  checks. Tool 50 leaves sets behind entirely
+  and hides a single lookup instead.
+- **Fetch one, tell neither — private
+  information retrieval** — a different thing
+  hidden: not data, not a set, but a lookup. A
+  small catalogue sits on two servers and the
+  reader wants exactly one row; asking in plain
+  words gives the row away to whoever is asked.
+  The reader draws a fresh random bit per row
+  (a `p4a-pirq-v1` query: the XOR of the rows
+  where the mask has a 1) and sends the second
+  server the same query with exactly the wanted
+  row's bit flipped, keeping a
+  `p4a-pirstate-v1` line. Each server XORs the
+  selected rows — every row padded into one
+  common block with a two-byte length header
+  inside the XOR, so no row's true length
+  shows — and returns one `p4a-pirans-v1`
+  block. XORing the answers cancels every row
+  folded in twice and leaves the wanted row
+  alone; its header is read and its padding
+  must be exactly zero or the finish fails
+  closed. Per server the privacy is
+  information-theoretic: one query is a
+  coin-flip pattern that fits any wanted row.
+  Honestly labelled: the two servers must not
+  compare queries — the XOR of their masks is
+  a single 1 standing on the wanted row, so
+  colluding servers (or one operator running
+  both) learn it instantly; answers are not
+  authenticated, so a carefully wrong answer
+  could decode as a plausible row; the
+  catalogue itself is public by design, and
+  its size and longest row leak. Not a Compact
+  circuit proof, and not a format any chain
+  or wallet checks.
 
 ## Guides
 
