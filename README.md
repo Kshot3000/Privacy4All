@@ -902,7 +902,38 @@ renewable resource that pays for shielded transactions.
   hands back the blinding difference. Not a
   Compact circuit proof, and not a format any
   chain or wallet checks. The openings it is made
-  from stay secrets of private-key rank.
+  from stay secrets of private-key rank. Tool 45
+  returns to one commitment and asks whether its
+  value sits on a public list.
+- **One of these, I won't say which —
+  set-membership proofs** — prove the value inside
+  a Pedersen commitment is one entry on a small
+  public list — two to six candidates — opening
+  nothing and naming no entry. For each candidate
+  `vᵢ` anyone can compute the shifted point
+  `Dᵢ = C − vᵢ×H`; for the candidate that equals
+  the hidden value the `H` term vanishes and
+  `Dᵢ = r×G`, a statement whose logarithm the
+  prover knows because the witness is their own
+  blinding, and for every other candidate the
+  logarithm runs through `H`, which nobody knows.
+  Membership is a Cramer–Damgård–Schoenmakers OR
+  proof run once per candidate — the true branch
+  answered like tool 32, the rest simulated
+  backwards — bound by one Fiat–Shamir challenge
+  hashed under `privacy4all-setmember-v1` over the
+  commitment, the canonical list and every
+  branch's nonce commitment, with the branch
+  challenges summing to it. The list is a set:
+  duplicates are refused and the order it is typed
+  in changes nothing. The proof line is
+  `p4a-setmember-v1`. Honestly labelled: the set is
+  public and membership is all it proves — a set
+  of two is a coin flip about which entry; the
+  witness is the blinding alone. Not a Compact
+  circuit proof, and not a format any chain or
+  wallet checks. The opening it is made from
+  stays a secret of private-key rank.
 
 ## Guides
 

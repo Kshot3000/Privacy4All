@@ -6945,7 +6945,10 @@ function verifyRangeProof(commitmentHex, proofText) {
    library and not side-channel resistant. Never
    paste a real wallet key or a production private
    key into any web page, including this one;
-   practise with throwaway commitments from tool 42. */
+   practise with throwaway commitments from tool 42.
+   Tool 45 below asks a set question about one
+   commitment instead of an equality question about
+   two. */
 var EQPROOF_FORMAT = "p4a-eqproof-v1";
 var EQPROOF_CHALLENGE_PREFIX = "privacy4all-eqproof-v1";
 
@@ -7113,6 +7116,463 @@ function verifyEqualityProof(commitA, commitB, proofText) {
     });
 }
 
+/* ---------- 45. One of these, I won't say which — set-membership proofs ----------
+
+   Tools 43 and 44 each answer one shape of question
+   about a hidden value: is it in a range, and does
+   it equal another hidden value. A third shape is
+   just as common in a selective-disclosure world:
+   is the hidden value ONE OF a small public list?
+   A credential whose tier is one of three published
+   tiers, an age bracket one of the brackets a venue
+   accepts, a jurisdiction on an allowed list — the
+   verifier publishes the list, the prover's value is
+   on it, and which entry it is stays hidden. This
+   tool proves exactly that membership over tool
+   42's Pedersen commitments, and nothing more.
+
+   The arithmetic starts from the commitment,
+   C = r×G + v×H. For each candidate value v_i on
+   the public list, anyone can compute the shifted
+   point D_i = C − v_i×H = r×G + (v − v_i)×H. For
+   the one candidate that equals the hidden value,
+   the H term vanishes and D_i is a plain multiple
+   of the base point, r×G — a statement about which
+   the prover knows the discrete logarithm, because
+   the witness is their own blinding r. For every
+   other candidate the H term survives, and its
+   logarithm under G is the number tool 42's
+   generator is built so nobody knows. Membership
+   is therefore an OR proof in the
+   Cramer–Damgård–Schoenmakers shape tool 43 uses
+   for its bits, run once per candidate instead of
+   once per bit: the true branch is answered the
+   way tool 32 answers a challenge, with a fresh
+   nonce, and every other branch is SIMULATED
+   backwards from a self-chosen challenge and
+   response (R_i = s_i×G − c_i×D_i). One
+   Fiat–Shamir challenge binds the whole proof —
+   SHA-256 under the label privacy4all-setmember-v1
+   over the commitment, the canonical candidate
+   list and every branch's nonce commitment — and
+   the branch challenges must sum to it under the
+   order, which is what stops a prover pre-building
+   every branch freely: they can pre-build all but
+   one, and the hash decides how the last must go.
+
+   The candidate list is a set, not a sequence: the
+   entries are canonicalised through tool 42's own
+   value parser, duplicates are refused, and the
+   list is hashed in sorted order, so a proof does
+   not depend on the order anyone typed the list
+   in — the same set makes the same statement in
+   any order. Two to six candidates: a set of one
+   would name the value outright, and past six the
+   teaching page's line grows past what a reader
+   can follow.
+
+   The verdict keeps the house split. True when
+   every branch balances and the challenges sum to
+   the rehashed one; false — never null — when
+   every piece is well-formed and one of those
+   fails: a nudged response, branches swapped
+   between candidates, a proof checked against a
+   different list, a proof transplanted to a
+   commitment whose value is on no list. Null when
+   a piece cannot even be parsed, or when a shifted
+   point lands on the identity — a pasted point
+   equal to some candidate's v_i×H alone, with no
+   blinding term at all, which this page does not
+   spell and cannot judge as a commitment.
+   Making a proof also refuses as null what it
+   cannot honestly prove: a value that is not on
+   the list (the refusal IS the membership failing,
+   stated before any proof is attempted), and an
+   opening that does not recompute its commitment.
+
+   The honest limits are plain. The set is public
+   and membership is all the proof says — a set of
+   two is a coin flip about which entry, so small
+   sets leak by their size, and membership in a
+   set nobody else belongs to is a name, not a
+   hiding place. The witness is the blinding alone:
+   anyone holding the opening can make this proof,
+   and the proof names neither the value nor the
+   blinding. The nonce discipline is inherited
+   whole from tool 32: one nonce behind two
+   responses hands back the witness it answered
+   with. The proof line is the hub's own
+   p4a-setmember-v1 spelling over P-256 teaching
+   arithmetic — not a format any chain or wallet
+   checks, not one of Midnight's Compact circuit
+   proofs, and like tool 30 the curve code is a
+   teaching implementation: affine arithmetic
+   written to be read and checked line by line, not
+   an audited library and not side-channel
+   resistant. Never paste a real wallet key or a
+   production private key into any web page,
+   including this one; practise with throwaway
+   commitments from tool 42. */
+var SETMEMBER_FORMAT = "p4a-setmember-v1";
+var SETMEMBER_CHALLENGE_PREFIX = "privacy4all-setmember-v1";
+var SETMEMBER_MIN_CANDIDATES = 2;
+var SETMEMBER_MAX_CANDIDATES = 6;
+
+/* The public list, parsed as a set: comma-separated
+   values, each canonicalised by tool 42's own value
+   parser, duplicates refused — a list that names a
+   value twice is a smaller set wearing a longer
+   list — and sorted ascending as numbers, so the
+   statement is the set itself and not the order it
+   was typed in. Anything outside two to six
+   distinct in-range values is null. The return is
+   the canonical array of value strings. */
+function parseSetCandidates(text) {
+  if (typeof text !== "string") return null;
+  var rawParts = text.split(",");
+  if (rawParts.length < SETMEMBER_MIN_CANDIDATES ||
+      rawParts.length > SETMEMBER_MAX_CANDIDATES) return null;
+  var seen = {};
+  var values = [];
+  for (var i = 0; i < rawParts.length; i++) {
+    var value = parsePedersenValue(rawParts[i]);
+    if (value === null || seen[value]) return null;
+    seen[value] = true;
+    values.push(value);
+  }
+  values.sort(function (a, b) {
+    var x = BigInt(a), y = BigInt(b);
+    return x < y ? -1 : (x > y ? 1 : 0);
+  });
+  return values;
+}
+
+/* A candidate array as the challenge and the
+   statement points need it: an array of two to six
+   value strings that canonicalise, with no
+   duplicates, returned in the same sorted canonical
+   order parseSetCandidates produces. Anything else
+   is null, so the helpers below judge one spelling
+   of a set and never two. */
+function canonicalSetCandidates(candidates) {
+  if (!Array.isArray(candidates) ||
+      candidates.length < SETMEMBER_MIN_CANDIDATES ||
+      candidates.length > SETMEMBER_MAX_CANDIDATES) return null;
+  var seen = {};
+  var values = [];
+  for (var i = 0; i < candidates.length; i++) {
+    if (typeof candidates[i] !== "string") return null;
+    var value = parsePedersenValue(candidates[i]);
+    if (value === null || value !== candidates[i] || seen[value]) {
+      return null;
+    }
+    seen[value] = true;
+    values.push(value);
+  }
+  var sorted = values.slice().sort(function (a, b) {
+    var x = BigInt(a), y = BigInt(b);
+    return x < y ? -1 : (x > y ? 1 : 0);
+  });
+  for (var j = 0; j < values.length; j++) {
+    if (sorted[j] !== values[j]) return null;
+  }
+  return values;
+}
+
+/* The shifted point for one candidate, D = C − v×H,
+   in the hub's 91-byte spelling: for the candidate
+   that equals the hidden value it is the blinding's
+   own public point; for every other it carries the
+   value gap as an H term. A zero candidate shifts
+   nothing, so its point is the commitment itself.
+   Null when a piece is malformed, or when the
+   shifted point is the identity — a commitment
+   with no blinding term at all. */
+function setMemberStatementPoint(commitmentHex, candidateText, hPoint) {
+  var point = parseP256Point(commitmentHex);
+  var value = parsePedersenValue(candidateText);
+  if (point === null || value === null || hPoint === null) return null;
+  var shifted = p256PointAdd(point,
+    p256PointNegate(p256PointMultiply(BigInt(value), hPoint)));
+  return shifted === null ? null : formatP256PublicKey(shifted);
+}
+
+/* All the shifted points for a statement, in the
+   canonical candidate order: one hash for H, then
+   plain point arithmetic per candidate. Null when
+   the commitment or the list cannot be judged, or
+   when any shifted point is the identity. */
+function setMemberStatementPoints(commitmentHex, candidates) {
+  var canonical = canonicalSetCandidates(candidates);
+  var point = parseP256Point(commitmentHex);
+  if (canonical === null || point === null) {
+    return Promise.resolve(null);
+  }
+  return pedersenGeneratorPoint().then(function (hHex) {
+    if (hHex === null) return null;
+    var hPoint = parseP256Point(hHex);
+    if (hPoint === null) return null;
+    var points = [];
+    for (var i = 0; i < canonical.length; i++) {
+      var shifted = setMemberStatementPoint(
+        formatP256PublicKey(point), canonical[i], hPoint);
+      if (shifted === null) return null;
+      points.push(shifted);
+    }
+    return points;
+  });
+}
+
+/* The one challenge for a proof: SHA-256 over the
+   label, the commitment, the canonical candidate
+   list and every branch's nonce commitment, every
+   point canonicalised first so the hash names
+   points and not spellings. Reduced under the
+   order; a reduced digest of zero is null — with
+   c = 0 every branch challenge would be chosen
+   freely and the proof would bind nothing, the
+   same refusal tools 32 and 33 make. */
+function setMemberChallenge(commitmentHex, candidates, noncePoints) {
+  var point = parseP256Point(commitmentHex);
+  var canonical = canonicalSetCandidates(candidates);
+  if (point === null || canonical === null ||
+      !Array.isArray(noncePoints) ||
+      noncePoints.length !== canonical.length) {
+    return Promise.resolve(null);
+  }
+  var canonicalNonces = [];
+  for (var i = 0; i < noncePoints.length; i++) {
+    var noncePoint = parseP256Point(noncePoints[i]);
+    if (noncePoint === null) return Promise.resolve(null);
+    canonicalNonces.push(formatP256PublicKey(noncePoint));
+  }
+  var transcript = SETMEMBER_CHALLENGE_PREFIX + "\n" +
+    formatP256PublicKey(point) + "\n" + canonical.join(",") +
+    "\n" + canonicalNonces.join("\n");
+  return sha256Hex(transcript).then(function (digest) {
+    if (digest === null) return null;
+    var value = BigInt("0x" + digest) % P256_N;
+    if (value === P256_ZERO) return null;
+    return p256IntToHex(value);
+  });
+}
+
+/* The proof line: the format tag, then per candidate
+   — in the canonical order — the branch's nonce
+   commitment (a whole 91-byte point) and its
+   challenge and response, gated as responses: zero
+   allowed, the order refused, because a branch
+   challenge honestly can be the difference that
+   lands on zero. Pieces that do not check out are
+   null, never a half-built line. */
+function formatSetMembershipProof(branches) {
+  if (!Array.isArray(branches) ||
+      branches.length < SETMEMBER_MIN_CANDIDATES ||
+      branches.length > SETMEMBER_MAX_CANDIDATES) return null;
+  var parts = [SETMEMBER_FORMAT];
+  for (var i = 0; i < branches.length; i++) {
+    var branch = branches[i];
+    if (branch === null || typeof branch !== "object") return null;
+    var point = parseP256Point(branch.nonceCommitment);
+    var challenge = parseProofResponse(branch.challenge);
+    var response = parseProofResponse(branch.response);
+    if (point === null || challenge === null || response === null) {
+      return null;
+    }
+    parts.push(formatP256PublicKey(point));
+    parts.push(challenge); parts.push(response);
+  }
+  return parts.join(":");
+}
+
+function parseSetMembershipProof(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length < 1 + SETMEMBER_MIN_CANDIDATES * 3 ||
+      parts.length > 1 + SETMEMBER_MAX_CANDIDATES * 3 ||
+      (parts.length - 1) % 3 !== 0 ||
+      parts[0] !== SETMEMBER_FORMAT) return null;
+  var branches = [];
+  for (var i = 0; i < (parts.length - 1) / 3; i++) {
+    var base = 1 + i * 3;
+    var point = parseP256Point(parts[base]);
+    var challenge = parseProofResponse(parts[base + 1]);
+    var response = parseProofResponse(parts[base + 2]);
+    if (point === null || challenge === null || response === null) {
+      return null;
+    }
+    branches.push({ nonceCommitment: formatP256PublicKey(point),
+                    challenge: challenge, response: response });
+  }
+  return { branches: branches };
+}
+
+/* One attempt at a proof, with all randomness drawn
+   fresh inside the attempt: the false branches are
+   simulated backwards, the true branch's nonce is
+   committed, the hash chooses the true branch's
+   challenge as whatever the simulated ones leave,
+   and the true branch answers with the blinding.
+   Any impossible point — a simulated branch landing
+   on the identity — fails the attempt as null and
+   the caller redraws, the same discipline tool 33's
+   signer follows. */
+function setMembershipProofAttempt(commitmentHex, candidates,
+                                   statementPoints, trueIndex,
+                                   blindingHex) {
+  var count = candidates.length;
+  var challenges = [];
+  var responses = [];
+  var noncePoints = [];
+  var i;
+  for (i = 0; i < count; i++) {
+    challenges.push(null); responses.push(null); noncePoints.push(null);
+  }
+  var nonceHex = null;
+  for (i = 0; i < count; i++) {
+    if (i === trueIndex) continue;
+    var simChallenge = randomProofScalar();
+    var simResponse = randomProofScalar();
+    if (simChallenge === null || simResponse === null) {
+      return Promise.resolve(null);
+    }
+    var simPoint = p256PointAdd(
+      p256PointMultiply(BigInt("0x" + simResponse),
+        { x: P256_GX, y: P256_GY }),
+      p256PointMultiply(rangeModN(-BigInt("0x" + simChallenge)),
+        parseP256Point(statementPoints[i])));
+    if (simPoint === null) return Promise.resolve(null);
+    challenges[i] = simChallenge;
+    responses[i] = simResponse;
+    noncePoints[i] = formatP256PublicKey(simPoint);
+  }
+  nonceHex = randomProofScalar();
+  if (nonceHex === null) return Promise.resolve(null);
+  var trueNoncePoint = proofCommitmentForNonce(nonceHex);
+  if (trueNoncePoint === null) return Promise.resolve(null);
+  noncePoints[trueIndex] = trueNoncePoint;
+  return setMemberChallenge(commitmentHex, candidates, noncePoints)
+    .then(function (challenge) {
+      if (challenge === null) return null;
+      var others = P256_ZERO;
+      for (var j = 0; j < count; j++) {
+        if (j === trueIndex) continue;
+        others = rangeModN(others + BigInt("0x" + challenges[j]));
+      }
+      var trueChallenge = rangeModN(BigInt("0x" + challenge) - others);
+      var trueResponse = rangeModN(BigInt("0x" + nonceHex) +
+        trueChallenge * BigInt("0x" + blindingHex));
+      challenges[trueIndex] = p256IntToHex(trueChallenge);
+      responses[trueIndex] = p256IntToHex(trueResponse);
+      var branches = [];
+      for (var k = 0; k < count; k++) {
+        branches.push({ nonceCommitment: noncePoints[k],
+                        challenge: challenges[k],
+                        response: responses[k] });
+      }
+      return formatSetMembershipProof(branches);
+    });
+}
+
+/* The prover's move: given a tool-42 commitment, its
+   opening and a public candidate list, prove the
+   hidden value is one of the candidates. The opening
+   is checked first — a value and blinding that do
+   not recompute their commitment are refused as
+   null — and membership is checked before anything
+   is proved: a value on no list gets null, because
+   no honest proof of its membership exists. */
+function makeSetMembershipProof(commitmentHex, valueText, blindingHex,
+                                candidatesText) {
+  var point = parseP256Point(commitmentHex);
+  var value = parsePedersenValue(valueText);
+  var blinding = parseProofScalar(blindingHex);
+  var candidates = parseSetCandidates(candidatesText);
+  if (point === null || value === null || blinding === null ||
+      candidates === null) {
+    return Promise.resolve(null);
+  }
+  var trueIndex = candidates.indexOf(value);
+  if (trueIndex === -1) return Promise.resolve(null);
+  var canonical = formatP256PublicKey(point);
+  return pedersenCommitmentFor(value, blinding).then(function (recomputed) {
+    if (recomputed === null || recomputed !== canonical) return null;
+    return setMemberStatementPoints(canonical, candidates)
+      .then(function (statementPoints) {
+        if (statementPoints === null) return null;
+        var attempt = function (triesLeft) {
+          return setMembershipProofAttempt(canonical, candidates,
+            statementPoints, trueIndex, blinding)
+            .then(function (proof) {
+              if (proof !== null) return proof;
+              return triesLeft > 1 ? attempt(triesLeft - 1) : null;
+            });
+        };
+        return attempt(4);
+      });
+  });
+}
+
+/* The verifier's verdict, needing no secret at all:
+   recompute every shifted point from the commitment
+   and the pasted list, re-hash the challenge from
+   the commitment, the canonical list and the proof's
+   nonce commitments, then check that the branch
+   challenges sum to it and every branch balances —
+   s_i×G against R_i + c_i×D_i. True when both hold;
+   false — never null — when every piece is
+   well-formed and one fails; null when a piece
+   cannot even be parsed, when the proof's branch
+   count does not match the list, or when a shifted
+   point is the identity this page does not spell.
+   An identity on either side of a branch balance
+   counts as the identity point it is: both sides
+   landing there together is a balance, one side
+   alone is not. */
+function verifySetMembershipProof(commitmentHex, candidatesText,
+                                  proofText) {
+  var point = parseP256Point(commitmentHex);
+  var candidates = parseSetCandidates(candidatesText);
+  var proof = parseSetMembershipProof(proofText);
+  if (point === null || candidates === null || proof === null ||
+      proof.branches.length !== candidates.length) {
+    return Promise.resolve(null);
+  }
+  var canonical = formatP256PublicKey(point);
+  return setMemberStatementPoints(canonical, candidates)
+    .then(function (statementPoints) {
+      if (statementPoints === null) return null;
+      var noncePoints = proof.branches.map(function (branch) {
+        return branch.nonceCommitment;
+      });
+      return setMemberChallenge(canonical, candidates, noncePoints)
+        .then(function (challenge) {
+          if (challenge === null) return null;
+          var sum = P256_ZERO;
+          var i;
+          for (i = 0; i < proof.branches.length; i++) {
+            sum = rangeModN(sum +
+              BigInt("0x" + proof.branches[i].challenge));
+          }
+          if (sum !== BigInt("0x" + challenge)) return false;
+          for (i = 0; i < proof.branches.length; i++) {
+            var branch = proof.branches[i];
+            var lhs = p256PointMultiply(BigInt("0x" + branch.response),
+              { x: P256_GX, y: P256_GY });
+            var rhs = p256PointAdd(parseP256Point(branch.nonceCommitment),
+              p256PointMultiply(BigInt("0x" + branch.challenge),
+                parseP256Point(statementPoints[i])));
+            if (lhs === null || rhs === null) {
+              if (lhs !== null || rhs !== null) return false;
+              continue;
+            }
+            if (lhs.x !== rhs.x || lhs.y !== rhs.y) return false;
+          }
+          return true;
+        });
+    });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -7263,7 +7723,14 @@ if (typeof module !== "undefined" && module.exports) {
                      EQPROOF_FORMAT, EQPROOF_CHALLENGE_PREFIX,
                      eqProofDifference, eqProofChallenge,
                      formatEqualityProof, parseEqualityProof,
-                     makeEqualityProof, verifyEqualityProof };
+                     makeEqualityProof, verifyEqualityProof,
+                     SETMEMBER_FORMAT, SETMEMBER_CHALLENGE_PREFIX,
+                     SETMEMBER_MIN_CANDIDATES, SETMEMBER_MAX_CANDIDATES,
+                     parseSetCandidates, canonicalSetCandidates,
+                     setMemberStatementPoint, setMemberStatementPoints,
+                     setMemberChallenge, formatSetMembershipProof,
+                     parseSetMembershipProof, makeSetMembershipProof,
+                     verifySetMembershipProof };
 }
 
 if (typeof document !== "undefined") {
@@ -9962,6 +10429,73 @@ if (typeof document !== "undefined") {
             "what a nudged response, a proof transplanted to a " +
             "pair whose values differ, or the pair pasted in the " +
             "wrong order does to a proof.";
+      });
+    });
+
+    /* --- one of these, I won't say which (set-membership proofs) --- */
+    document.getElementById("set-make").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("set-proof-out");
+      var status = document.getElementById("set-make-result");
+      out.value = "";
+      status.textContent = "Working\u2026";
+      makeSetMembershipProof(document.getElementById("set-commitment").value,
+        document.getElementById("set-value").value,
+        document.getElementById("set-blinding").value,
+        document.getElementById("set-candidates").value).then(function (proof) {
+        if (proof === null) {
+          status.textContent = "No proof made: the commitment must " +
+            "be a whole 91-byte point, the value a whole number " +
+            "from 0 to 1,000,000,000,000 with its whole 64-hex " +
+            "blinding actually opening it, and the list two to " +
+            "six different whole values in that range, separated " +
+            "by commas — with the hidden value on the list. A " +
+            "value that is not one of the candidates cannot be " +
+            "proved a member, and that refusal is the membership " +
+            "question answering itself.";
+          return;
+        }
+        out.value = proof;
+        status.textContent = "Proved. The line above says, in a " +
+          "form anyone can check with the second form and the " +
+          "same list: the value inside this commitment is one " +
+          "of the candidates. It does not say which one, and the " +
+          "blinding is not in it — whoever holds the opening " +
+          "could have made it, so keep it the way you keep " +
+          "private keys.";
+      });
+    });
+
+    document.getElementById("set-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("set-check-result");
+      status.textContent = "Working\u2026";
+      verifySetMembershipProof(document.getElementById("set-check-commitment").value,
+        document.getElementById("set-check-candidates").value,
+        document.getElementById("set-check-proof").value).then(function (verdict) {
+        if (verdict === null) {
+          status.textContent = "Cannot judge this proof: the " +
+            "commitment must be a whole 91-byte point, the list " +
+            "two to six different whole values separated by " +
+            "commas, and the proof a whole p4a-setmember-v1 line " +
+            "with one branch per candidate — nothing missing " +
+            "and nothing extra.";
+          return;
+        }
+        status.textContent = verdict ?
+          "A member, proved. Every branch balances against the " +
+            "point its candidate shifts this commitment to, and " +
+            "the branch challenges sum to the one challenge the " +
+            "commitment, the list and the proof hash to: the " +
+            "hidden value is one of these candidates, and you " +
+            "learned nothing about which one." :
+          "Not proved. Either a branch does not balance against " +
+            "its candidate's shifted point, or the branch " +
+            "challenges do not sum to the transcript's challenge " +
+            "— what a nudged response, branches swapped between " +
+            "candidates, a different list, or a proof transplanted " +
+            "to a commitment whose value is on no list does to " +
+            "a proof.";
       });
     });
 
