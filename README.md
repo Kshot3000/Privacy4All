@@ -1146,6 +1146,41 @@ renewable resource that pays for shielded transactions.
   coercion resistance and receipt-freeness
   are out of scope. Not a Compact circuit
   proof, and not a format any chain or wallet
+  checks. Tool 52 attaches the missing {0, 1}
+  proof to ballots cast there.
+- **Prove the ballot is honest — a ballot
+  validity proof** — the proof tool 51 names as
+  its load-bearing gap, built for this page's
+  own ballots. A ballot (A, B) under a counting
+  key Y claims one of two Chaum–Pedersen
+  equalities (tool 44's statement, over two
+  bases at once): the same r behind A and B —
+  a vote of 0 — or the same r behind A and
+  B − G — a vote of 1. The voter answers the
+  true branch and simulates the other backwards
+  (the CDS composition of tools 43 and 45);
+  one Fiat–Shamir challenge hashed under
+  `privacy4all-ballotproof-v1` over the key,
+  the ballot and all four nonce points splits
+  between the branches, which must sum to it,
+  on a `p4a-ballotproof-v1` line. A ballot
+  encrypting 2 satisfies neither branch — its
+  B − G still carries a whole base point of
+  unexplained vote — so no honest cast produces
+  its proof, and a both-branches-simulated
+  forgery fails the challenge sum. The checker
+  holds no secret and learns no vote.
+  Honestly labelled: the proof binds one
+  ballot under one key and nothing else —
+  eligibility, double voting, coercion and
+  receipts stay out of scope, and tool 51's
+  single authority can still open a single
+  ballot (threshold, tools 37–38, remains the
+  answer there). Proving needs the ballot's
+  randomness, which is itself vote-revealing,
+  so the cast form draws it, proves with it
+  and never prints it. Not a Compact circuit
+  proof, and not a format any chain or wallet
   checks.
 
 ## Guides

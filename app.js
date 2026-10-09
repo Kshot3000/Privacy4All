@@ -9818,6 +9818,368 @@ function openTally(stateText, tallyText) {
   return null;
 }
 
+/* Prove the ballot is honest — a ballot validity
+   proof (tool 52).
+
+   Tool 51's load-bearing limit, named in its own
+   text: nothing there proves a ballot encrypts
+   0 or 1, so a ballot encrypting 2 counts double
+   and only a cheat that pushes the total past
+   the ballot count is caught at the finish. This
+   tool builds the proof tool 51 says real
+   systems attach — for this page's own ballots,
+   in this page's own arithmetic. The statement
+   is about one ballot (A, B) under one counting
+   key Y, and it is an OR of two statements of
+   the shape tool 44 proves (equal discrete
+   logarithms, Chaum–Pedersen): either
+   log_G(A) = log_Y(B) — the same r behind both,
+   which is exactly a vote of 0 — or
+   log_G(A) = log_Y(B − G) — the same r behind A
+   and B with one base point removed, which is
+   exactly a vote of 1. The voter, who knows r
+   and their own vote, proves the branch that is
+   true the ordinary sigma way (a nonce pair
+   k×G, k×Y, answered against the challenge) and
+   SIMULATES the other branch backwards from a
+   challenge and response chosen first — the
+   Cramer–Damgård–Schoenmakers composition tools
+   43 and 45 already use, here over two bases at
+   once. One Fiat–Shamir challenge, hashed over
+   the key, the ballot and all four nonce points,
+   is split between the branches: they must sum
+   to it, so a prover can freely choose at most
+   one branch's challenge, and the branch they
+   did not choose is the one they must actually
+   know r for. A ballot encrypting 2 satisfies
+   NEITHER branch — its B − G still carries a
+   whole G of unexplained vote — so no honest
+   run of this prover produces a proof for it,
+   and a both-branches-simulated forgery fails
+   the challenge sum except with negligible
+   probability. The verifier needs no secret:
+   recompute the two shifted points, re-hash the
+   challenge, check the sum, and check both
+   branches balance on both bases.
+
+   The honest limits, stated before the code.
+   First, the proof is only ever as bound as its
+   hash: it speaks about THIS ballot under THIS
+   key — checked against another ballot or
+   another key it fails, which the tests pin —
+   and it says nothing at all about eligibility,
+   double voting, coercion or receipts, the
+   limits tool 51 keeps whole. Second, proving
+   needs r, and r is vote-revealing: anyone who
+   learns a ballot's r can strip its mask
+   (B − r×Y is the vote as a point), so this
+   page never prints r — the cast form below
+   draws it, proves with it and keeps it inside
+   the step, exactly as it never prints a private
+   key it generates. A voter who loses r loses
+   nothing but the ability to re-prove; the
+   ballot and its proof stand on their own.
+   Third, the single authority of tool 51 can
+   still open a single ballot — this proof fixes
+   the validity gap, not the authority gap;
+   threshold-splitting the counting key (tools
+   37 and 38) remains the real answer there.
+   The frame is the house one: a real proof
+   computed locally, but the line is this hub's
+   own p4a-ballotproof-v1 spelling — not a
+   format any chain or wallet checks, not one
+   of Midnight's Compact circuit proofs. Never
+   paste a real wallet key or a production
+   private key into any web page, including
+   this one. */
+var BALLOTPROOF_FORMAT = "p4a-ballotproof-v1";
+var BALLOTPROOF_CHALLENGE_PREFIX = "privacy4all-ballotproof-v1";
+
+/* The statement one ballot makes, judged: the
+   key point Y, the ballot's two points, and the
+   two shifted second points the branches speak
+   about — D0 = B (the vote-0 reading: B itself
+   must be r×Y) and D1 = B − G (the vote-1
+   reading: B with its one base point removed
+   must be r×Y). A shifted point landing on the
+   identity cannot be spelled or proved about,
+   so the whole statement is null rather than a
+   statement with a hole in it. */
+function ballotProofStatementPoints(keyText, ballotText) {
+  var keyHex = parseTallyPublicKey(keyText);
+  var ballot = parseTallyBallot(ballotText);
+  if (keyHex === null || ballot === null) return null;
+  var bPoint = parseP256Point(ballot.b);
+  if (bPoint === null) return null;
+  var shifted = p256PointAdd(bPoint,
+    p256PointNegate({ x: P256_GX, y: P256_GY }));
+  if (shifted === null) return null;
+  return { key: keyHex, a: ballot.a, b: ballot.b,
+           shifted: [ballot.b, formatP256PublicKey(shifted)] };
+}
+
+/* The one challenge for a ballot proof: SHA-256
+   over the label, the counting key, the ballot's
+   two points and the four branch nonce points —
+   the key-side and base-side commitments of both
+   branches, in branch order — every point
+   canonicalised first, so the hash names points
+   and not spellings, and binds the proof to this
+   key and this ballot and no other. Reduced
+   under the order; a reduced digest of zero is
+   null, the same refusal the page's other
+   Fiat–Shamir challenges make. */
+function ballotProofChallenge(keyText, ballotText, noncePoints) {
+  var statement = ballotProofStatementPoints(keyText, ballotText);
+  if (statement === null || !Array.isArray(noncePoints) ||
+      noncePoints.length !== 4) {
+    return Promise.resolve(null);
+  }
+  var canonical = [];
+  for (var i = 0; i < noncePoints.length; i++) {
+    var point = parseP256Point(noncePoints[i]);
+    if (point === null) return Promise.resolve(null);
+    canonical.push(formatP256PublicKey(point));
+  }
+  var transcript = BALLOTPROOF_CHALLENGE_PREFIX + "\n" +
+    statement.key + "\n" + statement.a + "\n" + statement.b +
+    "\n" + canonical.join("\n");
+  return sha256Hex(transcript).then(function (digest) {
+    if (digest === null) return null;
+    var value = BigInt("0x" + digest) % P256_N;
+    if (value === P256_ZERO) return null;
+    return p256IntToHex(value);
+  });
+}
+
+/* A ballot proof line: the format tag, then per
+   branch — vote 0 first, vote 1 second — the
+   branch's two nonce points (base side, key
+   side) and its challenge and response, gated
+   as responses: zero allowed, the order refused,
+   because a branch challenge honestly can be the
+   difference that lands on zero. Pieces that do
+   not check out are null, never a half-built
+   line. */
+function formatBallotProof(branches) {
+  if (!Array.isArray(branches) || branches.length !== 2) return null;
+  var parts = [BALLOTPROOF_FORMAT];
+  for (var i = 0; i < branches.length; i++) {
+    var branch = branches[i];
+    if (branch === null || typeof branch !== "object") return null;
+    var nonceA = parseP256Point(branch.nonceA);
+    var nonceY = parseP256Point(branch.nonceY);
+    var challenge = parseProofResponse(branch.challenge);
+    var response = parseProofResponse(branch.response);
+    if (nonceA === null || nonceY === null ||
+        challenge === null || response === null) return null;
+    parts.push(formatP256PublicKey(nonceA));
+    parts.push(formatP256PublicKey(nonceY));
+    parts.push(challenge); parts.push(response);
+  }
+  return parts.join(":");
+}
+
+function parseBallotProof(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 9 || parts[0] !== BALLOTPROOF_FORMAT) return null;
+  var branches = [];
+  for (var i = 0; i < 2; i++) {
+    var base = 1 + i * 4;
+    var nonceA = parseP256Point(parts[base]);
+    var nonceY = parseP256Point(parts[base + 1]);
+    var challenge = parseProofResponse(parts[base + 2]);
+    var response = parseProofResponse(parts[base + 3]);
+    if (nonceA === null || nonceY === null ||
+        challenge === null || response === null) return null;
+    branches.push({ nonceA: formatP256PublicKey(nonceA),
+                    nonceY: formatP256PublicKey(nonceY),
+                    challenge: challenge, response: response });
+  }
+  return { branches: branches };
+}
+
+/* One attempt at a proof, with all randomness
+   drawn fresh inside the attempt: the false
+   branch is simulated backwards on both bases,
+   the true branch's nonce pair is committed,
+   the hash chooses the true branch's challenge
+   as whatever the simulated one leaves, and the
+   true branch answers with the ballot's own
+   randomness. Any impossible point — a simulated
+   branch landing on the identity — fails the
+   attempt as null and the caller redraws, the
+   same discipline tools 43 and 45 follow. */
+function ballotProofAttempt(keyText, ballotText, statement,
+                            vote, randomnessHex) {
+  var falseIndex = 1 - vote;
+  var yPoint = parseP256Point(statement.key);
+  var aPoint = parseP256Point(statement.a);
+  if (yPoint === null || aPoint === null) {
+    return Promise.resolve(null);
+  }
+  var simChallenge = randomProofScalar();
+  var simResponse = randomProofScalar();
+  if (simChallenge === null || simResponse === null) {
+    return Promise.resolve(null);
+  }
+  var simC = BigInt("0x" + simChallenge);
+  var simS = BigInt("0x" + simResponse);
+  var shiftedPoint = parseP256Point(statement.shifted[falseIndex]);
+  if (shiftedPoint === null) return Promise.resolve(null);
+  var simNonceA = p256PointAdd(p256PointMultiply(simS,
+      { x: P256_GX, y: P256_GY }),
+    p256PointMultiply(rangeModN(-simC), aPoint));
+  var simNonceY = p256PointAdd(p256PointMultiply(simS, yPoint),
+    p256PointMultiply(rangeModN(-simC), shiftedPoint));
+  if (simNonceA === null || simNonceY === null) {
+    return Promise.resolve(null);
+  }
+  var nonceHex = randomProofScalar();
+  if (nonceHex === null) return Promise.resolve(null);
+  var trueNonceA = proofCommitmentForNonce(nonceHex);
+  var trueNonceYPoint = p256PointMultiply(BigInt("0x" + nonceHex),
+    yPoint);
+  if (trueNonceA === null || trueNonceYPoint === null) {
+    return Promise.resolve(null);
+  }
+  var noncePoints = [];
+  noncePoints[falseIndex * 2] = formatP256PublicKey(simNonceA);
+  noncePoints[falseIndex * 2 + 1] = formatP256PublicKey(simNonceY);
+  noncePoints[vote * 2] = trueNonceA;
+  noncePoints[vote * 2 + 1] = formatP256PublicKey(trueNonceYPoint);
+  return ballotProofChallenge(keyText, ballotText, noncePoints)
+    .then(function (challenge) {
+      if (challenge === null) return null;
+      var trueChallenge = rangeModN(BigInt("0x" + challenge) - simC);
+      var trueResponse = rangeModN(BigInt("0x" + nonceHex) +
+        trueChallenge * BigInt("0x" + randomnessHex));
+      var branches = [];
+      branches[falseIndex] = {
+        nonceA: noncePoints[falseIndex * 2],
+        nonceY: noncePoints[falseIndex * 2 + 1],
+        challenge: simChallenge, response: simResponse };
+      branches[vote] = {
+        nonceA: noncePoints[vote * 2],
+        nonceY: noncePoints[vote * 2 + 1],
+        challenge: p256IntToHex(trueChallenge),
+        response: p256IntToHex(trueResponse) };
+      return formatBallotProof(branches);
+    });
+}
+
+/* The prover's move: a ballot line, the key it
+   was cast under, the vote and the ballot's own
+   randomness in, the proof line out. The ballot
+   is checked first — the vote and randomness
+   must recompute exactly this ballot, the way
+   tool 45 checks an opening before proving — so
+   a ballot encrypting 2, a randomness that is
+   not this ballot's, or a vote that is not this
+   ballot's gets null: no proof exists here for
+   a ballot that is not what its prover claims,
+   and none is approximated. */
+function proveBallot(ballotText, keyText, voteText, randomnessHex) {
+  var vote = parseTallyVote(voteText);
+  var randomness = parseProofScalar(randomnessHex);
+  var ballot = parseTallyBallot(ballotText);
+  if (vote === null || randomness === null || ballot === null) {
+    return Promise.resolve(null);
+  }
+  var rebuilt = tallyBallotFor(vote, keyText, randomness);
+  if (rebuilt === null ||
+      rebuilt !== formatTallyBallot(ballot.a, ballot.b)) {
+    return Promise.resolve(null);
+  }
+  var statement = ballotProofStatementPoints(keyText, ballotText);
+  if (statement === null) return Promise.resolve(null);
+  var attempt = function (triesLeft) {
+    return ballotProofAttempt(keyText, ballotText, statement,
+      vote, randomness)
+      .then(function (proof) {
+        if (proof !== null) return proof;
+        return triesLeft > 1 ? attempt(triesLeft - 1) : null;
+      });
+  };
+  return attempt(4);
+}
+
+/* A voter's whole move, in one step: draw the
+   fresh randomness, cast the ballot under it
+   and prove the ballot honest, returning both
+   lines. The randomness itself is deliberately
+   NOT returned — it can strip this ballot's
+   mask, as the header states — so it exists
+   only inside this call, and the proof it made
+   is the voter's receipt that the ballot is a
+   0 or a 1 and nothing else. */
+function castProvedBallot(voteText, keyText) {
+  var vote = parseTallyVote(voteText);
+  if (vote === null) return Promise.resolve(null);
+  var randomness = randomProofScalar();
+  if (randomness === null) return Promise.resolve(null);
+  var ballot = tallyBallotFor(vote, keyText, randomness);
+  if (ballot === null) return Promise.resolve(null);
+  return proveBallot(ballot, keyText, String(vote), randomness)
+    .then(function (proof) {
+      if (proof === null) return null;
+      return { ballot: ballot, proof: proof };
+    });
+}
+
+/* The verifier's verdict, needing no secret of
+   any kind: recompute the statement's shifted
+   points from the key and ballot, re-hash the
+   challenge from the proof's four nonce points,
+   then check that the branch challenges sum to
+   it and every branch balances on both bases —
+   s×G against R_A + c×A and s×Y against
+   R_Y + c×D for its own shifted point. True
+   when all of it holds; false — never null —
+   when every piece is well-formed and one
+   fails; null when a piece cannot even be
+   parsed, or the statement itself cannot be
+   judged. An identity on either side of a
+   balance counts as the identity it is, by the
+   same point comparison the tally uses. */
+function verifyBallotProof(keyText, ballotText, proofText) {
+  var statement = ballotProofStatementPoints(keyText, ballotText);
+  var proof = parseBallotProof(proofText);
+  if (statement === null || proof === null) {
+    return Promise.resolve(null);
+  }
+  var noncePoints = [proof.branches[0].nonceA,
+    proof.branches[0].nonceY, proof.branches[1].nonceA,
+    proof.branches[1].nonceY];
+  return ballotProofChallenge(keyText, ballotText, noncePoints)
+    .then(function (challenge) {
+      if (challenge === null) return null;
+      var yPoint = parseP256Point(statement.key);
+      var aPoint = parseP256Point(statement.a);
+      if (yPoint === null || aPoint === null) return null;
+      var sum = rangeModN(BigInt("0x" + proof.branches[0].challenge) +
+        BigInt("0x" + proof.branches[1].challenge));
+      if (sum !== BigInt("0x" + challenge)) return false;
+      for (var i = 0; i < 2; i++) {
+        var branch = proof.branches[i];
+        var c = BigInt("0x" + branch.challenge);
+        var s = BigInt("0x" + branch.response);
+        var shiftedPoint = parseP256Point(statement.shifted[i]);
+        if (shiftedPoint === null) return null;
+        var lhsA = p256PointMultiply(s, { x: P256_GX, y: P256_GY });
+        var rhsA = p256PointAdd(parseP256Point(branch.nonceA),
+          p256PointMultiply(c, aPoint));
+        if (!tallyPointsEqual(lhsA, rhsA)) return false;
+        var lhsY = p256PointMultiply(s, yPoint);
+        var rhsY = p256PointAdd(parseP256Point(branch.nonceY),
+          p256PointMultiply(c, shiftedPoint));
+        if (!tallyPointsEqual(lhsY, rhsY)) return false;
+      }
+      return true;
+    });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -10023,7 +10385,12 @@ if (typeof module !== "undefined" && module.exports) {
                      parseTallyBallot, tallyBallotFor,
                      makeTallyBallot, parseTallyBallots,
                      formatTally, parseTally,
-                     tallyBallotsFor, openTally };
+                     tallyBallotsFor, openTally,
+                     BALLOTPROOF_FORMAT, BALLOTPROOF_CHALLENGE_PREFIX,
+                     ballotProofStatementPoints, ballotProofChallenge,
+                     formatBallotProof, parseBallotProof,
+                     proveBallot, castProvedBallot,
+                     verifyBallotProof };
 }
 
 if (typeof document !== "undefined") {
@@ -13228,6 +13595,77 @@ if (typeof document !== "undefined") {
         "get here — though the page text is honest that this " +
         "state COULD open one, which is why real elections " +
         "split it.";
+    });
+
+    /* --- prove the ballot is honest (ballot validity proof) --- */
+    document.getElementById("ballotproof-cast").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("ballotproof-cast-result");
+      var ballotOut = document.getElementById("bp-ballot-out");
+      var proofOut = document.getElementById("bp-proof-out");
+      status.textContent = "Casting and proving locally…";
+      castProvedBallot(
+        document.getElementById("bp-cast-vote").value,
+        document.getElementById("bp-cast-key").value)
+        .then(function (made) {
+          if (made === null) {
+            ballotOut.value = "";
+            proofOut.value = "";
+            status.textContent = "No ballot was cast: the vote " +
+              "must be exactly 0 or 1, and the key a whole " +
+              "p4a-tallykey-v1 line from tool 51's setup form.";
+            return;
+          }
+          ballotOut.value = made.ballot;
+          proofOut.value = made.proof;
+          status.textContent = "Cast — and proved in the same " +
+            "step: the proof line below is bound to this ballot " +
+            "and this key, and it convinces any checker that the " +
+            "ballot encrypts a 0 or a 1 without saying which. " +
+            "The randomness that made the ballot was never " +
+            "printed — it could strip the ballot's mask — so " +
+            "hand over both lines together, and keep nothing " +
+            "else. This proof does not touch eligibility or " +
+            "double voting; tool 51's limits there stand.";
+        });
+    });
+
+    document.getElementById("ballotproof-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("ballotproof-check-result");
+      var out = document.getElementById("bp-check-out");
+      status.textContent = "Checking locally…";
+      verifyBallotProof(
+        document.getElementById("bp-check-key").value,
+        document.getElementById("bp-check-ballot").value,
+        document.getElementById("bp-check-proof").value)
+        .then(function (ok) {
+          if (ok === null) {
+            out.value = "";
+            status.textContent = "Cannot judge this: the key " +
+              "must be a whole p4a-tallykey-v1 line, the ballot " +
+              "a whole p4a-ballot-v1 line and the proof a whole " +
+              "p4a-ballotproof-v1 line — a line that cannot be " +
+              "read gets no verdict, rather than a wrong one.";
+            return;
+          }
+          out.value = ok
+            ? "Proved — this ballot encrypts 0 or 1 under this key."
+            : "Not proved — this proof does not hold for this ballot under this key.";
+          status.textContent = ok
+            ? "Proved — without opening anything: the two branch " +
+              "challenges sum to the challenge rehashed from the " +
+              "key, the ballot and the proof's own nonce points, " +
+              "and both branches balance on both bases. The " +
+              "verdict names no vote: whichever branch was " +
+              "simulated is indistinguishable from the one that " +
+              "was answered for real."
+            : "Not proved: something here does not balance — a " +
+              "proof made for another ballot or another key, a " +
+              "nudged challenge or response, or a ballot that " +
+              "encrypts something other than 0 or 1, for which " +
+              "no proof from tool 52's cast form exists.";
+        });
     });
 
     /* --- copy donation address --- */
