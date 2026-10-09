@@ -1357,6 +1357,43 @@ renewable resource that pays for shielded transactions.
   and not a format any chain or wallet
   checks.
 
+- **Name the bad partial — a proof for every
+  partial opening** — the gap tool 53 names in
+  its own text: a partial made from a wrong
+  share is a well-formed point, so the
+  finish's checks do not catch it — it poisons
+  the weighted sum, the finish fails closed,
+  and which trustee erred is not identified.
+  Each trustee now attaches a Chaum–Pedersen
+  proof (tool 44's equal-log statement, share
+  side) that one scalar sits behind both their
+  published commitment in the
+  `p4a-tallytrustees-v1` line (share × G) and
+  their `p4a-tallypartial-v1` partial (share ×
+  the tally's summed point): a nonce pair, one
+  SHA-256 challenge under
+  `privacy4all-partialproof-v1` over the
+  trustee's index, the commitment, the tally
+  and the partial, and one response, in a
+  `p4a-partialproof-v1` line. Anyone checks
+  both balances with no secret; a wrong
+  share's proof balances on the tally side
+  alone and fails against the dealt
+  commitment, so the bad partial can be named
+  and excluded before the finish instead of
+  silently costing the whole count. Honestly
+  labelled: the proof names its trustee and
+  its tally by design and hides only the
+  share; one nonce behind two proofs hands
+  back the share (pinned in the tests); the
+  arithmetic cannot tell a partial over the
+  tally's sum from one over a single ballot —
+  the limit tool 53 states — so the proof
+  covers the tally its challenge names, and
+  tool 53's finish itself is unchanged. Not a
+  Compact circuit proof, and not a format any
+  chain or wallet checks.
+
 ## Guides
 
 - [Getting started building on Midnight](guides/getting-started-midnight.md) —

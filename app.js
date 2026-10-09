@@ -12197,6 +12197,327 @@ function verifyBoardShuffle(keyText, boardText, shuffledText,
   });
 }
 
+/* Name the bad partial — a proof for every
+   partial opening (tool 58).
+
+   Tool 53 ends on a named gap, stated plainly in
+   its own text: a partial made from a wrong share
+   is a well-formed point, so neither of the
+   finish's public checks catches it — it poisons
+   the weighted sum, the finish fails closed with
+   no answer, and which trustee erred is not
+   identified, "where real systems attach a proof
+   to each partial (tool 44's statement, share
+   side) so a bad one can be named". This tool
+   attaches that proof, for this page's own
+   partials, in this page's own arithmetic.
+
+   The statement is public and needs no secret to
+   state: trustee j's published commitment
+   C_j = s_j×G from the trustees line, the tally's
+   summed randomness point A, and the partial
+   P_j the trustee hands over. The claim is that
+   one scalar sits behind both points —
+   log_G(C_j) = log_A(P_j) = s_j — which is
+   exactly tool 44's equality, aimed at the share:
+   C_j under the base point, P_j under the tally's
+   own point. The trustee, who holds s_j, proves
+   it the Chaum–Pedersen way: a fresh nonce pair
+   (k×G, k×A), one Fiat–Shamir challenge — SHA-256
+   under the label privacy4all-partialproof-v1
+   over the trustee's index, the commitment, the
+   tally (its count and both points), the partial
+   and the two nonce points — and one response
+   z = k + c·s_j. The checker, holding nothing
+   secret, re-hashes the challenge and checks both
+   balances: z×G against R_G + c×C_j, and z×A
+   against R_A + c×P_j. Both together are the
+   verdict. A partial made from a wrong share w
+   can still be proved — under w — on the A side
+   alone, but its G side balances only against
+   w×G, not the dealt commitment, so the pair
+   fails and the failure names the trustee: this
+   partial, from this index, is not the dealt
+   share's work. A board that demands a proof per
+   partial and runs this checker before the
+   finish can exclude the bad partial and name
+   its trustee instead of losing the whole count
+   to a poisoned sum. Tool 53's finish itself is
+   unchanged — this checker stands in front of
+   it, the way a real board's would.
+
+   The honest limits are plain. The proof is
+   meant to name its trustee and its tally, and
+   it does: it hides the share and nothing else —
+   not who acted, not which tally, not when. The
+   nonce discipline is inherited whole from tool
+   32: one nonce behind two proofs (two tallies
+   are enough) hands back the share itself, and
+   the tests pin exactly that recovery, so a
+   nonce is drawn fresh inside every proof and
+   printed nowhere. The arithmetic cannot tell a
+   partial over the tally's summed point from one
+   over a single ballot's point — they are the
+   same multiplication, the limit tool 53 states
+   for the partial itself — so a proof that a
+   partial is the dealt share's honest work is
+   not a proof of what it was computed over
+   beyond the tally the challenge names: checked
+   against a single ballot's tally line, a
+   ballot-opening partial would prove just as
+   cleanly, and only the board's discipline —
+   partials accepted over the published tally
+   alone — keeps that door shut. And the proof
+   guards the finish, not the dealing: a dealer
+   who dealt bad shares dealt them, by tool 53's
+   own trusted-dealer limit, and a quorum pooling
+   shares still holds the secret whole. The frame
+   is the house one: real Chaum–Pedersen
+   arithmetic computed locally, but the line is
+   this hub's own p4a-partialproof-v1 spelling —
+   not a format any chain or wallet checks, not
+   one of Midnight's Compact circuit proofs. A
+   share line is a secret of the same rank as a
+   private key — never paste a real wallet key or
+   a production private key into any web page,
+   including this one. */
+var PARTIALPROOF_FORMAT = "p4a-partialproof-v1";
+var PARTIALPROOF_CHALLENGE_PREFIX = "privacy4all-partialproof-v1";
+
+/* The statement a partial proof makes, judged:
+   the trustees line, the tally line and the
+   partial line in, and out the trustee's index,
+   their published commitment, the tally's count
+   and two points, and the partial's point — every
+   piece canonicalised, so the challenge below
+   names points and not spellings. A partial from
+   an index the trustees line never dealt is no
+   statement at all here: null, the same refusal
+   tool 53's finish makes before any opening. */
+function partialProofStatement(trusteesText, tallyText, partialText) {
+  var trustees = parseTTallyTrustees(trusteesText);
+  var tally = parseTally(tallyText);
+  var partial = parseTTallyPartial(partialText);
+  if (trustees === null || tally === null || partial === null) {
+    return null;
+  }
+  var commitment = trustees.commitments[partial.index];
+  if (commitment === undefined) return null;
+  return { index: partial.index, commitment: commitment,
+           count: tally.count, tallyA: tally.a, tallyB: tally.b,
+           partial: partial.point };
+}
+
+/* The one challenge for a partial proof: SHA-256
+   over the label, the trustee's index, their
+   commitment, the tally's count and both points,
+   the partial and the two nonce points — binding
+   the proof to this trustee, this tally and this
+   partial and no other. Reduced under the order;
+   a reduced digest of zero is null, the same
+   refusal the page's other Fiat–Shamir challenges
+   make. */
+function partialProofChallenge(trusteesText, tallyText, partialText,
+                               noncePoints) {
+  var statement = partialProofStatement(trusteesText, tallyText,
+    partialText);
+  if (statement === null || !Array.isArray(noncePoints) ||
+      noncePoints.length !== 2) {
+    return Promise.resolve(null);
+  }
+  var canonical = [];
+  for (var i = 0; i < noncePoints.length; i++) {
+    var point = parseP256Point(noncePoints[i]);
+    if (point === null) return Promise.resolve(null);
+    canonical.push(formatP256PublicKey(point));
+  }
+  var transcript = PARTIALPROOF_CHALLENGE_PREFIX + "\n" +
+    statement.index + "\n" + statement.commitment + "\n" +
+    statement.count + "\n" + statement.tallyA + "\n" +
+    statement.tallyB + "\n" + statement.partial + "\n" +
+    canonical.join("\n");
+  return sha256Hex(transcript).then(function (digest) {
+    if (digest === null) return null;
+    var value = BigInt("0x" + digest) % P256_N;
+    if (value === P256_ZERO) return null;
+    return p256IntToHex(value);
+  });
+}
+
+/* A partial proof line: the format tag, the
+   trustee's index, the two nonce points (base
+   side, tally side) and the challenge and
+   response, gated as responses — zero allowed,
+   the order refused. The index rides in the line
+   because naming the trustee is the proof's
+   whole job. Pieces that do not check out are
+   null, never a half-built line. */
+function formatPartialProof(proof) {
+  if (proof === null || typeof proof !== "object") return null;
+  var nonceG = parseP256Point(proof.nonceG);
+  var nonceA = parseP256Point(proof.nonceA);
+  var challenge = parseProofResponse(proof.challenge);
+  var response = parseProofResponse(proof.response);
+  if (!validThresholdIndexValue(proof.index) || nonceG === null ||
+      nonceA === null || challenge === null || response === null) {
+    return null;
+  }
+  return [PARTIALPROOF_FORMAT, proof.index,
+    formatP256PublicKey(nonceG), formatP256PublicKey(nonceA),
+    challenge, response].join(":");
+}
+
+function parsePartialProof(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 6 || parts[0] !== PARTIALPROOF_FORMAT) {
+    return null;
+  }
+  var index = parseThresholdIndexText(parts[1]);
+  var nonceG = parseP256Point(parts[2]);
+  var nonceA = parseP256Point(parts[3]);
+  var challenge = parseProofResponse(parts[4]);
+  var response = parseProofResponse(parts[5]);
+  if (index === null || nonceG === null || nonceA === null ||
+      challenge === null || response === null) return null;
+  return { index: index, nonceG: formatP256PublicKey(nonceG),
+           nonceA: formatP256PublicKey(nonceA),
+           challenge: challenge, response: response };
+}
+
+/* One proof, to order: the share line, the tally
+   line and a chosen nonce in, the partial line
+   and its proof line out — synchronous in its
+   arithmetic and deterministic once the nonce is
+   fixed, so tests can pin every piece. The
+   partial is tool 53's own step, recomputed
+   here, and the response answers the challenge
+   with the share the share line carries. This
+   core does NOT judge the share against the
+   trustees line — a wrong share's proof is a
+   thing the checker must be able to refuse, so
+   it must be buildable here; the dealt-share
+   gate is the public prover's, below. A zero
+   challenge fails the attempt as null and the
+   caller redraws. */
+function partialProofWithNonce(trusteesText, shareText, tallyText,
+                               nonceHex) {
+  var share = parseTTallyShare(shareText);
+  var nonce = parseProofScalar(nonceHex);
+  var partial = thresholdTallyPartial(shareText, tallyText);
+  if (share === null || nonce === null || partial === null) {
+    return Promise.resolve(null);
+  }
+  var statement = partialProofStatement(trusteesText, tallyText,
+    partial);
+  if (statement === null) return Promise.resolve(null);
+  var tally = parseTally(tallyText);
+  var aPoint = tally === null ? null : parseP256Point(tally.a);
+  var nonceG = proofCommitmentForNonce(nonce);
+  var nonceAPoint = aPoint === null ? null :
+    p256PointMultiply(BigInt("0x" + nonce), aPoint);
+  if (nonceG === null || nonceAPoint === null) {
+    return Promise.resolve(null);
+  }
+  var nonceA = formatP256PublicKey(nonceAPoint);
+  return partialProofChallenge(trusteesText, tallyText, partial,
+      [nonceG, nonceA])
+    .then(function (challenge) {
+      if (challenge === null) return null;
+      var response = rangeModN(BigInt("0x" + nonce) +
+        BigInt("0x" + challenge) * BigInt("0x" + share.share));
+      var proof = formatPartialProof({ index: share.index,
+        nonceG: nonceG, nonceA: nonceA, challenge: challenge,
+        response: p256IntToHex(response) });
+      if (proof === null) return null;
+      return { partial: partial, proof: proof };
+    });
+}
+
+/* The trustee's move, whole: the trustees line,
+   their share line and the tally line in, their
+   partial line and its proof line out. The share
+   is judged first, by tool 53's own check — a
+   share the trustees line did not deal gets
+   null, because no honest proof ties it to the
+   published commitment and none is approximated.
+   The nonce is drawn fresh inside the attempt
+   and printed nowhere: it is the one secret
+   besides the share itself, and reusing it
+   across two proofs would hand the share back,
+   as the header states. */
+function provePartialOpening(trusteesText, shareText, tallyText) {
+  if (checkTTallyShare(trusteesText, shareText) !== true) {
+    return Promise.resolve(null);
+  }
+  var attempt = function (triesLeft) {
+    var nonce = randomProofScalar();
+    if (nonce === null) return Promise.resolve(null);
+    return partialProofWithNonce(trusteesText, shareText,
+        tallyText, nonce)
+      .then(function (made) {
+        if (made !== null) return made;
+        return triesLeft > 1 ? attempt(triesLeft - 1) : null;
+      });
+  };
+  return attempt(4);
+}
+
+/* The checker's verdict, needing no secret of
+   any kind: rebuild the statement from the
+   trustees line, the tally and the partial,
+   re-hash the challenge from the proof's two
+   nonce points, demand the proof's challenge be
+   that challenge and its index the partial's,
+   then check both balances — z×G against
+   R_G + c×C_j and z×A against R_A + c×P_j. True
+   when all of it holds; false — never null —
+   when every piece is well-formed and one fails:
+   a wrong share's proof, a proof transplanted to
+   another trustee's partial or another tally, a
+   nudged challenge or response. Null when a
+   piece cannot even be parsed, or the statement
+   itself cannot be judged — a partial from an
+   undealt index gets no verdict, rather than a
+   wrong one. An identity on either side of a
+   balance counts as the identity it is, by the
+   same point comparison the tally uses. */
+function verifyPartialProof(trusteesText, tallyText, partialText,
+                            proofText) {
+  var statement = partialProofStatement(trusteesText, tallyText,
+    partialText);
+  var proof = parsePartialProof(proofText);
+  if (statement === null || proof === null) {
+    return Promise.resolve(null);
+  }
+  if (proof.index !== statement.index) {
+    return Promise.resolve(false);
+  }
+  return partialProofChallenge(trusteesText, tallyText, partialText,
+      [proof.nonceG, proof.nonceA])
+    .then(function (challenge) {
+      if (challenge === null) return null;
+      if (BigInt("0x" + proof.challenge) !==
+          BigInt("0x" + challenge)) return false;
+      var commitment = parseP256Point(statement.commitment);
+      var aPoint = parseP256Point(statement.tallyA);
+      var partialPoint = parseP256Point(statement.partial);
+      if (commitment === null || aPoint === null ||
+          partialPoint === null) return null;
+      var c = BigInt("0x" + proof.challenge);
+      var z = BigInt("0x" + proof.response);
+      var lhsG = p256PointMultiply(z, { x: P256_GX, y: P256_GY });
+      var rhsG = p256PointAdd(parseP256Point(proof.nonceG),
+        p256PointMultiply(c, commitment));
+      if (!tallyPointsEqual(lhsG, rhsG)) return false;
+      var lhsA = p256PointMultiply(z, aPoint);
+      var rhsA = p256PointAdd(parseP256Point(proof.nonceA),
+        p256PointMultiply(c, partialPoint));
+      if (!tallyPointsEqual(lhsA, rhsA)) return false;
+      return true;
+    });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -12439,7 +12760,12 @@ if (typeof module !== "undefined" && module.exports) {
                      parseShuffleProof, shuffledBoardFor,
                      shuffleSumBallot, proveShuffleBallot,
                      verifyShuffleBallot, shuffleBoardAndProve,
-                     verifyBoardShuffle };
+                     verifyBoardShuffle,
+                     PARTIALPROOF_FORMAT, PARTIALPROOF_CHALLENGE_PREFIX,
+                     partialProofStatement, partialProofChallenge,
+                     formatPartialProof, parsePartialProof,
+                     partialProofWithNonce, provePartialOpening,
+                     verifyPartialProof };
 }
 
 if (typeof document !== "undefined") {
@@ -16124,6 +16450,91 @@ if (typeof document !== "undefined") {
               "total that moved is a vote changed, dropped or " +
               "duplicated — the report above says which one this " +
               "shuffle tells.";
+        });
+    });
+
+    /* --- name the bad partial (partial proof) --- */
+    document.getElementById("partial-proof-prove").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("partial-proof-result");
+      var partialOut = document.getElementById("pp-partial-out");
+      var proofOut = document.getElementById("pp-proof-out");
+      status.textContent = "Proving locally…";
+      provePartialOpening(
+        document.getElementById("pp-trustees").value,
+        document.getElementById("pp-share").value,
+        document.getElementById("pp-tally").value)
+        .then(function (made) {
+          if (made === null) {
+            partialOut.value = "";
+            proofOut.value = "";
+            status.textContent = "No proof: the trustees line " +
+              "must be a whole p4a-tallytrustees-v1 line, the share " +
+              "a whole p4a-tallyshare-v1 line the trustees line " +
+              "actually dealt (checked against its published " +
+              "commitment), and the tally a whole p4a-tally-v1 " +
+              "line — a share that is not the dealt one gets no " +
+              "proof, because no honest proof ties it to the " +
+              "commitment.";
+            return;
+          }
+          partialOut.value = made.partial;
+          proofOut.value = made.proof;
+          status.textContent = "Proved locally: the partial is " +
+            "tool 53's own step, and the proof ties it to your " +
+            "published commitment under both bases — the base " +
+            "point and the tally's summed point. Hand both lines " +
+            "to whoever runs the finish, in the open: the proof " +
+            "names you and this tally, and hides only your share. " +
+            "Your share line never left this form.";
+        });
+    });
+
+    document.getElementById("partial-proof-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("partial-proof-check-result");
+      var out = document.getElementById("ppc-out");
+      status.textContent = "Checking locally…";
+      verifyPartialProof(
+        document.getElementById("ppc-trustees").value,
+        document.getElementById("ppc-tally").value,
+        document.getElementById("ppc-partial").value,
+        document.getElementById("ppc-proof").value)
+        .then(function (verdict) {
+          if (verdict === null) {
+            out.value = "";
+            status.textContent = "Cannot judge this partial: the " +
+              "trustees line must be a whole p4a-tallytrustees-v1 " +
+              "line, the tally a whole p4a-tally-v1 line, the " +
+              "partial a whole p4a-tallypartial-v1 line from a " +
+              "dealt trustee, and the proof a whole " +
+              "p4a-partialproof-v1 line — a partial that cannot " +
+              "be read gets no verdict, rather than a wrong one.";
+            return;
+          }
+          out.value = verdict
+            ? "This partial is the dealt share's honest work: " +
+              "the proof balances under both bases, against the " +
+              "trustee's published commitment and against the " +
+              "tally's summed point."
+            : "This partial is NOT proved: the proof does not " +
+              "balance for this trustee, this tally and this " +
+              "partial — a wrong share, a transplanted proof, or " +
+              "a partial computed over something else. The " +
+              "trustee it names is the one whose partial this is.";
+          status.textContent = verdict
+            ? "The partial checks out: one scalar sits behind " +
+              "the trustee's commitment and this partial, so the " +
+              "finish can weight it knowing it is the dealt " +
+              "share's work. The checker held no secret and " +
+              "learned no share — only that this trustee's " +
+              "partial is honest."
+            : "The partial does not check out — and that is the " +
+              "point of the proof: in tool 53 this partial would " +
+              "have poisoned the finish silently and the count " +
+              "would simply have failed. Here the failure has a " +
+              "name: the trustee whose index the partial and " +
+              "the proof carry.";
         });
     });
 
