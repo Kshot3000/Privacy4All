@@ -12518,6 +12518,278 @@ function verifyPartialProof(trusteesText, tallyText, partialText,
     });
 }
 
+/* ---------- 59. No dealer ever held it — a jointly
+   made counting key ----------
+
+   Tool 53 ends on a named gap, stated plainly in
+   its own text: a DEALER deals its split, and
+   whoever runs its setup form holds the whole
+   counting secret for that one moment — "real
+   elections generate the key jointly, by tool 38's
+   distributed key generation, so it never exists
+   whole anywhere". Tool 38 runs that generation
+   for a SIGNING key, and its finalized shares are
+   tool 37 share lines. This tool runs the same
+   generation aimed at the counting key: every
+   trustee deals a split of their own random
+   contribution, in tool 38's own lines — a
+   broadcast p4a-dkgcommit-v1 commitment line and
+   one private p4a-dkgshare-v1 line per trustee —
+   and the counting key is a key nobody dealt.
+
+   The counting key falls out of the broadcast
+   lines alone: the sum of the contributions'
+   constant commitments, (Σ_j x_j)×G, spelled as
+   tool 51's own p4a-tallykey-v1 line, so voters
+   cast under it in tools 51 and 52 unchanged.
+   The trustees line falls out of the same lines:
+   trustee j's commitment for the summed
+   polynomial F = Σ_j f_j is Σ_d Σ_k j^k·C_dk
+   over every dealer's Feldman commitments —
+   exactly F(j)×G, computed as points, never as a
+   scalar — spelled as tool 53's own
+   p4a-tallytrustees-v1 line. Finalizing is tool
+   38's addition and nothing else: trustee j sums
+   the shares addressed to them, one from every
+   dealer including themselves, each first passing
+   its Feldman check against its dealer's
+   broadcast commitments, and the sum is spelled
+   as tool 53's own p4a-tallyshare-v1 line — then
+   judged once more by tool 53's own share check
+   against the derived trustees line before it is
+   handed back. From there the election is tools
+   53 and 58 unchanged: partials over the tally,
+   the threshold finish, a proof per partial. The
+   group secret X = Σ_j x_j is never computed, by
+   anyone, anywhere in this code: only its public
+   key exists. A quorum pooling finalized shares
+   still holds it — that is what a quorum is —
+   but no dealer, and no moment in the setup,
+   ever held it first.
+
+   The honest limits are the ones tool 38 states,
+   carried whole. This page plays every trustee on
+   one device, so here the whole round is visible
+   in one place; in real use each trustee runs
+   their own device, only commitment lines are
+   broadcast, and share lines travel over private
+   channels — a share line is a secret of the
+   same rank as in tool 53. There is no complaint
+   or dispute round: a dealer whose share fails
+   its Feldman check is refused at finalizing, and
+   restarting without them is the group's own
+   business off-page. A dealer who waits to see
+   the others' commitments before choosing their
+   own can bias the key's distribution, the
+   Pedersen-scheme caveat tool 38 names, which is
+   why production protocols add rounds this
+   teaching page does not. And the quorum remains
+   the privacy boundary, exactly as in tool 53:
+   trustees who run their partial step over a
+   single ballot instead of the tally still open
+   that ballot between them — the joint setup
+   removes the dealer, not the quorum's power.
+   The frame is the house one: a real distributed
+   key generation computed locally, spelled in
+   this hub's own lines around tools 51, 53 and
+   38's unchanged formats — not a format any
+   chain or wallet checks, not one of Midnight's
+   Compact circuit proofs. Never paste a real
+   wallet key or a production private key into
+   any web page, including this one; this tool
+   needs no existing key at all — every
+   contribution is drawn fresh on the page. */
+
+/* One trustee's dealing, to order: a chosen
+   contribution and coefficients in, the broadcast
+   commitment line and one share line per trustee
+   out — synchronous and deterministic, so tests
+   can pin every line against tool 38's own
+   arithmetic. The contribution scalar itself is
+   NOT part of what comes back: once its shares
+   are dealt, nobody needs it, and keeping it
+   would keep a road back to a piece of the group
+   secret. Coefficients must number exactly the
+   quorum minus one — the polynomial's degree is
+   the quorum's, as in tools 37, 38 and 53. */
+function jointTallyDealFor(contributionHex, coefficientHexes,
+                           threshold, count, dealerIndex) {
+  if (!validThresholdValue(threshold) ||
+      !validTTallyCountValue(count) || count < threshold ||
+      !validThresholdIndexValue(dealerIndex) ||
+      dealerIndex > count ||
+      !Array.isArray(coefficientHexes) ||
+      coefficientHexes.length !== threshold - 1) {
+    return null;
+  }
+  var commitments = dkgPolynomialCommitments(contributionHex,
+    coefficientHexes);
+  if (commitments === null) return null;
+  var commitment = formatDkgCommitmentLine(threshold, dealerIndex,
+    commitments);
+  if (commitment === null) return null;
+  var shares = [];
+  for (var i = 1; i <= count; i++) {
+    var shareScalar = thresholdShareScalar(contributionHex,
+      coefficientHexes, i);
+    if (shareScalar === null) return null;
+    var line = formatDkgShareLine(threshold, dealerIndex, i,
+      shareScalar);
+    if (line === null) return null;
+    shares.push(line);
+  }
+  return { dealer: dealerIndex, commitment: commitment,
+           shares: shares };
+}
+
+/* A trustee's whole move as a dealer: read the
+   typed quorum, trustee count and their own
+   number, draw a fresh contribution and its
+   coefficients, and deal. A fresh contribution
+   per trustee per count, as everywhere on this
+   page: a contribution reused across counts
+   would tie those counts' keys to one round of
+   dealing, which is wider than one count needs. */
+function makeJointTallyContribution(thresholdText, countText,
+                                    dealerText) {
+  var threshold = parseTTallyThreshold(thresholdText);
+  var count = parseTTallyTrusteeCount(countText);
+  var dealer = parseThresholdIndexText(dealerText);
+  if (threshold === null || count === null || dealer === null ||
+      count < threshold || dealer > count) {
+    return null;
+  }
+  var scalar = randomProofScalar();
+  if (scalar === null) return null;
+  var coefficients = [];
+  for (var c = 0; c < threshold - 1; c++) {
+    var coefficient = randomProofScalar();
+    if (coefficient === null) return null;
+    coefficients.push(coefficient);
+  }
+  return jointTallyDealFor(scalar, coefficients, threshold, count,
+    dealer);
+}
+
+/* The counting key, derived from the broadcast
+   lines alone — no share, no secret, no dealer
+   involved: tool 38's commitment-set parse
+   already sums the constant commitments into the
+   group point, and this spells that point as
+   tool 51's own key line, so a jointly made key
+   is cast under exactly as a dealt one is. A set
+   that is not a whole round — a dealer missing,
+   a quorum mixed — is null, never a key for a
+   round that did not happen. */
+function jointTallyKeyForCommitments(commitmentsText) {
+  var set = parseDkgCommitmentSet(commitmentsText);
+  if (set === null) return null;
+  return TALLY_KEY_FORMAT + ":" + set.publicKey;
+}
+
+/* The trustees line, derived from the same
+   broadcast lines alone: trustee j's commitment
+   is the summed polynomial's value at j, as a
+   point — for each dealer, their Feldman
+   commitments weighted by j's powers and added,
+   then added across dealers. Anyone can compute
+   it, which is the point: the finish's evidence
+   needs no dealer either. Spelled as tool 53's
+   own trustees line, so its finish and tool 58's
+   proofs take it unchanged. Any point arithmetic
+   landing on the identity — a summed commitment
+   that cancels exactly — cannot be spelled and
+   refuses the whole line. */
+function jointTallyTrusteesForCommitments(commitmentsText) {
+  var set = parseDkgCommitmentSet(commitmentsText);
+  if (set === null || !validTTallyCountValue(set.count)) {
+    return null;
+  }
+  var hexes = [];
+  for (var j = 1; j <= set.count; j++) {
+    var sum = null;
+    for (var d = 1; d <= set.count; d++) {
+      var commitments = set.byDealer[d].commitments;
+      var power = BigInt(1);
+      var recipient = BigInt(j);
+      for (var k = 0; k < commitments.length; k++) {
+        var point = parseP256Point(commitments[k]);
+        if (point === null) return null;
+        var term = p256PointMultiply(power, point);
+        if (term === null) return null;
+        sum = p256PointAdd(sum, term);
+        if (sum === null) return null;
+        power = power * recipient;
+      }
+    }
+    if (sum === null) return null;
+    hexes.push(formatP256PublicKey(sum));
+  }
+  return formatTTallyTrustees(set.threshold, set.count, hexes);
+}
+
+/* Finalizing, for one trustee: the broadcast
+   commitment set plus every share line addressed
+   to that trustee — exactly one per dealer, each
+   passing its Feldman check against that dealer's
+   own commitments, all addressed to the same
+   trustee. The final share is the plain sum of
+   the dealt shares under the order, spelled as
+   tool 53's own share line, and judged by tool
+   53's own share check against the derived
+   trustees line before it is handed back: a
+   round whose pieces do not agree does not
+   finalize. A sum of exactly zero is refused, as
+   in tool 38. Any share that fails its check, is
+   missing, is duplicated, or is addressed to
+   someone else makes the whole finalize null —
+   a group does not finalize on a partial or
+   inconsistent round. The key and trustees lines
+   come back with the share, derived from the
+   broadcast lines alone, so the trustee holds
+   the whole public picture with their one secret
+   line. */
+function finalizeJointTallyShare(commitmentsText, shareLinesText) {
+  var set = parseDkgCommitmentSet(commitmentsText);
+  if (set === null || typeof shareLinesText !== "string") {
+    return null;
+  }
+  var publicKey = jointTallyKeyForCommitments(commitmentsText);
+  var trustees = jointTallyTrusteesForCommitments(commitmentsText);
+  if (publicKey === null || trustees === null) return null;
+  var lines = shareLinesText.split(/\r?\n/);
+  var seen = {};
+  var recipient = null;
+  var total = P256_ZERO;
+  var found = 0;
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (line === "") continue;
+    var share = parseDkgShareLine(line);
+    if (share === null || share.threshold !== set.threshold ||
+        !set.byDealer[share.dealer] || seen[share.dealer]) {
+      return null;
+    }
+    if (recipient === null) recipient = share.recipient;
+    if (share.recipient !== recipient) return null;
+    if (verifyDkgShareParsed(set.byDealer[share.dealer],
+        share) !== true) {
+      return null;
+    }
+    seen[share.dealer] = true;
+    total = (total + BigInt("0x" + share.share)) % P256_N;
+    found++;
+  }
+  if (found !== set.count || recipient === null) return null;
+  if (total === P256_ZERO) return null;
+  var shareLine = formatTTallyShare(set.threshold, recipient,
+    p256IntToHex(total));
+  if (shareLine === null) return null;
+  if (checkTTallyShare(trustees, shareLine) !== true) return null;
+  return { publicKey: publicKey, trustees: trustees,
+           recipient: recipient, shareLine: shareLine };
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -12765,7 +13037,11 @@ if (typeof module !== "undefined" && module.exports) {
                      partialProofStatement, partialProofChallenge,
                      formatPartialProof, parsePartialProof,
                      partialProofWithNonce, provePartialOpening,
-                     verifyPartialProof };
+                     verifyPartialProof,
+                     jointTallyDealFor, makeJointTallyContribution,
+                     jointTallyKeyForCommitments,
+                     jointTallyTrusteesForCommitments,
+                     finalizeJointTallyShare };
 }
 
 if (typeof document !== "undefined") {
@@ -16536,6 +16812,98 @@ if (typeof document !== "undefined") {
               "name: the trustee whose index the partial and " +
               "the proof carry.";
         });
+    });
+
+    /* --- no dealer ever held it (joint tally key) --- */
+    document.getElementById("joint-tally-contribute").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("joint-tally-contribute-result");
+      var commitmentOut = document.getElementById("jt-commitment-out");
+      var sharesOut = document.getElementById("jt-shares-out");
+      var dealt = makeJointTallyContribution(
+        document.getElementById("jt-threshold").value,
+        document.getElementById("jt-count").value,
+        document.getElementById("jt-dealer").value);
+      if (dealt === null) {
+        commitmentOut.value = "";
+        sharesOut.value = "";
+        status.textContent = "No dealing: the quorum must be " +
+          "2 or 3, the trustees from the quorum up to 5, and " +
+          "your own number one of those trustees.";
+        return;
+      }
+      commitmentOut.value = dealt.commitment;
+      sharesOut.value = dealt.shares.join("\n");
+      status.textContent = "Dealt locally: your contribution " +
+        "was drawn fresh on this page and is printed nowhere — " +
+        "only its commitments and its shares exist. Broadcast " +
+        "the commitment line to every trustee, and send each " +
+        "share line to its own trustee, privately — the share " +
+        "lines are in trustee order, one per line.";
+    });
+
+    document.getElementById("joint-publish").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("joint-publish-result");
+      var keyOut = document.getElementById("jt-key-out");
+      var trusteesOut = document.getElementById("jt-trustees-out");
+      var commitments = document.getElementById("jt-publish-commitments").value;
+      var key = jointTallyKeyForCommitments(commitments);
+      var trustees = jointTallyTrusteesForCommitments(commitments);
+      if (key === null || trustees === null) {
+        keyOut.value = "";
+        trusteesOut.value = "";
+        status.textContent = "No key: the broadcast set must " +
+          "be one whole p4a-dkgcommit-v1 line per trustee, " +
+          "trustees numbered 1 up to the trustee count, all " +
+          "under one quorum — a round with a dealer missing " +
+          "derives nothing.";
+        return;
+      }
+      keyOut.value = key;
+      trusteesOut.value = trustees;
+      status.textContent = "Derived locally, from the " +
+        "broadcast lines alone — no share and no secret was " +
+        "involved: the counting key is the sum of the " +
+        "contributions' constant commitments, and each " +
+        "trustee's commitment is the summed polynomial's " +
+        "value at their index, as a point. Publish both lines; " +
+        "voters cast under the key in tools 51 and 52, and " +
+        "the finish in tool 53 takes the trustees line " +
+        "unchanged.";
+    });
+
+    document.getElementById("joint-tally-finalize").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("joint-tally-finalize-result");
+      var keyOut = document.getElementById("jt-final-key-out");
+      var trusteesOut = document.getElementById("jt-final-trustees-out");
+      var shareOut = document.getElementById("jt-final-share-out");
+      var finalized = finalizeJointTallyShare(
+        document.getElementById("jt-finalize-commitments").value,
+        document.getElementById("jt-finalize-shares").value);
+      if (finalized === null) {
+        keyOut.value = "";
+        trusteesOut.value = "";
+        shareOut.value = "";
+        status.textContent = "No final share: the broadcast " +
+          "set must be the whole round, and the share lines " +
+          "exactly one per dealer, every one addressed to you " +
+          "and passing its Feldman check against its dealer's " +
+          "broadcast commitments — a partial or inconsistent " +
+          "round does not finalize.";
+        return;
+      }
+      keyOut.value = finalized.publicKey;
+      trusteesOut.value = finalized.trustees;
+      shareOut.value = finalized.shareLine;
+      status.textContent = "Finalized locally: your share is " +
+        "the sum of the shares dealt to you, and it already " +
+        "passed tool 53's own check against the trustees line " +
+        "above. The counting secret itself was never computed " +
+        "— by you, by any dealer, by anyone. Keep the share " +
+        "line where you keep private keys: worthless alone, " +
+        "and the whole secret in a quorum.";
     });
 
     /* --- copy donation address --- */

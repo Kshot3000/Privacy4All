@@ -1210,7 +1210,8 @@ renewable resource that pays for shielded transactions.
   Honestly labelled: a dealer deals the split
   and holds the secret for that one moment
   (real elections use tool 38's joint key
-  generation); the quorum is the whole privacy
+  generation; tool 59 runs it for this
+  counting key); the quorum is the whole privacy
   boundary — a quorum pooling shares, or
   pooling partials computed over a single
   ballot, holds the secret, while no one
@@ -1393,6 +1394,45 @@ renewable resource that pays for shielded transactions.
   tool 53's finish itself is unchanged. Not a
   Compact circuit proof, and not a format any
   chain or wallet checks.
+
+- **No dealer ever held it — a jointly made
+  counting key** — the gap tool 53 names in
+  its own text: its setup is a trusted dealer
+  who holds the whole counting secret for one
+  moment, where real elections generate the
+  key jointly. Every trustee deals a split of
+  their own random contribution in tool 38's
+  own lines (a broadcast `p4a-dkgcommit-v1`
+  commitment line, one private
+  `p4a-dkgshare-v1` line per trustee), and
+  the election's public lines are derived
+  from the broadcast commitments alone: the
+  counting key is the sum of the
+  contributions' constant commitments,
+  spelled as tool 51's own
+  `p4a-tallykey-v1` line, and the trustees
+  line is the summed polynomial's commitments
+  (each trustee's share × G, computed as
+  points), spelled as tool 53's own
+  `p4a-tallytrustees-v1` line. Finalizing is
+  addition: a trustee sums the shares dealt
+  to them — each passing its Feldman check —
+  into a `p4a-tallyshare-v1` line that tool
+  53's own share check judges before it is
+  handed back, and tools 53 and 58 then run
+  unchanged. The group secret is never
+  computed by anyone, anywhere: only its
+  public key exists. Honestly labelled: this
+  page plays every trustee on one device;
+  there is no complaint round, only refusal
+  at finalizing; a dealer who waits on the
+  others' commitments can bias the key (the
+  Pedersen caveat tool 38 names); and the
+  quorum remains the whole privacy boundary —
+  the joint setup removes the dealer, not
+  the quorum's power. Not a Compact circuit
+  proof, and not a format any chain or
+  wallet checks.
 
 ## Guides
 
