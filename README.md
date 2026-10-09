@@ -1287,6 +1287,39 @@ renewable resource that pays for shielded transactions.
   Compact circuit proof, and not a format any
   chain or wallet checks.
 
+- **Same vote, new disguise — re-randomize a
+  ballot** — the receipt gap tools 51–55
+  name: a voter who kept their ballot's
+  randomness can be made to prove how they
+  voted, because that randomness strips the
+  posted ballot's mask. Anyone, with no key,
+  adds one fresh shift to both of a ballot's
+  points — `A′ = A + s×G`, `B′ = B + s×Y` —
+  and the shift cancels in the unmasking, so
+  the disguised ballot encrypts exactly the
+  original's vote and a tally swapping one
+  for the other opens to the same total,
+  while the voter's kept randomness no longer
+  opens the posted ballot. The proof is a
+  single Chaum–Pedersen equality over the
+  pair's public differences (`D_A = s×G`,
+  `D_B = s×Y`): a nonce pair, one SHA-256
+  challenge under `privacy4all-rerand-v1`
+  over the key, both ballots and both nonce
+  points, and one response, in a
+  `p4a-rerandproof-v1` line. Honestly
+  labelled: the shift is the link (it is
+  drawn inside the step and printed
+  nowhere); the proof names the pair, so
+  this is not a mixnet shuffle — no batch,
+  no permutation; same vote is all it proves
+  (validity stays tool 52, eligibility tool
+  54, and the counting authority can still
+  open the disguised ballot — tool 53 stays
+  that answer). Not a Compact circuit proof,
+  and not a format any chain or wallet
+  checks.
+
 ## Guides
 
 - [Getting started building on Midnight](guides/getting-started-midnight.md) —

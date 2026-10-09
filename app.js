@@ -11208,6 +11208,355 @@ function auditElection(rollText, electionId, keyText, castsText,
   });
 }
 
+/* Same vote, new disguise — re-randomize a ballot
+   (tool 56).
+
+   Tools 51–55 leave one gap named in their own
+   text: a ballot a voter can recognise is a
+   ballot they can be made to prove. A voter who
+   kept their ballot's randomness r holds a
+   receipt in everything but name — against the
+   posted ballot, B − r×Y is the vote as a point,
+   countable at a glance — and tool 55's auditor
+   states plainly that receipt-freeness is out of
+   its scope. This tool is the standard first
+   move against that, for this page's own
+   ballots: re-randomization. Anyone — no key of
+   any kind — can take a ballot (A, B) under a
+   counting key Y and a fresh shift s and publish
+   a new ballot A′ = A + s×G, B′ = B + s×Y. The
+   vote is untouched, because the shift cancels
+   in the only place the vote lives: B′ − x×A′ is
+   B − x×A, so the new ballot encrypts exactly
+   the original's vote, a tally that swaps the
+   original for the disguised ballot opens to
+   exactly the same total, and the voter's kept r
+   no longer opens the posted ballot — B′ − r×Y
+   is the vote point buried under s×Y, not a
+   countable multiple of G. What changed is only
+   the disguise: under a fresh s the new ballot
+   is two points unrelated to the original's, to
+   anyone who does not hold the shift.
+
+   The proof that the disguise changed nothing is
+   a single Chaum–Pedersen equality, the
+   statement tool 44 proves between two
+   commitments, here between two bases at once —
+   the same shape as one branch of tool 52's
+   proof, without the OR. The differences are
+   public: D_A = A′ − A and D_B = B′ − B, computed
+   by any verifier from the two ballots. An
+   honest re-randomization makes both differences
+   the shift under its two bases, D_A = s×G and
+   D_B = s×Y, so the prover — who knows s — proves
+   log_G(D_A) = log_Y(D_B) the ordinary sigma way:
+   a nonce pair k×G, k×Y, one Fiat–Shamir
+   challenge hashed over the key, both ballots
+   and both nonce points, and the response
+   z = k + c·s. The verifier recomputes the
+   differences and the challenge and checks both
+   balances. A disguise that also changed the
+   vote would put a whole G of vote into D_B that
+   no s×Y accounts for, and no response balances
+   both sides at once.
+
+   The honest limits, stated before the code.
+   First, THE SHIFT IS THE LINK: anyone holding s
+   and the original ballot recomputes the new one
+   exactly, so this page never prints s — the
+   combined form below draws it, disguises and
+   proves with it, and keeps it inside the step,
+   the way tool 52 never prints a ballot's r. A
+   board that publishes a shift has published the
+   pairing it was meant to hide. Second, the
+   proof NAMES THE PAIR: it proves this new
+   ballot carries that original's vote, so anyone
+   shown both ballots and the proof sees them
+   paired. This is not a mixnet shuffle — there
+   is no batch here and no permutation, and
+   re-randomizing one ballot in the open does not
+   by itself unlink a board's ballots from the
+   voters who cast them; real systems
+   re-randomize a whole board's ballots together
+   and prove the set, which this page does not
+   pretend to. The receipt benefit is the narrow,
+   real one stated above: once the original is
+   retired and only the disguised ballot stands,
+   the randomness the voter kept opens nothing.
+   Third, same vote is all the proof says: not
+   that the vote was honest — a ballot encrypting
+   2 re-randomizes to a ballot encrypting 2, and
+   validity stays tool 52's proof — not that the
+   voter was eligible (tool 54), and not that the
+   single authority of tool 51 cannot still open
+   the disguised ballot, because it can: the
+   disguise is against receipts, not against the
+   counting key, whose threshold answer stays
+   tool 53. The frame is the house one: a real
+   proof computed locally, but the line is this
+   hub's own p4a-rerandproof-v1 spelling — not a
+   format any chain or wallet checks, not one of
+   Midnight's Compact circuit proofs. Never paste
+   a real wallet key or a production private key
+   into any web page, including this one. */
+var RERAND_FORMAT = "p4a-rerandproof-v1";
+var RERAND_CHALLENGE_PREFIX = "privacy4all-rerand-v1";
+
+/* The statement a pair of ballots makes, judged:
+   the counting key, both ballots' points, and
+   the two differences any verifier computes —
+   D_A = A′ − A and D_B = B′ − B, the shift under
+   its two bases when the disguise is honest. A
+   difference landing on the identity — the new
+   ballot equal to the original, a disguise of
+   nothing — cannot be spelled or proved about,
+   so the whole statement is null rather than a
+   statement with a hole in it. */
+function rerandStatementPoints(keyText, origText, newText) {
+  var keyHex = parseTallyPublicKey(keyText);
+  var orig = parseTallyBallot(origText);
+  var disguised = parseTallyBallot(newText);
+  if (keyHex === null || orig === null || disguised === null) {
+    return null;
+  }
+  var deltaA = p256PointAdd(parseP256Point(disguised.a),
+    p256PointNegate(parseP256Point(orig.a)));
+  var deltaB = p256PointAdd(parseP256Point(disguised.b),
+    p256PointNegate(parseP256Point(orig.b)));
+  if (deltaA === null || deltaB === null) return null;
+  return { key: keyHex, origA: orig.a, origB: orig.b,
+           newA: disguised.a, newB: disguised.b,
+           deltaA: formatP256PublicKey(deltaA),
+           deltaB: formatP256PublicKey(deltaB) };
+}
+
+/* One ballot, disguised to order: the original
+   ballot line, the counting key line and a
+   chosen shift in, the new ballot line out —
+   A′ = A + s×G and B′ = B + s×Y by the page's own
+   point arithmetic. Synchronous and
+   deterministic, so tests can pin every point
+   against independent arithmetic. A shift of
+   zero is refused by the scalar gate itself:
+   it would be a disguise of nothing. A sum
+   landing on the identity cannot be spelled as
+   a ballot and is refused whole. */
+function rerandomizedBallotFor(ballotText, keyText, shiftHex) {
+  var keyHex = parseTallyPublicKey(keyText);
+  var ballot = parseTallyBallot(ballotText);
+  var shift = parseProofScalar(shiftHex);
+  if (keyHex === null || ballot === null || shift === null) {
+    return null;
+  }
+  var yPoint = parseP256Point(keyHex);
+  var s = BigInt("0x" + shift);
+  var a = p256PointAdd(parseP256Point(ballot.a),
+    p256PointMultiply(s, { x: P256_GX, y: P256_GY }));
+  var b = p256PointAdd(parseP256Point(ballot.b),
+    p256PointMultiply(s, yPoint));
+  if (a === null || b === null) return null;
+  return formatTallyBallot(formatP256PublicKey(a),
+    formatP256PublicKey(b));
+}
+
+/* The one challenge for a re-randomization proof:
+   SHA-256 over the label, the counting key, both
+   ballots' two points in original-then-disguised
+   order and the two nonce points — every point
+   canonicalised first, so the hash names points
+   and not spellings, and binds the proof to this
+   key and this pair of ballots and no other.
+   Reduced under the order; a reduced digest of
+   zero is null, the same refusal the page's
+   other Fiat–Shamir challenges make. */
+function rerandChallenge(keyText, origText, newText, noncePoints) {
+  var statement = rerandStatementPoints(keyText, origText, newText);
+  if (statement === null || !Array.isArray(noncePoints) ||
+      noncePoints.length !== 2) {
+    return Promise.resolve(null);
+  }
+  var canonical = [];
+  for (var i = 0; i < noncePoints.length; i++) {
+    var point = parseP256Point(noncePoints[i]);
+    if (point === null) return Promise.resolve(null);
+    canonical.push(formatP256PublicKey(point));
+  }
+  var transcript = RERAND_CHALLENGE_PREFIX + "\n" +
+    statement.key + "\n" + statement.origA + "\n" +
+    statement.origB + "\n" + statement.newA + "\n" +
+    statement.newB + "\n" + canonical.join("\n");
+  return sha256Hex(transcript).then(function (digest) {
+    if (digest === null) return null;
+    var value = BigInt("0x" + digest) % P256_N;
+    if (value === P256_ZERO) return null;
+    return p256IntToHex(value);
+  });
+}
+
+/* A re-randomization proof line: the format tag,
+   the two nonce points (base side, key side) and
+   the challenge and response, gated as responses:
+   zero allowed, the order refused. Pieces that
+   do not check out are null, never a half-built
+   line. */
+function formatRerandProof(proof) {
+  if (proof === null || typeof proof !== "object") return null;
+  var nonceG = parseP256Point(proof.nonceG);
+  var nonceY = parseP256Point(proof.nonceY);
+  var challenge = parseProofResponse(proof.challenge);
+  var response = parseProofResponse(proof.response);
+  if (nonceG === null || nonceY === null ||
+      challenge === null || response === null) return null;
+  return [RERAND_FORMAT, formatP256PublicKey(nonceG),
+    formatP256PublicKey(nonceY), challenge, response].join(":");
+}
+
+function parseRerandProof(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 5 || parts[0] !== RERAND_FORMAT) return null;
+  var nonceG = parseP256Point(parts[1]);
+  var nonceY = parseP256Point(parts[2]);
+  var challenge = parseProofResponse(parts[3]);
+  var response = parseProofResponse(parts[4]);
+  if (nonceG === null || nonceY === null ||
+      challenge === null || response === null) return null;
+  return { nonceG: formatP256PublicKey(nonceG),
+           nonceY: formatP256PublicKey(nonceY),
+           challenge: challenge, response: response };
+}
+
+/* One attempt at a proof, with the nonce drawn
+   fresh inside the attempt: commit the nonce
+   under both bases, take the hash's challenge,
+   and answer with the shift. Any impossible
+   point fails the attempt as null and the
+   caller redraws, the same discipline tools 43,
+   45 and 52 follow. */
+function rerandProofAttempt(keyText, origText, newText,
+                            statement, shiftHex) {
+  var yPoint = parseP256Point(statement.key);
+  if (yPoint === null) return Promise.resolve(null);
+  var nonceHex = randomProofScalar();
+  if (nonceHex === null) return Promise.resolve(null);
+  var nonceG = proofCommitmentForNonce(nonceHex);
+  var nonceYPoint = p256PointMultiply(BigInt("0x" + nonceHex),
+    yPoint);
+  if (nonceG === null || nonceYPoint === null) {
+    return Promise.resolve(null);
+  }
+  var nonceY = formatP256PublicKey(nonceYPoint);
+  return rerandChallenge(keyText, origText, newText,
+      [nonceG, nonceY])
+    .then(function (challenge) {
+      if (challenge === null) return null;
+      var response = rangeModN(BigInt("0x" + nonceHex) +
+        BigInt("0x" + challenge) * BigInt("0x" + shiftHex));
+      return formatRerandProof({ nonceG: nonceG, nonceY: nonceY,
+        challenge: challenge, response: p256IntToHex(response) });
+    });
+}
+
+/* The prover's move: the counting key, the
+   original ballot, the disguised ballot and the
+   shift in, the proof line out. The pair is
+   checked first — the shift must recompute
+   exactly this disguised ballot from this
+   original, the way tool 52 checks a ballot
+   before proving — so a shift that is not this
+   pair's, or a pair no shift produced, gets
+   null: no proof exists here for a pairing the
+   prover cannot account for, and none is
+   approximated. */
+function proveRerandomization(keyText, origText, newText, shiftHex) {
+  var shift = parseProofScalar(shiftHex);
+  if (shift === null) return Promise.resolve(null);
+  var rebuilt = rerandomizedBallotFor(origText, keyText, shift);
+  var disguised = parseTallyBallot(newText);
+  if (rebuilt === null || disguised === null ||
+      rebuilt !== formatTallyBallot(disguised.a, disguised.b)) {
+    return Promise.resolve(null);
+  }
+  var statement = rerandStatementPoints(keyText, origText, newText);
+  if (statement === null) return Promise.resolve(null);
+  var attempt = function (triesLeft) {
+    return rerandProofAttempt(keyText, origText, newText,
+      statement, shift)
+      .then(function (proof) {
+        if (proof !== null) return proof;
+        return triesLeft > 1 ? attempt(triesLeft - 1) : null;
+      });
+  };
+  return attempt(4);
+}
+
+/* A board's whole move, in one step: draw the
+   fresh shift, disguise the ballot under it and
+   prove the disguise honest, returning both
+   lines. The shift itself is deliberately NOT
+   returned — it is the link between the two
+   ballots, as the header states — so it exists
+   only inside this call, and the proof it made
+   is the board's receipt that the vote survived
+   the disguise unchanged. */
+function rerandomizeAndProve(ballotText, keyText) {
+  var shift = randomProofScalar();
+  if (shift === null) return Promise.resolve(null);
+  var disguised = rerandomizedBallotFor(ballotText, keyText, shift);
+  if (disguised === null) return Promise.resolve(null);
+  return proveRerandomization(keyText, ballotText, disguised, shift)
+    .then(function (proof) {
+      if (proof === null) return null;
+      return { ballot: disguised, proof: proof };
+    });
+}
+
+/* The verifier's verdict, needing no secret of
+   any kind: recompute the pair's differences
+   from the key and the two ballots, re-hash the
+   challenge from the proof's two nonce points,
+   demand the proof's challenge be that challenge,
+   then check both balances — z×G against
+   R_G + c×D_A and z×Y against R_Y + c×D_B. True
+   when all of it holds; false — never null —
+   when every piece is well-formed and one fails;
+   null when a piece cannot even be parsed, or
+   the pair itself cannot be judged. An identity
+   on either side of a balance counts as the
+   identity it is, by the same point comparison
+   the tally uses. */
+function verifyRerandomization(keyText, origText, newText, proofText) {
+  var statement = rerandStatementPoints(keyText, origText, newText);
+  var proof = parseRerandProof(proofText);
+  if (statement === null || proof === null) {
+    return Promise.resolve(null);
+  }
+  return rerandChallenge(keyText, origText, newText,
+      [proof.nonceG, proof.nonceY])
+    .then(function (challenge) {
+      if (challenge === null) return null;
+      if (BigInt("0x" + proof.challenge) !==
+          BigInt("0x" + challenge)) return false;
+      var yPoint = parseP256Point(statement.key);
+      var deltaA = parseP256Point(statement.deltaA);
+      var deltaB = parseP256Point(statement.deltaB);
+      if (yPoint === null || deltaA === null || deltaB === null) {
+        return null;
+      }
+      var c = BigInt("0x" + proof.challenge);
+      var z = BigInt("0x" + proof.response);
+      var lhsG = p256PointMultiply(z, { x: P256_GX, y: P256_GY });
+      var rhsG = p256PointAdd(parseP256Point(proof.nonceG),
+        p256PointMultiply(c, deltaA));
+      if (!tallyPointsEqual(lhsG, rhsG)) return false;
+      var lhsY = p256PointMultiply(z, yPoint);
+      var rhsY = p256PointAdd(parseP256Point(proof.nonceY),
+        p256PointMultiply(c, deltaB));
+      if (!tallyPointsEqual(lhsY, rhsY)) return false;
+      return true;
+    });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -11437,7 +11786,12 @@ if (typeof module !== "undefined" && module.exports) {
                      formatVoteNullifier, parseVoteNullifier,
                      voteNullifierForScalar, castVoteNullifier,
                      verifyVoteNullifier, voteNullifiersMatch,
-                     splitAuditLines, auditElection };
+                     splitAuditLines, auditElection,
+                     RERAND_FORMAT, RERAND_CHALLENGE_PREFIX,
+                     rerandStatementPoints, rerandomizedBallotFor,
+                     rerandChallenge, formatRerandProof,
+                     parseRerandProof, proveRerandomization,
+                     rerandomizeAndProve, verifyRerandomization };
 }
 
 if (typeof document !== "undefined") {
@@ -14962,6 +15316,80 @@ if (typeof document !== "undefined") {
             "four different stories, and the report above says " +
             "which one this board tells.";
       });
+    });
+
+    /* --- same vote, new disguise (ballot re-randomization) --- */
+    document.getElementById("rerand-shift").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("rerand-shift-result");
+      var ballotOut = document.getElementById("rr-ballot-out");
+      var proofOut = document.getElementById("rr-proof-out");
+      status.textContent = "Disguising locally…";
+      rerandomizeAndProve(
+        document.getElementById("rr-ballot").value,
+        document.getElementById("rr-key").value)
+        .then(function (made) {
+          if (made === null) {
+            ballotOut.value = "";
+            proofOut.value = "";
+            status.textContent = "No disguise was made: the " +
+              "counting key must be a whole p4a-tallykey-v1 line " +
+              "and the ballot a whole p4a-ballot-v1 line — a " +
+              "ballot this page cannot read gets no new disguise, " +
+              "rather than a wrong one.";
+            return;
+          }
+          ballotOut.value = made.ballot;
+          proofOut.value = made.proof;
+          status.textContent = "Disguised and proved. The new " +
+            "ballot encrypts exactly the original's vote under " +
+            "the same counting key, and a tally that swaps one " +
+            "for the other opens to the same total. The shift " +
+            "was drawn for this step only and printed nowhere — " +
+            "it is the link between the two ballots, so it is " +
+            "kept the way this page keeps a ballot's randomness: " +
+            "inside the step, and nowhere else.";
+        });
+    });
+
+    document.getElementById("rerand-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("rerand-check-result");
+      var out = document.getElementById("rr-check-out");
+      status.textContent = "Checking locally…";
+      verifyRerandomization(
+        document.getElementById("rr-check-key").value,
+        document.getElementById("rr-check-orig").value,
+        document.getElementById("rr-check-new").value,
+        document.getElementById("rr-check-proof").value)
+        .then(function (ok) {
+          if (ok === null) {
+            out.value = "";
+            status.textContent = "Cannot judge this pair: the " +
+              "key must be a whole p4a-tallykey-v1 line, both " +
+              "ballots whole p4a-ballot-v1 lines that differ from " +
+              "each other, and the proof a whole " +
+              "p4a-rerandproof-v1 line — a pair that cannot be " +
+              "read gets no verdict, rather than a wrong one.";
+            return;
+          }
+          out.value = ok
+            ? "Same vote — the disguised ballot encrypts exactly the original's vote."
+            : "Not proved — this disguised ballot does not carry the original's vote under this proof.";
+          status.textContent = ok
+            ? "Same vote, proved: the two differences the pair " +
+              "shows — on the base side and on the key side — are " +
+              "one shift under its two bases, so nothing but the " +
+              "disguise changed. The proof says nothing about " +
+              "whether the vote was an honest 0 or 1; that stays " +
+              "tool 52's proof, for the original ballot."
+            : "Not proved: something here does not balance — a " +
+              "disguise that also moved the vote, a proof made " +
+              "for another pair or another key, or a nudged " +
+              "challenge or response. A disguised ballot that " +
+              "fails this check has not been shown to carry the " +
+              "original's vote, whatever it encrypts.";
+        });
     });
 
     /* --- copy donation address --- */
