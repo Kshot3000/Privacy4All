@@ -11069,6 +11069,145 @@ function voteNullifiersMatch(lineA, lineB) {
   return a.nullifier === b.nullifier;
 }
 
+/* Check the whole election yourself — a public
+   election auditor (tool 55).
+
+   Tools 51–54 each check one piece of an
+   election: a ballot hides its vote and the pile
+   adds up (51), a ballot provably encrypts 0 or
+   1 (52), no single opener can read one ballot
+   (53), and a cast provably comes from the roll,
+   once per voter (54). What none of them does is
+   check a whole posted election at once — which
+   is the check a real observer actually runs,
+   and the one a counting board's published
+   result stands or falls by. This tool runs it,
+   with no secret of any kind: the election's
+   name, the roll, the counting key, the board's
+   casts, ballots and ballot proofs in matching
+   order, and the tally line the board claims.
+   Four checks, each one an earlier tool's own
+   verdict, plus the equality that ties them:
+   every cast's OR proof verifies against the
+   roll under the election's name (54's checker);
+   no nullifier appears twice, so no voter is
+   counted twice (54's equality); every ballot's
+   validity proof verifies under the counting
+   key (52's verifier); and the claimed tally
+   line is exactly the point-by-point sum of the
+   posted ballots, count included (51's public
+   step, compared field by field). The report
+   names each check separately, because an
+   election can fail one and pass the rest — a
+   repeated nullifier with honest proofs is a
+   different story from a tally that is not the
+   sum of its ballots — and the verdict is the
+   AND of the four. Anything that cannot even be
+   judged — a malformed line anywhere, a count
+   mismatch between casts, ballots and proofs, a
+   roll or election name the earlier tools
+   refuse — is null, never a verdict: an auditor
+   that cannot read the board says so, rather
+   than passing or failing it on a guess. The
+   auditor holds no opening key and opens
+   nothing: it checks that the claimed tally IS
+   the posted ballots' sum, and tools 51 and 53
+   remain the only steps that read a total off
+   it. And it checks the board, not the world:
+   that the roll pasted here is the roll the
+   voters agreed, that the name is the election's
+   agreed name, that the key is the election's
+   real counting key, and everything off the
+   board — coercion, timing, who really held
+   which key — stays exactly as far out of scope
+   as tools 51–54 leave it. */
+
+/* One board column in, its lines out: trailing
+   blank lines forgiven, as the tally's own
+   parser forgives them; a blank line in the
+   middle is a hole in the board and refuses the
+   whole column as null, rather than quietly
+   renumbering the rows below it. */
+function splitAuditLines(text) {
+  if (typeof text !== "string") return null;
+  var lines = text.split("\n");
+  while (lines.length > 0 && lines[lines.length - 1].trim() === "") lines.pop();
+  if (lines.length === 0) return null;
+  var out = [];
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (line === "") return null;
+    out.push(line);
+  }
+  return out;
+}
+
+function auditElection(rollText, electionId, keyText, castsText,
+    ballotsText, proofsText, tallyText) {
+  var casts = splitAuditLines(castsText);
+  var ballots = splitAuditLines(ballotsText);
+  var proofs = splitAuditLines(proofsText);
+  if (casts === null || ballots === null || proofs === null) {
+    return Promise.resolve(null);
+  }
+  if (casts.length < TALLY_MIN_BALLOTS ||
+      casts.length > TALLY_MAX_BALLOTS ||
+      ballots.length !== casts.length ||
+      proofs.length !== casts.length) {
+    return Promise.resolve(null);
+  }
+  var parsedCasts = [];
+  for (var i = 0; i < casts.length; i++) {
+    var parsedCast = parseVoteNullifier(casts[i]);
+    if (parsedCast === null) return Promise.resolve(null);
+    parsedCasts.push(parsedCast);
+  }
+  if (parseTallyBallots(ballots.join("\n")) === null) {
+    return Promise.resolve(null);
+  }
+  var claimed = parseTally(tallyText);
+  if (claimed === null) return Promise.resolve(null);
+  var summedText = tallyBallotsFor(ballots.join("\n"));
+  if (summedText === null) return Promise.resolve(null);
+  var summed = parseTally(summedText);
+  if (summed === null) return Promise.resolve(null);
+  var tallyMatches = claimed.count === summed.count &&
+    claimed.a === summed.a && claimed.b === summed.b;
+  var nullifiersUnique = true;
+  for (var a = 0; a < parsedCasts.length; a++) {
+    for (var b = a + 1; b < parsedCasts.length; b++) {
+      if (parsedCasts[a].nullifier === parsedCasts[b].nullifier) {
+        nullifiersUnique = false;
+      }
+    }
+  }
+  var castChecks = casts.map(function (line) {
+    return verifyVoteNullifier(rollText, electionId, line);
+  });
+  var proofChecks = ballots.map(function (line, idx) {
+    return verifyBallotProof(keyText, line, proofs[idx]);
+  });
+  return Promise.all(castChecks).then(function (castVerdicts) {
+    if (castVerdicts.indexOf(null) !== -1) return null;
+    return Promise.all(proofChecks).then(function (proofVerdicts) {
+      if (proofVerdicts.indexOf(null) !== -1) return null;
+      var nullifiersVerified = castVerdicts.every(function (v) {
+        return v === true;
+      });
+      var proofsVerified = proofVerdicts.every(function (v) {
+        return v === true;
+      });
+      return { casts: casts.length,
+               nullifiersVerified: nullifiersVerified,
+               nullifiersUnique: nullifiersUnique,
+               proofsVerified: proofsVerified,
+               tallyMatches: tallyMatches,
+               verdict: nullifiersVerified && nullifiersUnique &&
+                 proofsVerified && tallyMatches };
+    });
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -11297,7 +11436,8 @@ if (typeof module !== "undefined" && module.exports) {
                      voteNullifierBasePoint, voteNullifierChallenge,
                      formatVoteNullifier, parseVoteNullifier,
                      voteNullifierForScalar, castVoteNullifier,
-                     verifyVoteNullifier, voteNullifiersMatch };
+                     verifyVoteNullifier, voteNullifiersMatch,
+                     splitAuditLines, auditElection };
 }
 
 if (typeof document !== "undefined") {
@@ -14765,6 +14905,63 @@ if (typeof document !== "undefined") {
           "different election, whose nullifier is an unrelated " +
           "point by design, so nobody can follow them from one " +
           "election to the next.";
+    });
+
+    document.getElementById("election-audit").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("election-audit-result");
+      var out = document.getElementById("ea-out");
+      status.textContent = "Auditing the board…";
+      auditElection(
+        document.getElementById("ea-roll").value,
+        document.getElementById("ea-election").value,
+        document.getElementById("ea-key").value,
+        document.getElementById("ea-casts").value,
+        document.getElementById("ea-ballots").value,
+        document.getElementById("ea-proofs").value,
+        document.getElementById("ea-tally").value)
+      .then(function (report) {
+        if (report === null) {
+          out.value = "";
+          status.textContent = "This board cannot be audited as " +
+            "pasted: the election's name and the roll must be ones " +
+            "tool 54 accepts, the three columns must hold the same " +
+            "number of whole lines (1 to 16 rows), the tally must " +
+            "be a whole p4a-tally-v1 line, and every line must be " +
+            "readable. A board that cannot be read gets no verdict, " +
+            "rather than a wrong one.";
+          return;
+        }
+        var yesNo = function (ok, failText) {
+          return ok ? "yes" : failText;
+        };
+        out.value =
+          "Election audit — " + report.casts + " cast(s) on the board\n" +
+          "Eligibility proofs — every cast proved a roll member made it (tool 54): " +
+            yesNo(report.nullifiersVerified, "NO — at least one cast did not prove") + "\n" +
+          "One person, one vote — no nullifier appears twice (tool 54): " +
+            yesNo(report.nullifiersUnique, "NO — a repeat nullifier is a repeat cast") + "\n" +
+          "Ballot validity proofs — every ballot proved it encrypts 0 or 1 (tool 52): " +
+            yesNo(report.proofsVerified, "NO — at least one ballot did not prove") + "\n" +
+          "Claimed tally — exactly the sum of the posted ballots (tool 51): " +
+            yesNo(report.tallyMatches, "NO — the claimed tally is not these ballots' sum") + "\n" +
+          "Verdict: " + (report.verdict
+            ? "the board checks out — every check above passed."
+            : "the board does NOT check out — see the failed check(s) above.");
+        status.textContent = report.verdict
+          ? "The board checks out: every cast is eligible, no " +
+            "voter is counted twice, every ballot is proved " +
+            "honest, and the claimed tally is the posted ballots' " +
+            "exact sum. The auditor opened nothing and holds no " +
+            "key — reading the total off that tally is still " +
+            "tools 51 and 53's step."
+          : "The board does not check out. Each check is reported " +
+            "separately because they fail differently: an " +
+            "ineligible cast, a voter counted twice, an unproved " +
+            "ballot and a tally that is not its ballots' sum are " +
+            "four different stories, and the report above says " +
+            "which one this board tells.";
+      });
     });
 
     /* --- copy donation address --- */

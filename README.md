@@ -1257,6 +1257,36 @@ renewable resource that pays for shielded transactions.
   Not a Compact circuit proof, and not a
   format any chain or wallet checks.
 
+- **Check the whole election yourself — a
+  public election auditor** — the capstone
+  tools 51–54 compose into: no new
+  cryptography, no new line format. Paste a
+  posted board — the election's name, the
+  roll, the counting key, the casts, ballots
+  and ballot proofs in matching order, and
+  the tally line the board claims — and the
+  auditor re-runs each earlier tool's own
+  verdict: every cast's eligibility proof
+  verifies (tool 54), no nullifier appears
+  twice (tool 54's equality), every ballot's
+  validity proof verifies (tool 52), and the
+  claimed tally is exactly the point-by-point
+  sum of the posted ballots, count included
+  (tool 51's public step). Each check is
+  reported separately, because they fail
+  differently; the verdict is all four
+  together; anything unreadable gets no
+  verdict at all. Honestly labelled: the
+  auditor holds no key and cannot open the
+  tally — reading the total stays tools 51
+  and 53's step; it checks the board, not the
+  world (that the roll, name and key pasted
+  are the agreed ones is for the election's
+  own publication to vouch for); coercion and
+  receipt-freeness stay out of scope. Not a
+  Compact circuit proof, and not a format any
+  chain or wallet checks.
+
 ## Guides
 
 - [Getting started building on Midnight](guides/getting-started-midnight.md) —
