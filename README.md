@@ -1182,6 +1182,44 @@ renewable resource that pays for shielded transactions.
   and never prints it. Not a Compact circuit
   proof, and not a format any chain or wallet
   checks.
+- **No single opener — a threshold tally
+  opening** — the fix tools 51 and 52 both name
+  for the single counting authority, whose
+  state can open any one ballot. The counting
+  secret is dealt as Shamir shares under the
+  curve order (tool 37's polynomial, evaluated
+  by its own arithmetic), one
+  `p4a-tallyshare-v1` line per trustee under a
+  quorum of two or three, and setup also
+  publishes a `p4a-tallytrustees-v1` line of
+  share commitments (share × G, in index
+  order). The counting key is tool 51's own
+  line, unchanged — voters cast as in tools 51
+  and 52. To finish, each participating
+  trustee multiplies their share into the
+  tally's summed randomness point
+  (`p4a-tallypartial-v1`); the finish weights
+  the partials by their Lagrange coefficients
+  (tool 37's), whose sum is exactly the mask
+  tool 51 strips — the secret is never
+  reconstructed anywhere. The finish first
+  demands the weighted commitments rebuild the
+  counting key itself, and a wrong share's
+  partial poisons the sum so the finish fails
+  closed as no answer, never a false total.
+  Honestly labelled: a dealer deals the split
+  and holds the secret for that one moment
+  (real elections use tool 38's joint key
+  generation); the quorum is the whole privacy
+  boundary — a quorum pooling shares, or
+  pooling partials computed over a single
+  ballot, holds the secret, while no one
+  trustee and no sub-quorum group can open
+  anything; eligibility, double voting,
+  coercion and receipts stay out of scope, and
+  validity still comes from tool 52. Not a
+  Compact circuit proof, and not a format any
+  chain or wallet checks.
 
 ## Guides
 

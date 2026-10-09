@@ -10180,6 +10180,451 @@ function verifyBallotProof(keyText, ballotText, proofText) {
     });
 }
 
+/* No single opener — a threshold tally opening
+   (tool 53).
+
+   Tools 51 and 52 both end on the same named
+   limit: the counting authority is ONE holder of
+   the secret x, and the state that opens the
+   total can open any single ballot too
+   (B − x×A, one at a time), so ballots are
+   private from everyone except that one holder.
+   This tool removes the single holder. The
+   secret is dealt as Shamir shares under the
+   curve order — the exact polynomial tool 37
+   deals for a signing key, evaluated by that
+   tool's own thresholdShareScalar — one share
+   per trustee, under a quorum: any threshold
+   of the trustees, and no fewer, can open a
+   tally, and nobody ever reconstructs x to do
+   it. Each participating trustee multiplies
+   their share into the tally's summed randomness
+   point, P_j = f(j)×A_sum, a partial opening
+   that is a point and nothing else; the finish
+   weights each partial by its Lagrange
+   coefficient for the participating set — tool
+   37's thresholdLagrangeCoefficient, the same
+   arithmetic — and Σ λ_j×P_j is exactly
+   x×A_sum, because Σ λ_j·f(j) is f(0) = x. From
+   there the finish is tool 51's own: B_sum
+   minus that point, counted off in base-point
+   multiples up to the ballot count.
+
+   Two public checks guard the finish. The setup
+   also publishes a trustees line carrying each
+   share's commitment, f(j)×G, in index order.
+   The finish first recomputes Σ λ_j×commitment_j
+   over the participating set and demands it be
+   the counting key Y itself — so a trustees
+   line dealt for a different key, or a set of
+   partials whose indices are not the dealt
+   ones, is refused before any opening is
+   attempted. And a share can be checked against
+   the trustees line on its own (f(j)×G against
+   the published commitment) without opening
+   anything. A partial made from a wrong share
+   is not caught by either check — it is a
+   well-formed point — but it poisons the
+   weighted sum, the unmasked point lands on no
+   in-range multiple, and the finish fails
+   closed as null rather than reporting a wrong
+   total: a bad quorum produces no answer, never
+   a false one. Which trustee erred is not
+   identified; real systems attach a
+   Chaum–Pedersen proof to each partial (tool
+   44's statement, share side) so a bad partial
+   can be named, and this page does not pretend
+   to.
+
+   The honest limits, stated before the code.
+   First, a DEALER deals the split: whoever runs
+   the setup form holds the whole secret for
+   that moment, exactly as in tool 37 — real
+   elections generate the key jointly, by the
+   distributed key generation of tool 38, so the
+   whole secret never exists in one place; this
+   page's setup is a trusted-dealer teaching
+   construction and says so. Second, the quorum
+   is the privacy boundary, whole and entire:
+   any threshold of trustees who pool their
+   shares hold the secret itself, and trustees
+   who run their partial step on a SINGLE
+   ballot's A point instead of the tally's sum,
+   and pool those, open that ballot — the
+   arithmetic cannot tell a partial opening of
+   a sum from one of a single ballot, because
+   they are the same multiplication. What the
+   threshold buys is that NO ONE trustee, and no
+   group under the quorum, can open anything:
+   a sub-quorum set of partials interpolates to
+   a scalar that is not x, and the finish finds
+   no total. Third, everything tool 51 keeps
+   stands: eligibility, a ballot pasted twice,
+   coercion and receipts are out of scope, and
+   validity comes from tool 52's proofs, not
+   from this split. A share line is a secret of
+   the same rank as a private key — one share
+   alone is worthless, which is the point, and
+   a quorum of them is the whole secret, which
+   is also the point. The frame is the house
+   one: real threshold arithmetic computed
+   locally, but the lines are this hub's own
+   spellings — p4a-tallyshare-v1,
+   p4a-tallytrustees-v1 and p4a-tallypartial-v1,
+   around tool 51's unchanged p4a-tallykey-v1,
+   p4a-ballot-v1 and p4a-tally-v1 — not a format
+   any chain or wallet checks, not one of
+   Midnight's Compact circuit proofs. Never
+   paste a real wallet key or a production
+   private key into any web page, including this
+   one. */
+var TTALLY_SHARE_FORMAT = "p4a-tallyshare-v1";
+var TTALLY_TRUSTEES_FORMAT = "p4a-tallytrustees-v1";
+var TTALLY_PARTIAL_FORMAT = "p4a-tallypartial-v1";
+var TTALLY_MIN_TRUSTEES = 2;
+var TTALLY_MAX_TRUSTEES = 5;
+
+/* The quorum, as typed: a whole number tool 37's
+   bounds accept (two or three — the dealer
+   polynomial's degree is the quorum minus one,
+   and this page deals at teaching size).
+   Anything else is null. */
+function parseTTallyThreshold(text) {
+  if (typeof text !== "string") return null;
+  var trimmed = text.trim();
+  if (!/^[0-9]+$/.test(trimmed)) return null;
+  var value = Number(trimmed);
+  return validThresholdValue(value) ? value : null;
+}
+
+/* The trustee count, as typed: a whole number
+   from two to five — one trustee is the single
+   authority this tool exists to remove, and
+   more than five is past teaching size. */
+function parseTTallyTrusteeCount(text) {
+  if (typeof text !== "string") return null;
+  var trimmed = text.trim();
+  if (!/^[0-9]+$/.test(trimmed)) return null;
+  var value = Number(trimmed);
+  if (!isFinite(value) || Math.floor(value) !== value ||
+      value < TTALLY_MIN_TRUSTEES || value > TTALLY_MAX_TRUSTEES) {
+    return null;
+  }
+  return value;
+}
+
+function validTTallyCountValue(v) {
+  return typeof v === "number" && isFinite(v) && Math.floor(v) === v &&
+    v >= TTALLY_MIN_TRUSTEES && v <= TTALLY_MAX_TRUSTEES;
+}
+
+/* One trustee's share line: the tag, the quorum,
+   the trustee's index and the share scalar —
+   tool 37's share shape in this tool's own
+   spelling, because a share of a counting secret
+   and a share of a signing key are different
+   secrets and their lines must never be
+   interchangeable. The scalar is a secret of
+   the same rank as a private key, worthless
+   alone and the whole secret in a quorum. */
+function formatTTallyShare(threshold, index, shareHex) {
+  var share = parseProofScalar(shareHex);
+  if (!validThresholdValue(threshold) ||
+      !validThresholdIndexValue(index) || share === null) {
+    return null;
+  }
+  return TTALLY_SHARE_FORMAT + ":" + threshold + ":" + index + ":" + share;
+}
+
+function parseTTallyShare(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 4 || parts[0] !== TTALLY_SHARE_FORMAT) return null;
+  var threshold = parseTTallyThreshold(parts[1]);
+  var index = parseThresholdIndexText(parts[2]);
+  var share = parseProofScalar(parts[3]);
+  if (threshold === null || index === null || share === null) return null;
+  return { threshold: threshold, index: index, share: share };
+}
+
+/* The trustees line: the tag, the quorum, the
+   trustee count, and every share's commitment
+   f(j)×G in index order — all public, all
+   checkable, and the finish's evidence that the
+   set of partials it is handed belongs to the
+   key the voters cast under. A commitment is a
+   point, spelled as the hub's usual SPKI point;
+   the line is long because it carries one point
+   per trustee, and it hides nothing: a
+   commitment names no share. */
+function formatTTallyTrustees(threshold, count, commitmentHexes) {
+  if (!validThresholdValue(threshold) || !validTTallyCountValue(count) ||
+      !Array.isArray(commitmentHexes) ||
+      commitmentHexes.length !== count) {
+    return null;
+  }
+  var points = [];
+  for (var i = 0; i < commitmentHexes.length; i++) {
+    var point = parseP256Point(commitmentHexes[i]);
+    if (point === null) return null;
+    points.push(formatP256PublicKey(point));
+  }
+  return TTALLY_TRUSTEES_FORMAT + ":" + threshold + ":" + count + ":" +
+    points.join(":");
+}
+
+function parseTTallyTrustees(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length < 3 || parts[0] !== TTALLY_TRUSTEES_FORMAT) return null;
+  var threshold = parseTTallyThreshold(parts[1]);
+  var count = parseTTallyTrusteeCount(parts[2]);
+  if (threshold === null || count === null) return null;
+  if (parts.length !== 3 + count) return null;
+  var commitments = {};
+  var indices = [];
+  for (var i = 0; i < count; i++) {
+    var point = parseP256Point(parts[3 + i]);
+    if (point === null) return null;
+    commitments[i + 1] = formatP256PublicKey(point);
+    indices.push(i + 1);
+  }
+  return { threshold: threshold, count: count,
+           commitments: commitments, indices: indices };
+}
+
+/* The split itself, deterministic once the
+   secret and the dealer coefficients exist, so
+   tests can pin every share and commitment
+   against independent arithmetic: the counting
+   key is tool 51's own key line for the secret,
+   each share is tool 37's polynomial evaluated
+   at the trustee's index, and each commitment
+   is that share times the base point. The
+   secret and the coefficients are NOT part of
+   what comes back — once the shares exist,
+   nobody needs either, and keeping them would
+   keep a second road back to the whole key. */
+function splitTTallySecretFor(secretHex, coefficientHexes, threshold, count) {
+  var secret = parseProofScalar(secretHex);
+  if (secret === null || !Array.isArray(coefficientHexes) ||
+      coefficientHexes.length !== threshold - 1 ||
+      !validThresholdValue(threshold) || !validTTallyCountValue(count) ||
+      count < threshold) {
+    return null;
+  }
+  var publicKey = tallyKeyForSecret(secret);
+  if (publicKey === null) return null;
+  var shares = [];
+  var commitments = [];
+  for (var i = 1; i <= count; i++) {
+    var shareScalar = thresholdShareScalar(secret, coefficientHexes, i);
+    if (shareScalar === null) return null;
+    var line = formatTTallyShare(threshold, i, shareScalar);
+    var commitment = p256PointMultiply(BigInt("0x" + shareScalar),
+      { x: P256_GX, y: P256_GY });
+    if (line === null || commitment === null) return null;
+    shares.push(line);
+    commitments.push(formatP256PublicKey(commitment));
+  }
+  var trustees = formatTTallyTrustees(threshold, count, commitments);
+  if (trustees === null) return null;
+  return { publicKey: publicKey, trustees: trustees, shares: shares };
+}
+
+/* Dealing a count, whole: draw a fresh counting
+   secret and fresh dealer coefficients, split,
+   and hand back the key line voters cast under
+   (tool 51's forms take it unchanged), the
+   public trustees line, and one share line per
+   trustee. A fresh secret per count, as in
+   tool 51: a secret reused across counts ties
+   those counts' ballots to one quorum, which is
+   the trustees' whole power and should never be
+   wider than one count needs. The dealer sees
+   the secret at this one moment — the header
+   states what that means, plainly. */
+function makeThresholdTally(thresholdText, countText) {
+  var threshold = parseTTallyThreshold(thresholdText);
+  var count = parseTTallyTrusteeCount(countText);
+  if (threshold === null || count === null || count < threshold) {
+    return null;
+  }
+  var secret = randomProofScalar();
+  if (secret === null) return null;
+  var coefficients = [];
+  for (var c = 0; c < threshold - 1; c++) {
+    var coefficient = randomProofScalar();
+    if (coefficient === null) return null;
+    coefficients.push(coefficient);
+  }
+  return splitTTallySecretFor(secret, coefficients, threshold, count);
+}
+
+/* One share, judged against the trustees line —
+   the tri-state every checker on this page
+   keeps: true when the share's own point is
+   exactly the commitment published under its
+   index and its quorum is the line's quorum;
+   false when both lines parse and the share is
+   simply not the dealt one; null when a line
+   cannot even be read. Checking a share opens
+   nothing: the commitment was always public. */
+function checkTTallyShare(trusteesText, shareText) {
+  var trustees = parseTTallyTrustees(trusteesText);
+  var share = parseTTallyShare(shareText);
+  if (trustees === null || share === null) return null;
+  if (share.threshold !== trustees.threshold) return false;
+  var expected = trustees.commitments[share.index];
+  if (expected === undefined) return false;
+  var point = p256PointMultiply(BigInt("0x" + share.share),
+    { x: P256_GX, y: P256_GY });
+  if (point === null) return null;
+  return formatP256PublicKey(point) === expected;
+}
+
+/* One trustee's partial opening line: the tag,
+   the trustee's index, and the point
+   share×A_sum — the share weighted into the
+   tally's summed randomness, and nothing else:
+   no share, no secret, and no vote travels in
+   it. A partial is safe to hand to whoever runs
+   the finish, in the open. */
+function formatTTallyPartial(index, pointHex) {
+  var point = parseP256Point(pointHex);
+  if (!validThresholdIndexValue(index) || point === null) return null;
+  return TTALLY_PARTIAL_FORMAT + ":" + index + ":" +
+    formatP256PublicKey(point);
+}
+
+function parseTTallyPartial(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 3 || parts[0] !== TTALLY_PARTIAL_FORMAT) return null;
+  var index = parseThresholdIndexText(parts[1]);
+  var point = parseP256Point(parts[2]);
+  if (index === null || point === null) return null;
+  return { index: index, point: formatP256PublicKey(point) };
+}
+
+/* The partials for a finish, as pasted: one
+   partial line per line, trailing blank lines
+   ignored, any other blank line refused, indices
+   distinct — the same discipline as the ballot
+   pile, because a partial pasted twice must not
+   count as two trustees. How many make a quorum
+   is the finish's judgement, not this parser's:
+   it reports the set it was handed. */
+function parseTTallyPartials(text) {
+  if (typeof text !== "string") return null;
+  var lines = text.split("\n");
+  while (lines.length > 0 && lines[lines.length - 1].trim() === "") {
+    lines.pop();
+  }
+  if (lines.length < 1 || lines.length > TTALLY_MAX_TRUSTEES) return null;
+  var out = [];
+  var seen = {};
+  for (var i = 0; i < lines.length; i++) {
+    var partial = parseTTallyPartial(lines[i]);
+    if (partial === null || seen[partial.index]) return null;
+    seen[partial.index] = true;
+    out.push(partial);
+  }
+  return out;
+}
+
+/* A trustee's move, whole: their share line and
+   the public tally line in, their partial line
+   out — the share multiplied into the tally's
+   summed randomness point A_sum, by the page's
+   own point arithmetic. The share itself never
+   leaves this step, and the partial is computed
+   over the SUM: a trustee who runs this over a
+   single ballot's A instead is doing a
+   different, vote-opening thing, and the header
+   says so plainly rather than pretending the
+   arithmetic can tell the difference. A product
+   landing on the identity cannot be spelled as
+   a point and is refused whole. */
+function thresholdTallyPartial(shareText, tallyText) {
+  var share = parseTTallyShare(shareText);
+  var tally = parseTally(tallyText);
+  if (share === null || tally === null) return null;
+  var aPoint = parseP256Point(tally.a);
+  if (aPoint === null) return null;
+  var partial = p256PointMultiply(BigInt("0x" + share.share), aPoint);
+  if (partial === null) return null;
+  return formatTTallyPartial(share.index, formatP256PublicKey(partial));
+}
+
+/* The finish, and the tool's verdict: the
+   counting key line, the trustees line, the
+   tally line and a quorum of partial lines in,
+   the count of yes votes out — or null. Every
+   gate is checked before any opening: the
+   partials number at least the quorum, every
+   partial's index is a dealt trustee's, and the
+   participating set's commitments, weighted by
+   their Lagrange coefficients, rebuild the
+   counting key Y exactly — a trustees line from
+   another count, or partials from trustees who
+   were never dealt in, stops here. Only then
+   are the partials weighted and summed into
+   x×A_sum — x itself is never reconstructed, by
+   anyone, anywhere in this tool — and the total
+   counted off exactly as tool 51 counts it. A
+   point that is no in-range multiple — a wrong
+   share's partial, a tally summed under another
+   key — is null, never a best guess. */
+function thresholdTallyOpen(keyText, trusteesText, tallyText, partialsText) {
+  var keyHex = parseTallyPublicKey(keyText);
+  var trustees = parseTTallyTrustees(trusteesText);
+  var tally = parseTally(tallyText);
+  var partials = parseTTallyPartials(partialsText);
+  if (keyHex === null || trustees === null || tally === null ||
+      partials === null) {
+    return null;
+  }
+  if (partials.length < trustees.threshold) return null;
+  var indices = [];
+  for (var i = 0; i < partials.length; i++) {
+    if (trustees.commitments[partials[i].index] === undefined) return null;
+    indices.push(partials[i].index);
+  }
+  indices.sort(function (a, b) { return a - b; });
+  var yPoint = parseP256Point(keyHex);
+  var aPoint = parseP256Point(tally.a);
+  var bPoint = parseP256Point(tally.b);
+  if (yPoint === null || aPoint === null || bPoint === null) return null;
+  var keyCheck = null;
+  var weighted = null;
+  for (var j = 0; j < partials.length; j++) {
+    var lambda = thresholdLagrangeCoefficient(partials[j].index, indices);
+    if (lambda === null) return null;
+    var lambdaValue = BigInt("0x" + lambda);
+    var commitmentPoint = parseP256Point(
+      trustees.commitments[partials[j].index]);
+    var partialPoint = parseP256Point(partials[j].point);
+    if (commitmentPoint === null || partialPoint === null) return null;
+    keyCheck = p256PointAdd(keyCheck,
+      p256PointMultiply(lambdaValue, commitmentPoint));
+    weighted = p256PointAdd(weighted,
+      p256PointMultiply(lambdaValue, partialPoint));
+    if (keyCheck === null || weighted === null) return null;
+  }
+  if (!tallyPointsEqual(keyCheck, yPoint)) return null;
+  var unmasked = p256PointAdd(bPoint, p256PointNegate(weighted));
+  var acc = null;
+  for (var t = 0; t <= tally.count; t++) {
+    if (tallyPointsEqual(acc, unmasked)) {
+      return { total: t, ballots: tally.count };
+    }
+    acc = p256PointAdd(acc, { x: P256_GX, y: P256_GY });
+    if (acc === null && t < tally.count) return null;
+  }
+  return null;
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -10390,7 +10835,17 @@ if (typeof module !== "undefined" && module.exports) {
                      ballotProofStatementPoints, ballotProofChallenge,
                      formatBallotProof, parseBallotProof,
                      proveBallot, castProvedBallot,
-                     verifyBallotProof };
+                     verifyBallotProof,
+                     TTALLY_SHARE_FORMAT, TTALLY_TRUSTEES_FORMAT,
+                     TTALLY_PARTIAL_FORMAT,
+                     TTALLY_MIN_TRUSTEES, TTALLY_MAX_TRUSTEES,
+                     parseTTallyThreshold, parseTTallyTrusteeCount,
+                     formatTTallyShare, parseTTallyShare,
+                     formatTTallyTrustees, parseTTallyTrustees,
+                     splitTTallySecretFor, makeThresholdTally,
+                     checkTTallyShare, formatTTallyPartial,
+                     parseTTallyPartial, parseTTallyPartials,
+                     thresholdTallyPartial, thresholdTallyOpen };
 }
 
 if (typeof document !== "undefined") {
@@ -13666,6 +14121,95 @@ if (typeof document !== "undefined") {
               "encrypts something other than 0 or 1, for which " +
               "no proof from tool 52's cast form exists.";
         });
+    });
+
+    /* --- no single opener (threshold tally opening) --- */
+    document.getElementById("ttally-split").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("ttally-split-result");
+      var keyOut = document.getElementById("tt-key-out");
+      var trusteesOut = document.getElementById("tt-trustees-out");
+      var sharesOut = document.getElementById("tt-shares-out");
+      status.textContent = "Dealing locally…";
+      var dealt = makeThresholdTally(
+        document.getElementById("tt-split-threshold").value,
+        document.getElementById("tt-split-count").value);
+      if (dealt === null) {
+        keyOut.value = "";
+        trusteesOut.value = "";
+        sharesOut.value = "";
+        status.textContent = "Nothing was dealt: the quorum " +
+          "must be 2 or 3, and the trustees must number from " +
+          "the quorum up to 5.";
+        return;
+      }
+      keyOut.value = dealt.publicKey;
+      trusteesOut.value = dealt.trustees;
+      sharesOut.value = dealt.shares.join("\n");
+      status.textContent = "Dealt. Publish the counting key " +
+        "and the trustees line; hand each trustee exactly their " +
+        "own share line and have them keep it where they keep " +
+        "private keys. This form held the whole secret for the " +
+        "moment of the split and printed it nowhere — from " +
+        "here on it exists only as the shares, and no one " +
+        "trustee can open anything alone.";
+    });
+
+    document.getElementById("ttally-partial").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("ttally-partial-result");
+      var out = document.getElementById("tt-part-out");
+      status.textContent = "Computing your partial locally…";
+      var partial = thresholdTallyPartial(
+        document.getElementById("tt-part-share").value,
+        document.getElementById("tt-part-tally").value);
+      if (partial === null) {
+        out.value = "";
+        status.textContent = "No partial was made: the share " +
+          "must be a whole p4a-tallyshare-v1 line and the tally " +
+          "a whole p4a-tally-v1 line from tool 51's adding-up.";
+        return;
+      }
+      out.value = partial;
+      status.textContent = "Your partial is ready — a single " +
+        "point, safe to hand to whoever runs the finish, in the " +
+        "open. Your share never left this form. Run this only " +
+        "over a tally line (the summed ballots), never over a " +
+        "single ballot: a quorum pooling single-ballot " +
+        "partials would open that ballot, and the arithmetic " +
+        "cannot tell the difference.";
+    });
+
+    document.getElementById("ttally-open").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("ttally-open-result");
+      var out = document.getElementById("tt-open-out");
+      status.textContent = "Opening the total locally…";
+      var opened = thresholdTallyOpen(
+        document.getElementById("tt-open-key").value,
+        document.getElementById("tt-open-trustees").value,
+        document.getElementById("tt-open-tally").value,
+        document.getElementById("tt-open-partials").value);
+      if (opened === null) {
+        out.value = "";
+        status.textContent = "No total: the key, trustees and " +
+          "tally lines must be whole, the partials must number " +
+          "at least the quorum, every partial must come from a " +
+          "dealt trustee, and the trustees line must be the one " +
+          "dealt for this key — and if a share behind a partial " +
+          "was wrong, the weighted sum lands on no honest " +
+          "total and the finish fails closed rather than " +
+          "inventing one.";
+        return;
+      }
+      out.value = "Yes votes: " + opened.total + " of " +
+        opened.ballots + " ballots.";
+      status.textContent = "Opened — by a quorum, and the " +
+        "secret was never rebuilt: the partials were weighted " +
+        "by their Lagrange coefficients and summed straight " +
+        "into the tally's mask. Only the total was read; no " +
+        "single ballot was opened, and no trustee under the " +
+        "quorum could have produced this answer.";
     });
 
     /* --- copy donation address --- */
