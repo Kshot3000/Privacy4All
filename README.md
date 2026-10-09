@@ -1320,6 +1320,43 @@ renewable resource that pays for shielded transactions.
   and not a format any chain or wallet
   checks.
 
+- **Shuffle the whole board — a verifiable
+  board shuffle** — the mixnet gap tool 56
+  names: its proof names the pair, so a board
+  in cast order can still be followed. The
+  mixer re-randomizes every ballot under a
+  fresh shift, publishes them in a permuted
+  order, and proves the set, never the
+  pairing, in two halves. Per published
+  ballot, an OR proof over the whole input
+  board (one branch per input: this output
+  is that input re-randomized, the equality
+  of tool 56 over the pair's differences;
+  the true branch proved, the rest simulated
+  backwards, branch challenges summing to
+  one SHA-256 challenge under
+  `privacy4all-shuffle-v1`), in a
+  `p4a-shuffleproof-v1` line: the output came
+  from some board ballot, and which one is
+  the one thing unsaid. Plus one aggregate
+  proof — tool 56's own, between the two
+  boards' sums spelled as ballots — fixing
+  the total. With equal counts, no repeated
+  lines and binary votes (tool 52's input
+  board), count + total fix the whole
+  multiset of votes. Honestly labelled: one
+  mixer knows the permutation (drawn inside
+  the step, printed nowhere; real mixnets
+  cascade several independent mixers); the
+  OR proof grows with the square of the
+  board, so boards are capped at six — real
+  shuffles use Neff / Bayer–Groth arguments;
+  the ballot column only (validity and
+  eligibility stay tools 52/54/55 on the
+  input board). Not a Compact circuit proof,
+  and not a format any chain or wallet
+  checks.
+
 ## Guides
 
 - [Getting started building on Midnight](guides/getting-started-midnight.md) —

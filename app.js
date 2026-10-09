@@ -11557,6 +11557,646 @@ function verifyRerandomization(keyText, origText, newText, proofText) {
     });
 }
 
+
+/* Shuffle the whole board — a verifiable board
+   shuffle (tool 57).
+
+   Tool 56 disguises one ballot and says plainly
+   what it is not: a mixnet shuffle. The proof
+   there names the pair, so anyone shown it sees
+   the pairing — and a board whose ballots still
+   stand in cast order is a board whose ballots
+   can be followed back to the casts above them,
+   however well each one is disguised. This tool
+   does the whole board at once, for this page's
+   own ballots: the mixer re-randomizes every
+   ballot under a fresh shift (tool 56's move),
+   publishes the disguised ballots in a permuted
+   order, and proves the set — never the pairing.
+
+   The proof has two halves, and the verdict is
+   their AND. First, for each published ballot,
+   an OR proof over the whole input board, in
+   the Cramer–Damgård–Schoenmakers composition
+   tools 52 and 54 use: for every input ballot a
+   branch states that this output is that input
+   re-randomized — the two public differences,
+   output minus input on each side, are one
+   shift under its two bases, the equality tool
+   56 proves. The mixer, who knows which input
+   this output came from and the shift they
+   used, proves that branch the ordinary sigma
+   way and simulates every other branch backwards
+   from a challenge and response chosen first.
+   One Fiat–Shamir challenge, hashed over the
+   counting key, the whole input board in order
+   and this output, is shared by the branches,
+   whose challenges must sum to it — so the
+   proof shows the output came from SOME ballot
+   on the board, and the branch that is real is
+   the one thing it does not say. Second, one
+   aggregate proof, which is exactly tool 56's
+   proof between two ballots that were never
+   cast: the input board's sum and the output
+   board's sum, spelled as ballots by tool 51's
+   public step. The sum of the shifts is a single
+   shift between those sums, and the mixer proves
+   it with tool 56's own prover, so the board's
+   total vote is untouched — the unmasking of the
+   output sum is the unmasking of the input sum.
+
+   Why those two halves are enough, for THIS
+   page's ballots, stated as carefully as the
+   page states anything: the boards hold the
+   same number of lines, no line repeated in
+   either. Each output is proved a re-randomi-
+   zation of some input, so every output's vote
+   is some input's vote. The aggregate proof
+   fixes the number of yes votes across the
+   whole board. Ballots here encrypt only 0 or
+   1 — that is what tool 52's proof on the input
+   board established, and the shuffle takes the
+   input board as already proved — and for
+   binary votes, the count of ballots and the
+   count of yes votes together fix the whole
+   multiset of votes. So no ballot's vote can
+   have been changed, dropped or duplicated
+   without one half failing: a swapped vote
+   breaks a branch or the total, a duplicated
+   ballot that drops another of a different vote
+   breaks the total, and a ballot from outside
+   the board has no honest branch at all.
+
+   The honest limits, stated before the code.
+   First, ONE MIXER KNOWS THE PERMUTATION: the
+   shifts and the order are drawn inside the
+   shuffle step and printed nowhere — the result
+   carries the shuffled board and its proofs and
+   nothing else — but whoever runs this step
+   could in principle remember them. Real
+   mixnets answer that with several independent
+   mixers in a row, each re-randomizing and
+   re-permuting the last one's output and
+   proving its own shuffle, so no single mixer
+   knows a ballot's whole path; this page runs
+   one step and does not pretend to be a cascade.
+   Second, THIS PROOF DOES NOT SCALE, and does
+   not claim to: an OR branch per input per
+   output makes the proof grow with the square
+   of the board, so the board here is capped at
+   six ballots, a teaching size. Real shuffles
+   of thousands of ballots use dedicated shuffle
+   arguments (Neff's, Bayer–Groth's) whose proofs
+   grow far more slowly; the statement they
+   prove is the same one proved here. Third,
+   the shuffle proves things about the BALLOT
+   column only: that the input ballots were
+   valid and eligible is the earlier tools' work
+   (52's proofs and 54's casts, audited together
+   by tool 55 on the input board, before the
+   shuffle), the casts are not shuffled here,
+   and timing, order of casting and network
+   metadata are nobody's proof. The counting
+   authority can still open the shuffled board's
+   total, and any single ballot with its secret
+   — the disguise is against linkage, not against
+   the counting key, whose threshold answer stays
+   tool 53. The frame is the house one: real
+   proofs computed locally, but the lines are
+   this hub's own p4a-shuffleproof-v1 spelling —
+   not a format any chain or wallet checks, not
+   one of Midnight's Compact circuit proofs.
+   Never paste a real wallet key or a production
+   private key into any web page, including this
+   one. */
+var SHUFFLE_FORMAT = "p4a-shuffleproof-v1";
+var SHUFFLE_CHALLENGE_PREFIX = "privacy4all-shuffle-v1";
+var SHUFFLE_MIN_BOARD = 2;
+var SHUFFLE_MAX_BOARD = 6;
+
+/* A board, as pasted: one ballot line per line,
+   read by tool 55's column discipline, held to
+   this tool's teaching size — at least two
+   ballots, because a board of one has nothing
+   to shuffle into, and at most six, because the
+   proof below grows with the square of the
+   board — and no line repeated: the same ballot
+   twice on one board is a copied ballot, and a
+   shuffle that cannot tell copies from voters
+   will not bless one. Returns the canonical
+   ballot lines, in the order pasted. */
+function parseShuffleBoard(text) {
+  var lines = splitAuditLines(text);
+  if (lines === null || lines.length < SHUFFLE_MIN_BOARD ||
+      lines.length > SHUFFLE_MAX_BOARD) return null;
+  var out = [];
+  for (var i = 0; i < lines.length; i++) {
+    var ballot = parseTallyBallot(lines[i]);
+    if (ballot === null) return null;
+    var line = formatTallyBallot(ballot.a, ballot.b);
+    if (line === null || out.indexOf(line) !== -1) return null;
+    out.push(line);
+  }
+  return out;
+}
+
+/* The statement one branch of a shuffle proof
+   makes, judged: under this counting key, the
+   two differences between one input ballot and
+   one output ballot — output minus input, on
+   the base side and on the key side. When the
+   output honestly is the input re-randomized,
+   both differences are the one shift under its
+   two bases. A difference landing on the
+   identity cannot be spelled or proved about,
+   so the whole statement is null. */
+function shuffleDifferencePoints(keyText, inputText, outputText) {
+  var keyHex = parseTallyPublicKey(keyText);
+  var input = parseTallyBallot(inputText);
+  var output = parseTallyBallot(outputText);
+  if (keyHex === null || input === null || output === null) {
+    return null;
+  }
+  var deltaA = p256PointAdd(parseP256Point(output.a),
+    p256PointNegate(parseP256Point(input.a)));
+  var deltaB = p256PointAdd(parseP256Point(output.b),
+    p256PointNegate(parseP256Point(input.b)));
+  if (deltaA === null || deltaB === null) return null;
+  return { key: keyHex,
+           deltaA: formatP256PublicKey(deltaA),
+           deltaB: formatP256PublicKey(deltaB) };
+}
+
+/* The one challenge for one output's shuffle
+   proof: SHA-256 over the label, the counting
+   key, the whole input board in its published
+   order, this output ballot, and every branch's
+   two nonce points in board order — base side
+   first, key side second — every point
+   canonicalised first, so the hash names the
+   statement and not a spelling of it. Reduced
+   under the order; a reduced digest of zero is
+   null, the refusal every Fiat–Shamir challenge
+   on this page makes. */
+function shuffleChallenge(keyText, boardText, outputText, noncePairs) {
+  var keyHex = parseTallyPublicKey(keyText);
+  var board = parseShuffleBoard(boardText);
+  var output = parseTallyBallot(outputText);
+  if (keyHex === null || board === null || output === null ||
+      !Array.isArray(noncePairs) ||
+      noncePairs.length !== board.length) {
+    return Promise.resolve(null);
+  }
+  var flat = [];
+  for (var i = 0; i < noncePairs.length; i++) {
+    if (!Array.isArray(noncePairs[i]) || noncePairs[i].length !== 2) {
+      return Promise.resolve(null);
+    }
+    var first = parseP256Point(noncePairs[i][0]);
+    var second = parseP256Point(noncePairs[i][1]);
+    if (first === null || second === null) {
+      return Promise.resolve(null);
+    }
+    flat.push(formatP256PublicKey(first));
+    flat.push(formatP256PublicKey(second));
+  }
+  var transcript = SHUFFLE_CHALLENGE_PREFIX + "\n" + keyHex + "\n" +
+    board.join("\n") + "\n" +
+    formatTallyBallot(output.a, output.b) + "\n" + flat.join("\n");
+  return sha256Hex(transcript).then(function (digest) {
+    if (digest === null) return null;
+    var value = BigInt("0x" + digest) % P256_N;
+    if (value === P256_ZERO) return null;
+    return p256IntToHex(value);
+  });
+}
+
+/* One output's shuffle proof line: the format
+   tag, then per input ballot — in board order —
+   that branch's challenge and response, gated as
+   responses: zero allowed, the order refused,
+   because a branch challenge honestly can be the
+   difference that lands on zero. The line
+   carries no nonce points and no marker of the
+   true branch — the branches are deliberately
+   indistinguishable, the true one included. */
+function formatShuffleProof(branches) {
+  if (!Array.isArray(branches) ||
+      branches.length < SHUFFLE_MIN_BOARD ||
+      branches.length > SHUFFLE_MAX_BOARD) return null;
+  var parts = [SHUFFLE_FORMAT];
+  for (var i = 0; i < branches.length; i++) {
+    var branch = branches[i];
+    if (branch === null || typeof branch !== "object") return null;
+    var challenge = parseProofResponse(branch.challenge);
+    var response = parseProofResponse(branch.response);
+    if (challenge === null || response === null) return null;
+    parts.push(challenge); parts.push(response);
+  }
+  return parts.join(":");
+}
+
+function parseShuffleProof(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length < 1 + 2 * SHUFFLE_MIN_BOARD ||
+      parts.length > 1 + 2 * SHUFFLE_MAX_BOARD ||
+      (parts.length - 1) % 2 !== 0 || parts[0] !== SHUFFLE_FORMAT) {
+    return null;
+  }
+  var branches = [];
+  for (var i = 0; i < (parts.length - 1) / 2; i++) {
+    var challenge = parseProofResponse(parts[1 + i * 2]);
+    var response = parseProofResponse(parts[2 + i * 2]);
+    if (challenge === null || response === null) return null;
+    branches.push({ challenge: challenge, response: response });
+  }
+  return { branches: branches };
+}
+
+/* A board shuffled to order: the board, a
+   permutation of its positions and one shift
+   per published ballot in, the shuffled board's
+   text out — published ballot j is input ballot
+   permutation[j] re-randomized under shift j,
+   by tool 56's own arithmetic. Synchronous and
+   deterministic, so tests can pin every output
+   against the single-ballot disguise. A
+   permutation that repeats or drops a position,
+   a shift tool 56's gate refuses, or two
+   published ballots landing on the same line
+   are all null: this is the mixer's arithmetic,
+   and arithmetic it cannot state exactly it
+   will not publish. */
+function shuffledBoardFor(keyText, boardText, permutation, shifts) {
+  var board = parseShuffleBoard(boardText);
+  if (board === null || !Array.isArray(permutation) ||
+      !Array.isArray(shifts) ||
+      permutation.length !== board.length ||
+      shifts.length !== board.length) return null;
+  var seen = [];
+  for (var i = 0; i < permutation.length; i++) {
+    var idx = permutation[i];
+    if (typeof idx !== "number" || Math.floor(idx) !== idx ||
+        idx < 0 || idx >= board.length ||
+        seen.indexOf(idx) !== -1) return null;
+    seen.push(idx);
+  }
+  var out = [];
+  for (var j = 0; j < permutation.length; j++) {
+    var line = rerandomizedBallotFor(board[permutation[j]],
+      keyText, shifts[j]);
+    if (line === null || out.indexOf(line) !== -1) return null;
+    out.push(line);
+  }
+  return out.join("\n");
+}
+
+/* A board's sum, spelled as a ballot: tool 51's
+   public step adds the board point by point,
+   and the tally line it spells carries the two
+   summed points — re-spelled here as one ballot
+   line, the ballot that was never cast whose
+   unmasking is the board's total. This is the
+   pair the aggregate half of the shuffle proof
+   is proved between, with tool 56's own prover
+   and verifier. */
+function shuffleSumBallot(boardText) {
+  var board = parseShuffleBoard(boardText);
+  if (board === null) return null;
+  var tally = parseTally(tallyBallotsFor(board.join("\n")));
+  if (tally === null) return null;
+  return formatTallyBallot(tally.a, tally.b);
+}
+
+/* One attempt at one output's proof, with all
+   randomness drawn fresh inside the attempt:
+   every branch but the true one is simulated
+   backwards on both differences, the true
+   branch's nonce pair is committed, the hash
+   chooses the true branch's challenge as
+   whatever the simulated ones leave, and the
+   true branch answers with the shift. Any
+   impossible point fails the attempt as null
+   and the caller redraws, the discipline tools
+   43, 45, 52 and 54 follow. */
+function shuffleProofAttempt(keyText, board, outputText,
+                             differences, trueIndex, shiftHex) {
+  var yPoint = parseP256Point(differences[0].key);
+  if (yPoint === null) return Promise.resolve(null);
+  var branches = new Array(board.length);
+  var pairs = new Array(board.length);
+  for (var i = 0; i < board.length; i++) {
+    if (i === trueIndex) continue;
+    var simChallenge = randomProofScalar();
+    var simResponse = randomProofScalar();
+    if (simChallenge === null || simResponse === null) {
+      return Promise.resolve(null);
+    }
+    var simC = BigInt("0x" + simChallenge);
+    var simS = BigInt("0x" + simResponse);
+    var deltaA = parseP256Point(differences[i].deltaA);
+    var deltaB = parseP256Point(differences[i].deltaB);
+    if (deltaA === null || deltaB === null) {
+      return Promise.resolve(null);
+    }
+    var nonceG = p256PointAdd(p256PointMultiply(simS,
+        { x: P256_GX, y: P256_GY }),
+      p256PointMultiply(rangeModN(-simC), deltaA));
+    var nonceY = p256PointAdd(p256PointMultiply(simS, yPoint),
+      p256PointMultiply(rangeModN(-simC), deltaB));
+    if (nonceG === null || nonceY === null) {
+      return Promise.resolve(null);
+    }
+    branches[i] = { challenge: simChallenge, response: simResponse };
+    pairs[i] = [formatP256PublicKey(nonceG),
+      formatP256PublicKey(nonceY)];
+  }
+  var nonceHex = randomProofScalar();
+  if (nonceHex === null) return Promise.resolve(null);
+  var trueNonceG = proofCommitmentForNonce(nonceHex);
+  var trueNonceYPoint = p256PointMultiply(BigInt("0x" + nonceHex),
+    yPoint);
+  if (trueNonceG === null || trueNonceYPoint === null) {
+    return Promise.resolve(null);
+  }
+  pairs[trueIndex] = [trueNonceG,
+    formatP256PublicKey(trueNonceYPoint)];
+  return shuffleChallenge(keyText, board.join("\n"), outputText,
+      pairs)
+    .then(function (challenge) {
+      if (challenge === null) return null;
+      var others = P256_ZERO;
+      for (var j = 0; j < board.length; j++) {
+        if (j === trueIndex) continue;
+        others = rangeModN(others +
+          BigInt("0x" + branches[j].challenge));
+      }
+      var trueChallenge = rangeModN(BigInt("0x" + challenge) -
+        others);
+      var trueResponse = rangeModN(BigInt("0x" + nonceHex) +
+        trueChallenge * BigInt("0x" + shiftHex));
+      branches[trueIndex] = {
+        challenge: p256IntToHex(trueChallenge),
+        response: p256IntToHex(trueResponse) };
+      return formatShuffleProof(branches);
+    });
+}
+
+/* The mixer's proof for one published ballot:
+   the counting key, the input board, this
+   output, the position it came from and the
+   shift it was disguised under, in — the proof
+   line out. The pairing is checked first: the
+   shift must recompute exactly this output from
+   exactly that input, the way tool 56 checks a
+   pair before proving — so a shift that is not
+   this pairing's, a position off the board, or
+   an output no input on the board produced gets
+   null. The position and the shift are the
+   mixer's secrets: they are read for this one
+   step and carried in no line this tool makes. */
+function proveShuffleBallot(keyText, boardText, outputText,
+                            inputIndex, shiftHex) {
+  var board = parseShuffleBoard(boardText);
+  var shift = parseProofScalar(shiftHex);
+  if (board === null || shift === null ||
+      typeof inputIndex !== "number" ||
+      Math.floor(inputIndex) !== inputIndex ||
+      inputIndex < 0 || inputIndex >= board.length) {
+    return Promise.resolve(null);
+  }
+  var output = parseTallyBallot(outputText);
+  if (output === null) return Promise.resolve(null);
+  var canonicalOutput = formatTallyBallot(output.a, output.b);
+  var rebuilt = rerandomizedBallotFor(board[inputIndex], keyText,
+    shift);
+  if (rebuilt === null || rebuilt !== canonicalOutput) {
+    return Promise.resolve(null);
+  }
+  var differences = [];
+  for (var i = 0; i < board.length; i++) {
+    var diff = shuffleDifferencePoints(keyText, board[i],
+      canonicalOutput);
+    if (diff === null) return Promise.resolve(null);
+    differences.push(diff);
+  }
+  var attempt = function (triesLeft) {
+    return shuffleProofAttempt(keyText, board, canonicalOutput,
+      differences, inputIndex, shift)
+      .then(function (proof) {
+        if (proof !== null) return proof;
+        return triesLeft > 1 ? attempt(triesLeft - 1) : null;
+      });
+  };
+  return attempt(4);
+}
+
+/* The verifier's verdict on one published
+   ballot, needing no secret of any kind: rebuild
+   every branch's two nonce points from its
+   challenge and response — on the base side
+   against that branch's base difference, on the
+   key side against its key difference — re-hash
+   the challenge from them, and check that the
+   branch challenges sum to it. True when it all
+   holds: this output is some board ballot
+   re-randomized. False — never null — when every
+   piece is well-formed and one fails; null when
+   a piece cannot even be parsed, the branch
+   count is not the board's, or a branch's
+   statement cannot be judged. A branch whose
+   rebuilt nonce point is the identity is false:
+   an honest proof never produces one — its
+   prover redraws — and the identity cannot be
+   spelled into the hash. */
+function verifyShuffleBallot(keyText, boardText, outputText,
+                             proofText) {
+  var board = parseShuffleBoard(boardText);
+  var proof = parseShuffleProof(proofText);
+  var output = parseTallyBallot(outputText);
+  if (board === null || proof === null || output === null ||
+      proof.branches.length !== board.length) {
+    return Promise.resolve(null);
+  }
+  var canonicalOutput = formatTallyBallot(output.a, output.b);
+  var pairs = [];
+  for (var i = 0; i < board.length; i++) {
+    var diff = shuffleDifferencePoints(keyText, board[i],
+      canonicalOutput);
+    if (diff === null) return Promise.resolve(null);
+    var yPoint = parseP256Point(diff.key);
+    var deltaA = parseP256Point(diff.deltaA);
+    var deltaB = parseP256Point(diff.deltaB);
+    if (yPoint === null || deltaA === null || deltaB === null) {
+      return Promise.resolve(null);
+    }
+    var branch = proof.branches[i];
+    var c = BigInt("0x" + branch.challenge);
+    var s = BigInt("0x" + branch.response);
+    var nonceG = p256PointAdd(p256PointMultiply(s,
+        { x: P256_GX, y: P256_GY }),
+      p256PointMultiply(rangeModN(-c), deltaA));
+    var nonceY = p256PointAdd(p256PointMultiply(s, yPoint),
+      p256PointMultiply(rangeModN(-c), deltaB));
+    if (nonceG === null || nonceY === null) {
+      return Promise.resolve(false);
+    }
+    pairs.push([formatP256PublicKey(nonceG),
+      formatP256PublicKey(nonceY)]);
+  }
+  return shuffleChallenge(keyText, board.join("\n"),
+      canonicalOutput, pairs)
+    .then(function (challenge) {
+      if (challenge === null) return null;
+      var sum = P256_ZERO;
+      for (var j = 0; j < proof.branches.length; j++) {
+        sum = rangeModN(sum +
+          BigInt("0x" + proof.branches[j].challenge));
+      }
+      return sum === BigInt("0x" + challenge);
+    });
+}
+
+/* One whole shuffle attempt, with the order and
+   every shift drawn fresh inside it: permute
+   the board's positions Fisher–Yates, disguise
+   each ballot under its own shift, prove each
+   published ballot against the whole board, and
+   prove the sums against each other with tool
+   56's prover under the shifts' total. A drawn
+   total of zero — the shifts cancelling exactly,
+   a disguise of nothing between the sums — fails
+   the attempt and the caller redraws, rather
+   than publishing an aggregate proof tool 56's
+   own gate would refuse. */
+function shuffleBoardAttempt(keyText, board) {
+  var n = board.length;
+  var permutation = [];
+  for (var i = 0; i < n; i++) permutation.push(i);
+  for (var k = n - 1; k > 0; k--) {
+    var j = psiRandomBelow(k + 1);
+    if (j === null) return Promise.resolve(null);
+    var tmp = permutation[k];
+    permutation[k] = permutation[j];
+    permutation[j] = tmp;
+  }
+  var shifts = [];
+  var total = P256_ZERO;
+  for (var m = 0; m < n; m++) {
+    var shift = randomProofScalar();
+    if (shift === null) return Promise.resolve(null);
+    shifts.push(shift);
+    total = rangeModN(total + BigInt("0x" + shift));
+  }
+  if (total === P256_ZERO) return Promise.resolve(null);
+  var boardText = board.join("\n");
+  var shuffledText = shuffledBoardFor(keyText, boardText,
+    permutation, shifts);
+  if (shuffledText === null) return Promise.resolve(null);
+  var outputs = shuffledText.split("\n");
+  var proofPromises = outputs.map(function (line, idx) {
+    return proveShuffleBallot(keyText, boardText, line,
+      permutation[idx], shifts[idx]);
+  });
+  return Promise.all(proofPromises).then(function (proofs) {
+    if (proofs.indexOf(null) !== -1) return null;
+    var inSum = shuffleSumBallot(boardText);
+    var outSum = shuffleSumBallot(shuffledText);
+    if (inSum === null || outSum === null) return null;
+    return proveRerandomization(keyText, inSum, outSum,
+        p256IntToHex(total))
+      .then(function (aggregate) {
+        if (aggregate === null) return null;
+        return { ballots: shuffledText,
+                 proofs: proofs.join("\n") + "\n" + aggregate };
+      });
+  });
+}
+
+/* The mixer's whole move: the counting key and
+   the input board in, the shuffled board and
+   its proof bundle out — one p4a-shuffleproof-v1
+   line per published ballot, in published order,
+   and one p4a-rerandproof-v1 line for the sums
+   last. The permutation and the shifts are
+   deliberately NOT returned — together they are
+   the pairing this tool exists to hide — so they
+   exist only inside this call, and the bundle
+   is the board's receipt that the shuffle
+   changed nothing but the order and the
+   disguises. */
+function shuffleBoardAndProve(keyText, boardText) {
+  var board = parseShuffleBoard(boardText);
+  if (board === null || parseTallyPublicKey(keyText) === null) {
+    return Promise.resolve(null);
+  }
+  var attempt = function (triesLeft) {
+    return shuffleBoardAttempt(keyText, board)
+      .then(function (made) {
+        if (made !== null) return made;
+        return triesLeft > 1 ? attempt(triesLeft - 1) : null;
+      });
+  };
+  return attempt(4);
+}
+
+/* The checker's whole verdict, needing no
+   secret of any kind: both boards judged, the
+   bundle's lines counted — one proof per
+   published ballot, plus the aggregate line —
+   then the two halves run separately, because
+   they fail differently. outputsProved: every
+   published ballot's OR proof verifies against
+   the input board, so every published vote is
+   some cast vote, disguised. totalPreserved:
+   the aggregate proof verifies between the two
+   boards' sums, so the board's total vote is
+   untouched. The verdict is their AND, and the
+   reasoning that makes the AND enough — same
+   count, no repeats, binary votes — is stated
+   in this tool's header and on its page.
+   Anything that cannot even be judged — a
+   malformed board or line anywhere, boards of
+   different sizes, a bundle of the wrong length,
+   a proof the earlier tools cannot read — is
+   null, never a verdict. */
+function verifyBoardShuffle(keyText, boardText, shuffledText,
+                            proofsText) {
+  var board = parseShuffleBoard(boardText);
+  var shuffled = parseShuffleBoard(shuffledText);
+  var lines = splitAuditLines(proofsText);
+  if (board === null || shuffled === null || lines === null ||
+      shuffled.length !== board.length ||
+      lines.length !== board.length + 1) {
+    return Promise.resolve(null);
+  }
+  var inSum = shuffleSumBallot(board.join("\n"));
+  var outSum = shuffleSumBallot(shuffled.join("\n"));
+  if (inSum === null || outSum === null) {
+    return Promise.resolve(null);
+  }
+  var perOutput = shuffled.map(function (line, idx) {
+    return verifyShuffleBallot(keyText, board.join("\n"), line,
+      lines[idx]);
+  });
+  return Promise.all(perOutput).then(function (verdicts) {
+    if (verdicts.indexOf(null) !== -1) return null;
+    return verifyRerandomization(keyText, inSum, outSum,
+        lines[board.length])
+      .then(function (aggregate) {
+        if (aggregate === null) return null;
+        var outputsProved = verdicts.every(function (v) {
+          return v === true;
+        });
+        return { ballots: board.length,
+                 outputsProved: outputsProved,
+                 totalPreserved: aggregate,
+                 verdict: outputsProved && aggregate };
+      });
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -11791,7 +12431,15 @@ if (typeof module !== "undefined" && module.exports) {
                      rerandStatementPoints, rerandomizedBallotFor,
                      rerandChallenge, formatRerandProof,
                      parseRerandProof, proveRerandomization,
-                     rerandomizeAndProve, verifyRerandomization };
+                     rerandomizeAndProve, verifyRerandomization,
+                     SHUFFLE_FORMAT, SHUFFLE_CHALLENGE_PREFIX,
+                     SHUFFLE_MIN_BOARD, SHUFFLE_MAX_BOARD,
+                     parseShuffleBoard, shuffleDifferencePoints,
+                     shuffleChallenge, formatShuffleProof,
+                     parseShuffleProof, shuffledBoardFor,
+                     shuffleSumBallot, proveShuffleBallot,
+                     verifyShuffleBallot, shuffleBoardAndProve,
+                     verifyBoardShuffle };
 }
 
 if (typeof document !== "undefined") {
@@ -15389,6 +16037,93 @@ if (typeof document !== "undefined") {
               "challenge or response. A disguised ballot that " +
               "fails this check has not been shown to carry the " +
               "original's vote, whatever it encrypts.";
+        });
+    });
+
+    /* --- shuffle the whole board (verifiable board shuffle) --- */
+    document.getElementById("board-shuffle").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("board-shuffle-result");
+      var boardOut = document.getElementById("bs-board-out");
+      var proofsOut = document.getElementById("bs-proofs-out");
+      status.textContent = "Shuffling locally…";
+      shuffleBoardAndProve(
+        document.getElementById("bs-key").value,
+        document.getElementById("bs-board").value)
+        .then(function (made) {
+          if (made === null) {
+            boardOut.value = "";
+            proofsOut.value = "";
+            status.textContent = "No shuffle was made: the " +
+              "counting key must be a whole p4a-tallykey-v1 line " +
+              "and the board 2 to 6 whole p4a-ballot-v1 lines, no " +
+              "line repeated — a board this page cannot read gets " +
+              "no shuffle, rather than a wrong one.";
+            return;
+          }
+          boardOut.value = made.ballots;
+          proofsOut.value = made.proofs;
+          status.textContent = "Shuffled and proved. Every " +
+            "published ballot is a disguised ballot from the board " +
+            "you pasted, in an order this step chose and printed " +
+            "nowhere, and the board's total vote is untouched. " +
+            "The permutation and the shifts were drawn for this " +
+            "step only and printed nowhere — together they are " +
+            "the pairing, so they are kept the way this page " +
+            "keeps a ballot's randomness: inside the step, and " +
+            "nowhere else.";
+        });
+    });
+
+    document.getElementById("board-shuffle-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("board-shuffle-check-result");
+      var out = document.getElementById("bsc-out");
+      status.textContent = "Checking locally…";
+      verifyBoardShuffle(
+        document.getElementById("bsc-key").value,
+        document.getElementById("bsc-board").value,
+        document.getElementById("bsc-shuffled").value,
+        document.getElementById("bsc-proofs").value)
+        .then(function (report) {
+          if (report === null) {
+            out.value = "";
+            status.textContent = "Cannot judge this shuffle: the " +
+              "key must be a whole p4a-tallykey-v1 line, both " +
+              "boards the same number of whole p4a-ballot-v1 " +
+              "lines (2 to 6, no line repeated), and the bundle " +
+              "one p4a-shuffleproof-v1 line per published ballot " +
+              "plus the p4a-rerandproof-v1 line for the sums — a " +
+              "shuffle that cannot be read gets no verdict, " +
+              "rather than a wrong one.";
+            return;
+          }
+          var yesNo = function (ok, failText) {
+            return ok ? "yes" : failText;
+          };
+          out.value =
+            "Board shuffle — " + report.ballots + " ballot(s) on each board\n" +
+            "Every published ballot proved a disguised board ballot (tool 57): " +
+              yesNo(report.outputsProved, "NO — at least one published ballot did not prove") + "\n" +
+            "The board's total — the sums differ by one shift under both bases (tool 56): " +
+              yesNo(report.totalPreserved, "NO — the shuffled board's total is not the original's") + "\n" +
+            "Verdict: " + (report.verdict
+              ? "the shuffle checks out — same ballots, same votes, new order, new disguises."
+              : "the shuffle does NOT check out — see the failed check(s) above.");
+          status.textContent = report.verdict
+            ? "The shuffle checks out: every published ballot " +
+              "proved it is one of the board's own ballots " +
+              "disguised, without saying which, and the two " +
+              "boards' sums differ by a single shift, so no vote " +
+              "was changed, dropped or duplicated. The checker " +
+              "holds no key and learned no pairing — the order " +
+              "stays the mixer's secret."
+            : "The shuffle does not check out. The two checks " +
+              "fail differently: a published ballot that is no " +
+              "disguised board ballot is a substitution, and a " +
+              "total that moved is a vote changed, dropped or " +
+              "duplicated — the report above says which one this " +
+              "shuffle tells.";
         });
     });
 
