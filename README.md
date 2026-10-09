@@ -873,7 +873,36 @@ renewable resource that pays for shielded transactions.
   amounts in logarithmic space; not a Compact
   circuit proof, and not a format any chain or
   wallet checks. The opening it is made from stays
-  a secret of private-key rank.
+  a secret of private-key rank. Tool 44 turns from
+  one commitment to two: whether they hide the
+  same value.
+- **Same value, twice hidden — equality proofs**
+  — prove two Pedersen commitments hide the same
+  value, opening neither. Two commitments to one
+  value under different blindings differ only in
+  their blinding terms, so `C₁ − C₂ = (r₁ − r₂)×G`:
+  the difference point is a plain multiple of the
+  base point that any verifier computes from the
+  pair alone, and the proof is tool 32's Schnorr
+  proof of knowledge aimed at it — fresh nonce
+  commitment, one Fiat–Shamir challenge hashed
+  under `privacy4all-eqproof-v1` over the pair in
+  order and the nonce commitment, response checked
+  as `s×G = R + c×D`. Had the values differed, the
+  difference would carry an `H` term whose
+  logarithm under `G` nobody knows — that unknown
+  is the soundness. The witness is the blinding
+  difference alone: the value never enters the
+  response, and anyone holding both blindings can
+  make the proof. The proof line is
+  `p4a-eqproof-v1`. Honestly labelled: identical
+  commitments are refused — visibly equal already,
+  and their difference is the identity this page
+  does not spell; one nonce behind two responses
+  hands back the blinding difference. Not a
+  Compact circuit proof, and not a format any
+  chain or wallet checks. The openings it is made
+  from stay secrets of private-key rank.
 
 ## Guides
 

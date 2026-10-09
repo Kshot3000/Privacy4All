@@ -6854,6 +6854,265 @@ function verifyRangeProof(commitmentHex, proofText) {
   });
 }
 
+/* ---------- 44. Same value, twice hidden — equality proofs ----------
+
+   Tools 42 and 43 ask questions about ONE commitment:
+   does it open to this value, is the hidden value in
+   range. A shielded ledger asks a two-commitment
+   question just as often: the commitment published
+   when a note was created and the commitment in
+   today's transfer — do they hide the SAME amount?
+   If they do, value moved from one hiding place to
+   another without changing; if they do not, value was
+   created or destroyed somewhere between the two
+   points on the ledger. This tool proves the equality
+   without opening either commitment.
+
+   The arithmetic is one subtraction. Two commitments
+   to the same value under different blindings,
+
+     C1 = r1×G + v×H        C2 = r2×G + v×H,
+
+   differ only in their blinding terms, so their
+   difference is a plain multiple of the base point:
+
+     C1 − C2 = (r1 − r2)×G.
+
+   Proving the values equal is therefore proving
+   knowledge of the difference d = (r1 − r2) mod n
+   behind the difference point D = C1 − C2 — a
+   Schnorr proof of knowledge, tool 32's protocol,
+   aimed at a point the verifier computes for
+   themselves from the two pasted commitments.
+   The prover commits to a fresh nonce (R = k×G),
+   the challenge is SHA-256 under the label
+   privacy4all-eqproof-v1 over the two commitments
+   and the nonce commitment, and the response is
+   tool 32's own s = k + c·d mod n; the verifier
+   checks s×G = R + c×D. If the values had differed
+   by any δ ≠ 0, the difference point would carry a
+   δ×H term, and answering the challenge would mean
+   knowing the discrete logarithm of an H-carrying
+   point under G — the very logarithm tool 42's
+   generator is built so nobody knows. That unknown
+   is the soundness: equality here is proved, not
+   merely claimed.
+
+   The witness deserves stating plainly: it is the
+   blinding difference and nothing else. The value
+   never enters the response — anyone holding both
+   blindings can make this proof, and the proof
+   itself names neither the value nor either
+   blinding. It also binds the pair in order: the
+   challenge hashes C1 before C2, and the swapped
+   pair is a different statement (its witness is
+   −d), so a proof does not transplant from one
+   ordering to the other.
+
+   The verdict keeps the house split. True when the
+   response balances against the difference point;
+   false — never null — when every piece is
+   well-formed and it does not: a nudged response, a
+   proof transplanted to a pair whose values differ,
+   the pair pasted in the wrong order. Null when a
+   piece cannot even be parsed, and in one case that
+   is the statement's own edge: identical commitments
+   have the identity for a difference, which has no
+   point spelling on this page — two identical
+   commitments are visibly equal already, and there
+   is nothing to prove. Making a proof also refuses
+   as null what it cannot honestly prove: openings
+   that do not recompute their commitments, two
+   values that differ (the refusal IS the equality
+   failing, stated before any proof is attempted),
+   equal blindings (which would make the commitments
+   identical), and a zero blinding on either side.
+
+   The honest limits are plain. The nonce discipline
+   is inherited whole from tool 32: one nonce behind
+   two responses hands back the witness — here the
+   blinding difference — and the tests pin exactly
+   that recovery, using one nonce for the pair and
+   for the pair swapped. Whoever learns the blinding
+   difference and holds one blinding holds the other,
+   so the difference is a secret of the same rank.
+   The proof line is the hub's own p4a-eqproof-v1
+   spelling over P-256 teaching arithmetic — not a
+   format any chain or wallet checks, not one of
+   Midnight's Compact circuit proofs, and the curve
+   code is a teaching implementation: affine
+   arithmetic written to be read, not an audited
+   library and not side-channel resistant. Never
+   paste a real wallet key or a production private
+   key into any web page, including this one;
+   practise with throwaway commitments from tool 42. */
+var EQPROOF_FORMAT = "p4a-eqproof-v1";
+var EQPROOF_CHALLENGE_PREFIX = "privacy4all-eqproof-v1";
+
+/* The difference point of two commitments, C1 − C2,
+   in the hub's 91-byte spelling. When the values
+   match it is (r1 − r2)×G; when they do not it
+   carries the value gap as an H term. Null when
+   either point is malformed, or when the two are
+   identical and the difference is the identity,
+   which this page does not spell as a point. */
+function eqProofDifference(commitmentA, commitmentB) {
+  var a = parseP256Point(commitmentA);
+  var b = parseP256Point(commitmentB);
+  if (a === null || b === null) return null;
+  var diff = p256PointAdd(a, p256PointNegate(b));
+  return diff === null ? null : formatP256PublicKey(diff);
+}
+
+/* The one challenge for a proof: SHA-256 over the
+   label, the two commitments in order and the nonce
+   commitment, every point canonicalised first so the
+   hash names points and not spellings. Reduced under
+   the order; a reduced digest of zero is null — with
+   c = 0 the response would bind nothing, the same
+   refusal tools 32 and 33 make. */
+function eqProofChallenge(commitmentA, commitmentB, noncePointHex) {
+  var a = parseP256Point(commitmentA);
+  var b = parseP256Point(commitmentB);
+  var r = parseP256Point(noncePointHex);
+  if (a === null || b === null || r === null) {
+    return Promise.resolve(null);
+  }
+  var transcript = EQPROOF_CHALLENGE_PREFIX + "\n" +
+    formatP256PublicKey(a) + "\n" + formatP256PublicKey(b) +
+    "\n" + formatP256PublicKey(r);
+  return sha256Hex(transcript).then(function (digest) {
+    if (digest === null) return null;
+    var value = BigInt("0x" + digest) % P256_N;
+    if (value === P256_ZERO) return null;
+    return p256IntToHex(value);
+  });
+}
+
+/* The proof line: the format tag, the nonce
+   commitment (a whole 91-byte point) and the
+   response, gated as a response — zero allowed, the
+   order refused. Pieces that do not check out are
+   null, never a half-built line. */
+function formatEqualityProof(noncePointHex, responseHex) {
+  var point = parseP256Point(noncePointHex);
+  var response = parseProofResponse(responseHex);
+  if (point === null || response === null) return null;
+  return [EQPROOF_FORMAT, formatP256PublicKey(point), response].join(":");
+}
+
+function parseEqualityProof(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 3 || parts[0] !== EQPROOF_FORMAT) return null;
+  var point = parseP256Point(parts[1]);
+  var response = parseProofResponse(parts[2]);
+  if (point === null || response === null) return null;
+  return { nonceCommitment: formatP256PublicKey(point),
+           response: response };
+}
+
+/* One attempt at a proof, with the nonce drawn fresh
+   inside the attempt. A zero challenge or a zero
+   response fails the attempt as null and the caller
+   redraws, the same discipline tool 33's signer
+   follows. */
+function equalityProofAttempt(commitmentA, commitmentB, differenceHex) {
+  var nonce = randomProofScalar();
+  if (nonce === null) return Promise.resolve(null);
+  var noncePoint = proofCommitmentForNonce(nonce);
+  if (noncePoint === null) return Promise.resolve(null);
+  return eqProofChallenge(commitmentA, commitmentB, noncePoint)
+    .then(function (challenge) {
+      if (challenge === null) return null;
+      var response = proofResponseForScalar(differenceHex, nonce, challenge);
+      if (response === null) return null;
+      return formatEqualityProof(noncePoint, response);
+    });
+}
+
+/* The prover's move: given two tool-42 commitments
+   and both openings, prove the hidden values are the
+   same. Both openings are checked first — a value and
+   blinding that do not recompute their commitment are
+   refused as null — and the values themselves are
+   compared before anything is proved: two different
+   values get null, because no honest proof of their
+   equality exists. Equal blindings are refused the
+   same way: they would make the two commitments the
+   same point, and identical commitments are visibly
+   equal — there is nothing to prove. */
+function makeEqualityProof(commitA, valueA, blindingA,
+                           commitB, valueB, blindingB) {
+  var aPoint = parseP256Point(commitA);
+  var bPoint = parseP256Point(commitB);
+  var vA = parsePedersenValue(valueA);
+  var vB = parsePedersenValue(valueB);
+  var rA = parseProofScalar(blindingA);
+  var rB = parseProofScalar(blindingB);
+  if (aPoint === null || bPoint === null || vA === null ||
+      vB === null || rA === null || rB === null) {
+    return Promise.resolve(null);
+  }
+  if (vA !== vB) return Promise.resolve(null);
+  var difference = rangeModN(BigInt("0x" + rA) - BigInt("0x" + rB));
+  if (difference === P256_ZERO) return Promise.resolve(null);
+  var differenceHex = p256IntToHex(difference);
+  var canonA = formatP256PublicKey(aPoint);
+  var canonB = formatP256PublicKey(bPoint);
+  return pedersenCommitmentFor(vA, rA).then(function (recomputedA) {
+    if (recomputedA === null || recomputedA !== canonA) return null;
+    return pedersenCommitmentFor(vB, rB).then(function (recomputedB) {
+      if (recomputedB === null || recomputedB !== canonB) return null;
+      var attempt = function (triesLeft) {
+        return equalityProofAttempt(canonA, canonB, differenceHex)
+          .then(function (proof) {
+            if (proof !== null) return proof;
+            return triesLeft > 1 ? attempt(triesLeft - 1) : null;
+          });
+      };
+      return attempt(4);
+    });
+  });
+}
+
+/* The verifier's verdict, needing no secret at all:
+   subtract the second commitment from the first,
+   re-hash the challenge from the two commitments and
+   the proof's nonce commitment, and check the
+   response balances — s×G against R + c×D. True when
+   it balances; false — never null — when every piece
+   is well-formed and it does not; null when a piece
+   cannot even be parsed, or when the two commitments
+   are identical and their difference is the identity
+   this page does not spell. An identity on either
+   side of the balance counts as the identity point
+   it is: both sides landing there together is a
+   balance, one side alone is not. */
+function verifyEqualityProof(commitA, commitB, proofText) {
+  var aPoint = parseP256Point(commitA);
+  var bPoint = parseP256Point(commitB);
+  var proof = parseEqualityProof(proofText);
+  if (aPoint === null || bPoint === null || proof === null) {
+    return Promise.resolve(null);
+  }
+  var diff = p256PointAdd(aPoint, p256PointNegate(bPoint));
+  if (diff === null) return Promise.resolve(null);
+  return eqProofChallenge(formatP256PublicKey(aPoint),
+    formatP256PublicKey(bPoint), proof.nonceCommitment)
+    .then(function (challenge) {
+      if (challenge === null) return null;
+      var lhs = p256PointMultiply(BigInt("0x" + proof.response),
+        { x: P256_GX, y: P256_GY });
+      var rhs = p256PointAdd(parseP256Point(proof.nonceCommitment),
+        p256PointMultiply(BigInt("0x" + challenge), diff));
+      if (lhs === null || rhs === null) {
+        return lhs === null && rhs === null;
+      }
+      return lhs.x === rhs.x && lhs.y === rhs.y;
+    });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -7000,7 +7259,11 @@ if (typeof module !== "undefined" && module.exports) {
                      RANGE_BITS, RANGE_MAX_VALUE,
                      parseRangeValue, rangeProofChallenge,
                      formatRangeProof, parseRangeProof,
-                     makeRangeProof, verifyRangeProof };
+                     makeRangeProof, verifyRangeProof,
+                     EQPROOF_FORMAT, EQPROOF_CHALLENGE_PREFIX,
+                     eqProofDifference, eqProofChallenge,
+                     formatEqualityProof, parseEqualityProof,
+                     makeEqualityProof, verifyEqualityProof };
 }
 
 if (typeof document !== "undefined") {
@@ -9634,6 +9897,71 @@ if (typeof document !== "undefined") {
             "challenge pair does not sum to the transcript's " +
             "challenge, which is what a nudged response, a " +
             "swapped bit or a forged branch does to a proof.";
+      });
+    });
+
+    /* --- same value, twice hidden (equality proofs) --- */
+    document.getElementById("eq-make").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("eq-proof-out");
+      var status = document.getElementById("eq-make-result");
+      out.value = "";
+      status.textContent = "Working…";
+      makeEqualityProof(document.getElementById("eq-a-commitment").value,
+        document.getElementById("eq-a-value").value,
+        document.getElementById("eq-a-blinding").value,
+        document.getElementById("eq-b-commitment").value,
+        document.getElementById("eq-b-value").value,
+        document.getElementById("eq-b-blinding").value).then(function (proof) {
+        if (proof === null) {
+          status.textContent = "No proof made: each side needs a " +
+            "whole 91-byte commitment point, a whole value from 0 " +
+            "to 1,000,000,000,000 and its whole 64-hex blinding — " +
+            "and the two values must be the same, under two " +
+            "different blindings, with each opening actually " +
+            "opening its own commitment. Two different values " +
+            "cannot be proved equal, and identical commitments " +
+            "need no proof.";
+          return;
+        }
+        out.value = proof;
+        status.textContent = "Proved. The line above says, in a " +
+          "form anyone can check with the second form: these two " +
+          "commitments hide the same value. It does not say which " +
+          "value, and neither blinding is in it — whoever holds " +
+          "both blindings could have made it, so keep them the " +
+          "way you keep private keys.";
+      });
+    });
+
+    document.getElementById("eq-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("eq-check-result");
+      status.textContent = "Working…";
+      verifyEqualityProof(document.getElementById("eq-check-a-commitment").value,
+        document.getElementById("eq-check-b-commitment").value,
+        document.getElementById("eq-check-proof").value).then(function (verdict) {
+        if (verdict === null) {
+          status.textContent = "Cannot judge this proof: the two " +
+            "commitments must be whole 91-byte points — and two " +
+            "different ones, since identical commitments have no " +
+            "difference point to prove against — and the proof a " +
+            "whole p4a-eqproof-v1 line, nothing missing and " +
+            "nothing extra.";
+          return;
+        }
+        status.textContent = verdict ?
+          "Same value, proved. The response balances against " +
+            "the difference of the two commitments — a point " +
+            "anyone can compute from the pair alone — under the " +
+            "challenge the pair and the proof hash to: the two " +
+            "commitments hide the same amount, and you learned " +
+            "nothing about what the amount is." :
+          "Not proved. The response does not balance against " +
+            "this pair's difference point under its challenge — " +
+            "what a nudged response, a proof transplanted to a " +
+            "pair whose values differ, or the pair pasted in the " +
+            "wrong order does to a proof.";
       });
     });
 
