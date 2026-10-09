@@ -7573,6 +7573,408 @@ function verifySetMembershipProof(commitmentHex, candidatesText,
     });
 }
 
+/* ---------- 46. Pick one, learn one — oblivious transfer ----------
+
+   Every tool so far hides something at rest: a value
+   inside a commitment, a key behind a proof, a message
+   inside a seal. This one hides a QUESTION. A receiver
+   wants exactly one of two messages a sender holds —
+   one record of two, one file of two — and the
+   transfer is private in both directions at once: the
+   sender learns nothing about which message was taken,
+   and the receiver learns nothing about the one left
+   behind. That two-way shape is oblivious transfer,
+   the Bellare–Micali construction, and it is the
+   load-bearing primitive under private database
+   lookups and private set intersection: ask for your
+   record without handing over which record is yours.
+
+   The stage is one fixed public point C whose
+   logarithm under G nobody knows — tool 42's
+   hashed-into-the-curve generator H, reused exactly
+   because nobody chose it, so nobody holds its log.
+   The receiver picks a choice bit b and one fresh
+   random scalar r, and builds TWO keys that sum to C:
+
+     key_b     = r×G            (its log, r, is known)
+     key_{1−b} = C − r×G        (its log is log C − r —
+                                 known only to someone
+                                 who knows log C)
+
+   The request line carries both keys, in message
+   order. To the sender the pair is two random-looking
+   points with one checkable property — they sum to
+   C — and nothing about which of them the receiver
+   can actually use. That sum is not decoration: it is
+   what ties the receiver to knowing at most one log.
+   A receiver who built both keys from scalars they
+   chose would know both logs and could read both
+   messages — but then the keys would sum to
+   (r₀ + r₁)×G, not to C, and the sender on this page
+   checks the sum before sealing anything and refuses
+   a pair that fails it.
+
+   The sender answers each key the way tool 26 closes
+   a box, stripped to the arithmetic: a fresh ephemeral
+   scalar k_i per slot, E_i = k_i×G published, the
+   shared point S_i = k_i×key_i, and the message XORed
+   with a pad hashed out of S_i under the label
+   privacy4all-ot-v1. The receiver computes their one
+   reachable shared point from the other side —
+   r×E_b = r×(k_b×G) = k_b×(r×G) = k_b×key_b — and
+   un-XORs exactly one message. For the other slot the
+   same r lands on r×E_{1−b}, which is not
+   k_{1−b}×key_{1−b}: reaching that point would take
+   the log of key_{1−b}, the one number the sum to C
+   guarantees the receiver does not have. Trying
+   anyway yields pad bytes that un-XOR to garbage —
+   the protocol does not lock the other message, it
+   makes it unreachable, which is the stronger shape
+   and the honest one to state.
+
+   The honest limits are structural. This is the
+   semi-honest teaching core of OT: the sum check is
+   what stands between it and a cheating receiver, so
+   a sender who skips that check — or any base point
+   whose log somebody does know — quietly collapses
+   the promise, and real protocols add proofs of
+   correct behaviour for settings where the other side
+   may be actively malicious, plus fresh keys per
+   query. Nothing here hides THAT a transfer happened,
+   or when, or between whom — metadata is out of scope,
+   as it is for tool 9. One page plays both sides, so
+   here it demonstrates the maths, not a live exchange
+   between two devices. And the frame is the house
+   one: a real oblivious transfer computed and opened
+   locally, but the lines are this hub's own spellings
+   — not a format any chain or wallet checks, not one
+   of Midnight's Compact circuit proofs, and the curve
+   code is the same teaching implementation as tool
+   30's, affine arithmetic written to be read, not an
+   audited library and not side-channel resistant. The
+   receiver's state line holds r: whoever holds it can
+   open the chosen slot from any copy of the response,
+   so it is kept the way tool 37 says share lines are
+   kept — deliberately, never pasted around. Never
+   paste a real wallet key or a production private key
+   into any web page, including this one. */
+var OT_REQUEST_FORMAT = "p4a-otreq-v1";
+var OT_STATE_FORMAT = "p4a-otstate-v1";
+var OT_RESPONSE_FORMAT = "p4a-otresp-v1";
+var OT_PAD_PREFIX = "privacy4all-ot-v1";
+var OT_MAX_MESSAGE_CHARS = 200;
+var OT_MAX_MESSAGE_BYTES = 800;
+
+/* A transferable message: a non-blank string of at
+   most OT_MAX_MESSAGE_CHARS characters whose UTF-8
+   spelling fits OT_MAX_MESSAGE_BYTES — short records,
+   codes, names, one line of a file. The text is used
+   exactly as typed; only the gates look at the trim. */
+function parseOtMessage(text) {
+  if (typeof text !== "string") return null;
+  if (text.trim() === "" || text.length > OT_MAX_MESSAGE_CHARS) return null;
+  if (secretToBytes(text).length > OT_MAX_MESSAGE_BYTES) return null;
+  return text;
+}
+
+/* The two request keys for one choice, from the
+   receiver's scalar and the public base point: the
+   chosen slot is the scalar's own public point, the
+   other is the base point minus it, so the pair sums
+   to the base point by construction. Synchronous and
+   deterministic, so tests can pin both points against
+   independent arithmetic. A pair whose slots came out
+   equal — the scalar landing on the one point with
+   2×P = C, a 2^-256 accident — is refused as null:
+   equal keys would make the "choice" no choice. */
+function otRequestKeysFor(choiceBit, scalarHex, basePointHex) {
+  if (choiceBit !== 0 && choiceBit !== 1) return null;
+  var scalar = parseProofScalar(scalarHex);
+  var basePoint = parseP256Point(basePointHex);
+  if (scalar === null || basePoint === null) return null;
+  var chosen = proofCommitmentForNonce(scalar);
+  if (chosen === null) return null;
+  var otherPoint = p256PointAdd(basePoint,
+    p256PointNegate(parseP256Point(chosen)));
+  if (otherPoint === null) return null;
+  var other = formatP256PublicKey(otherPoint);
+  if (other === null || other === chosen) return null;
+  return choiceBit === 0 ? { key0: chosen, key1: other } :
+    { key0: other, key1: chosen };
+}
+
+/* The request line: the format tag and the two keys in
+   message order — slot 0's key first, whatever the
+   receiver chose. This is the line the receiver SENDS:
+   public by design, and it names neither the choice
+   nor the scalar. */
+function formatOtRequest(key0Hex, key1Hex) {
+  var key0 = parseP256Point(key0Hex);
+  var key1 = parseP256Point(key1Hex);
+  if (key0 === null || key1 === null) return null;
+  var k0 = formatP256PublicKey(key0);
+  var k1 = formatP256PublicKey(key1);
+  if (k0 === null || k1 === null || k0 === k1) return null;
+  return OT_REQUEST_FORMAT + ":" + k0 + ":" + k1;
+}
+
+function parseOtRequest(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 3 || parts[0] !== OT_REQUEST_FORMAT) return null;
+  var key0 = parseP256Point(parts[1]);
+  var key1 = parseP256Point(parts[2]);
+  if (key0 === null || key1 === null) return null;
+  var k0 = formatP256PublicKey(key0);
+  var k1 = formatP256PublicKey(key1);
+  if (k0 === null || k1 === null || k0 === k1) return null;
+  return { key0: k0, key1: k1 };
+}
+
+/* The receiver-only state line: the format tag, the
+   choice bit and the scalar behind the chosen key.
+   It never travels — it is what the receiver keeps in
+   order to open exactly one slot of the answer. */
+function formatOtState(choiceBit, scalarHex) {
+  if (choiceBit !== 0 && choiceBit !== 1) return null;
+  var scalar = parseProofScalar(scalarHex);
+  if (scalar === null) return null;
+  return OT_STATE_FORMAT + ":" + choiceBit + ":" + scalar;
+}
+
+function parseOtState(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 3 || parts[0] !== OT_STATE_FORMAT) return null;
+  if (parts[1] !== "0" && parts[1] !== "1") return null;
+  var scalar = parseProofScalar(parts[2]);
+  if (scalar === null) return null;
+  return { choice: Number(parts[1]), scalar: scalar };
+}
+
+/* One side's shared point: a scalar times a point, in
+   the hub's SPKI spelling. The sender reaches it as
+   k_i×key_i, the receiver as r×E_b, and the two
+   spellings are the same point exactly when the
+   receiver's scalar stands behind that slot's key —
+   the whole transfer in one equation. */
+function otSharedPointHex(scalarHex, pointHex) {
+  var scalar = parseProofScalar(scalarHex);
+  var point = parseP256Point(pointHex);
+  if (scalar === null || point === null) return null;
+  var shared = p256PointMultiply(BigInt("0x" + scalar), point);
+  if (shared === null) return null;
+  return formatP256PublicKey(shared);
+}
+
+/* The pad for one slot: labelled SHA-256 blocks of
+   the shared point's spelling, counted from zero,
+   concatenated to whatever length the message needs.
+   Both sides derive it from the shared point alone,
+   so the point is the key and the label is the domain
+   separation — no other tool's hash can stand in. */
+function otPadBytes(pointHex, length) {
+  var point = parseP256Point(pointHex);
+  if (point === null || typeof length !== "number" ||
+      !isFinite(length) || Math.floor(length) !== length ||
+      length < 1 || length > OT_MAX_MESSAGE_BYTES) {
+    return Promise.resolve(null);
+  }
+  var canonical = formatP256PublicKey(point);
+  var blocks = [];
+  var produced = 0;
+  var step = function (counter) {
+    if (produced >= length) {
+      var out = new Uint8Array(length);
+      var offset = 0;
+      for (var i = 0; i < blocks.length && offset < length; i++) {
+        var take = Math.min(blocks[i].length, length - offset);
+        out.set(blocks[i].subarray(0, take), offset);
+        offset += take;
+      }
+      return Promise.resolve(out);
+    }
+    return sha256Hex(OT_PAD_PREFIX + "\n" + canonical + "\n" + counter)
+      .then(function (digest) {
+        if (digest === null) return null;
+        var bytes = hexToBytes(digest);
+        if (bytes === null) return null;
+        blocks.push(bytes);
+        produced += bytes.length;
+        return step(counter + 1);
+      });
+  };
+  return step(0);
+}
+
+/* Seal one slot: a caller-chosen ephemeral scalar
+   (the answering function draws it fresh), the slot's
+   key point, and the message. Out: the ephemeral
+   public point and the ciphertext hex — the message
+   XORed with the pad of k×key. Synchronous pieces
+   apart from the pad's hashes, so tests can pin a
+   fixed-vector slot end to end. */
+function otEncryptSlot(ephemeralScalarHex, keyPointHex, message) {
+  var msg = parseOtMessage(message);
+  var ephemeral = proofCommitmentForNonce(ephemeralScalarHex);
+  var shared = otSharedPointHex(ephemeralScalarHex, keyPointHex);
+  if (msg === null || ephemeral === null || shared === null) {
+    return Promise.resolve(null);
+  }
+  var msgBytes = secretToBytes(msg);
+  return otPadBytes(shared, msgBytes.length).then(function (pad) {
+    if (pad === null) return null;
+    var cipher = new Uint8Array(msgBytes.length);
+    for (var i = 0; i < msgBytes.length; i++) cipher[i] = msgBytes[i] ^ pad[i];
+    return { ephemeral: ephemeral, cipher: shareBytesToHex(cipher) };
+  });
+}
+
+/* Open one slot with a scalar: the mirror image. The
+   scalar times the slot's ephemeral point is the
+   shared point — the right point for the slot the
+   scalar stands behind, a wrong one for any other —
+   and the pad un-XORs whatever it un-XORs. Bytes that
+   are not valid UTF-8 are null, never gibberish
+   presented as a message: a tampered or mis-paired
+   slot fails closed, in the house's one-null style. */
+function otDecryptSlot(scalarHex, ephemeralHex, cipherHex) {
+  var shared = otSharedPointHex(scalarHex, ephemeralHex);
+  if (shared === null || typeof cipherHex !== "string") {
+    return Promise.resolve(null);
+  }
+  var cipherText = cipherHex.trim().toLowerCase();
+  if (!/^[0-9a-f]+$/.test(cipherText) ||
+      cipherText.length % 2 !== 0 ||
+      cipherText.length < 2 ||
+      cipherText.length > OT_MAX_MESSAGE_BYTES * 2) {
+    return Promise.resolve(null);
+  }
+  var cipher = hexToBytes(cipherText);
+  if (cipher === null) return Promise.resolve(null);
+  return otPadBytes(shared, cipher.length).then(function (pad) {
+    if (pad === null) return null;
+    var plain = new Uint8Array(cipher.length);
+    for (var i = 0; i < cipher.length; i++) plain[i] = cipher[i] ^ pad[i];
+    return bytesToSecret(plain);
+  });
+}
+
+/* The receiver's move, whole: draw a fresh scalar,
+   build the key pair against the public base point
+   (tool 42's hashed generator), and hand back the
+   request line to send and the state line to keep.
+   The scalar is drawn until the pair is well-formed —
+   the equal-keys accident simply draws again. */
+function makeOtRequest(choiceBit) {
+  if (choiceBit !== 0 && choiceBit !== 1) return Promise.resolve(null);
+  return pedersenGeneratorPoint().then(function (base) {
+    if (base === null) return null;
+    for (var attempt = 0; attempt < 8; attempt++) {
+      var scalar = randomProofScalar();
+      if (scalar === null) return null;
+      var keys = otRequestKeysFor(choiceBit, scalar, base);
+      if (keys === null) continue;
+      var request = formatOtRequest(keys.key0, keys.key1);
+      var state = formatOtState(choiceBit, scalar);
+      if (request === null || state === null) return null;
+      return { request: request, state: state };
+    }
+    return null;
+  });
+}
+
+/* The response line: the format tag, then per slot
+   the ephemeral point and the ciphertext hex, slot 0
+   first. Both slots are always present and always
+   sealed the same way — a response that favoured one
+   slot would itself leak the sender's guess at the
+   choice. */
+function formatOtResponse(ephemeral0Hex, cipher0Hex, ephemeral1Hex, cipher1Hex) {
+  var e0 = parseP256Point(ephemeral0Hex);
+  var e1 = parseP256Point(ephemeral1Hex);
+  if (e0 === null || e1 === null) return null;
+  var ciphers = [cipher0Hex, cipher1Hex];
+  for (var i = 0; i < 2; i++) {
+    if (typeof ciphers[i] !== "string") return null;
+    var c = ciphers[i].trim().toLowerCase();
+    if (!/^[0-9a-f]+$/.test(c) || c.length % 2 !== 0 || c.length < 2 ||
+        c.length > OT_MAX_MESSAGE_BYTES * 2) return null;
+    ciphers[i] = c;
+  }
+  return OT_RESPONSE_FORMAT + ":" + formatP256PublicKey(e0) + ":" +
+    ciphers[0] + ":" + formatP256PublicKey(e1) + ":" + ciphers[1];
+}
+
+function parseOtResponse(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 5 || parts[0] !== OT_RESPONSE_FORMAT) return null;
+  var e0 = parseP256Point(parts[1]);
+  var e1 = parseP256Point(parts[3]);
+  if (e0 === null || e1 === null) return null;
+  var ciphers = [parts[2], parts[4]];
+  for (var i = 0; i < 2; i++) {
+    var c = ciphers[i].trim().toLowerCase();
+    if (!/^[0-9a-f]+$/.test(c) || c.length % 2 !== 0 || c.length < 2 ||
+        c.length > OT_MAX_MESSAGE_BYTES * 2) return null;
+    ciphers[i] = c;
+  }
+  return { ephemeral0: formatP256PublicKey(e0), cipher0: ciphers[0],
+    ephemeral1: formatP256PublicKey(e1), cipher1: ciphers[1] };
+}
+
+/* The sender's move, whole: read the request, CHECK
+   THE SUM — the two keys must add up to the public
+   base point, the one property that ties the receiver
+   to knowing at most one key's log — then seal both
+   messages under fresh ephemeral scalars and answer
+   with the response line. A request that fails the
+   sum, a message this page will not carry, a key that
+   is not a point: null, and nothing is sealed. */
+function answerOtRequest(requestText, message0, message1) {
+  var request = parseOtRequest(requestText);
+  var msg0 = parseOtMessage(message0);
+  var msg1 = parseOtMessage(message1);
+  if (request === null || msg0 === null || msg1 === null) {
+    return Promise.resolve(null);
+  }
+  return pedersenGeneratorPoint().then(function (base) {
+    if (base === null) return null;
+    var sum = p256PointAdd(parseP256Point(request.key0),
+      parseP256Point(request.key1));
+    var basePoint = parseP256Point(base);
+    if (sum === null || basePoint === null ||
+        sum.x !== basePoint.x || sum.y !== basePoint.y) return null;
+    var k0 = randomProofScalar();
+    var k1 = randomProofScalar();
+    if (k0 === null || k1 === null) return null;
+    return otEncryptSlot(k0, request.key0, msg0).then(function (slot0) {
+      if (slot0 === null) return null;
+      return otEncryptSlot(k1, request.key1, msg1).then(function (slot1) {
+        if (slot1 === null) return null;
+        return formatOtResponse(slot0.ephemeral, slot0.cipher,
+          slot1.ephemeral, slot1.cipher);
+      });
+    });
+  });
+}
+
+/* The receiver's opening, whole: the state says which
+   slot and supplies the scalar; that slot — and only
+   that slot — is opened. The other ciphertext is not
+   touched: there is no code path here that even tries
+   it, which is the protocol's promise kept in the
+   page's own structure. */
+function openOtResponse(stateText, responseText) {
+  var state = parseOtState(stateText);
+  var response = parseOtResponse(responseText);
+  if (state === null || response === null) return Promise.resolve(null);
+  return state.choice === 0 ?
+    otDecryptSlot(state.scalar, response.ephemeral0, response.cipher0) :
+    otDecryptSlot(state.scalar, response.ephemeral1, response.cipher1);
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -7730,7 +8132,14 @@ if (typeof module !== "undefined" && module.exports) {
                      setMemberStatementPoint, setMemberStatementPoints,
                      setMemberChallenge, formatSetMembershipProof,
                      parseSetMembershipProof, makeSetMembershipProof,
-                     verifySetMembershipProof };
+                     verifySetMembershipProof,
+                     OT_REQUEST_FORMAT, OT_STATE_FORMAT, OT_RESPONSE_FORMAT,
+                     OT_PAD_PREFIX, OT_MAX_MESSAGE_CHARS, OT_MAX_MESSAGE_BYTES,
+                     parseOtMessage, otRequestKeysFor, formatOtRequest,
+                     parseOtRequest, formatOtState, parseOtState,
+                     otSharedPointHex, otPadBytes, otEncryptSlot,
+                     otDecryptSlot, makeOtRequest, formatOtResponse,
+                     parseOtResponse, answerOtRequest, openOtResponse };
 }
 
 if (typeof document !== "undefined") {
@@ -10496,6 +10905,78 @@ if (typeof document !== "undefined") {
             "candidates, a different list, or a proof transplanted " +
             "to a commitment whose value is on no list does to " +
             "a proof.";
+      });
+    });
+
+    document.getElementById("ot-choose").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("ot-choose-result");
+      status.textContent = "Working\u2026";
+      var choice = Number(document.getElementById("ot-choice").value);
+      makeOtRequest(choice).then(function (made) {
+        if (made === null) {
+          status.textContent = "No request was made: the choice " +
+            "must be the first or the second message.";
+          return;
+        }
+        document.getElementById("ot-request-out").value = made.request;
+        document.getElementById("ot-state-out").value = made.state;
+        status.textContent = "Chosen and hidden. Send the request " +
+          "line to the sender — it carries both keys and names " +
+          "neither your choice nor your secret number. Keep the " +
+          "state line where you keep private keys: it is the only " +
+          "thing that can open your half of the answer.";
+      });
+    });
+
+    document.getElementById("ot-answer").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("ot-answer-result");
+      status.textContent = "Working\u2026";
+      answerOtRequest(document.getElementById("ot-answer-request").value,
+        document.getElementById("ot-answer-message-0").value,
+        document.getElementById("ot-answer-message-1").value).then(function (response) {
+        if (response === null) {
+          status.textContent = "Nothing was sealed: the request " +
+            "must be a whole p4a-otreq-v1 line whose two keys add " +
+            "up to the public base point — a pair that does not " +
+            "is refused, because it could be opened on both sides — " +
+            "and each message a non-blank line of at most 200 " +
+            "characters.";
+          return;
+        }
+        document.getElementById("ot-answer-out").value = response;
+        status.textContent = "Both messages sealed, the same way, " +
+          "under fresh keys — the response favours neither slot, " +
+          "and this form never saw a choice to favour: the request " +
+          "line does not carry one. Send the response line back; " +
+          "only the receiver's kept state can open one half of it.";
+      });
+    });
+
+    document.getElementById("ot-open").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("ot-open-result");
+      var out = document.getElementById("ot-open-out");
+      status.textContent = "Working\u2026";
+      openOtResponse(document.getElementById("ot-open-state").value,
+        document.getElementById("ot-open-response").value).then(function (message) {
+        if (message === null) {
+          out.value = "";
+          status.textContent = "Cannot open this: the state must " +
+            "be a whole p4a-otstate-v1 line and the response a " +
+            "whole p4a-otresp-v1 line, and the state's secret " +
+            "number must be the one the request was built from — " +
+            "a wrong number, a swapped state or a tampered " +
+            "ciphertext opens nothing, exactly as sealed.";
+          return;
+        }
+        out.value = message;
+        status.textContent = "Opened — your half, and only your " +
+          "half. The other half of that response stays sealed " +
+          "to you: opening it would take the logarithm of the key " +
+          "you did not build, and the request's sum to the public " +
+          "point is what guarantees you never had it.";
       });
     });
 

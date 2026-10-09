@@ -933,7 +933,43 @@ renewable resource that pays for shielded transactions.
   witness is the blinding alone. Not a Compact
   circuit proof, and not a format any chain or
   wallet checks. The opening it is made from
-  stays a secret of private-key rank.
+  stays a secret of private-key rank. Tool 46
+  changes the question from proving to asking.
+- **Pick one, learn one — oblivious
+  transfer** — a receiver takes exactly one of a
+  sender's two messages while the sender learns
+  nothing about which message was taken, and the
+  receiver learns nothing about the one left
+  behind: the Bellare–Micali construction, the
+  primitive under private database lookups and
+  private set intersection. One fixed public
+  point whose logarithm nobody knows — tool 42's
+  hashed generator — is the stage. The receiver
+  picks a fresh scalar `r` and builds two keys
+  that sum to that point: the chosen slot's key
+  is `r×G`, the other is the point minus `r×G`,
+  whose logarithm would need the public point's
+  own. The request line is `p4a-otreq-v1`, the
+  receiver's kept secret a `p4a-otstate-v1` line.
+  The sender checks the two keys sum to the
+  public point before sealing anything — the sum
+  is what ties the receiver to knowing at most
+  one key's logarithm, and a pair built from two
+  chosen scalars fails it — then seals each
+  message under a fresh ephemeral key, the pad
+  hashed out of `kᵢ×keyᵢ` under
+  `privacy4all-ot-v1`, answering with a
+  `p4a-otresp-v1` line that favours neither slot.
+  The receiver rebuilds one shared point,
+  `r×E_b = k_b×key_b`, and opens exactly one
+  message; the other is not locked but
+  unreachable. Honestly labelled: the semi-honest
+  teaching core — the sum check is what stands
+  between it and a cheating receiver, metadata
+  about the transfer itself is out of scope, and
+  the state line is a secret of private-key rank.
+  Not a Compact circuit proof, and not a format
+  any chain or wallet checks.
 
 ## Guides
 
