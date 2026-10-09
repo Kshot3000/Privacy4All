@@ -824,6 +824,33 @@ renewable resource that pays for shielded transactions.
   work over secp256k1. Not the signature format
   any chain or wallet checks. This tool takes
   public keys and published signatures only.
+- **Hide the amount, keep the maths — Pedersen
+  commitments** — a commitment that hides a value
+  completely yet still does arithmetic: `C(v, r) =
+  r×G + v×H`, where `H` is a second generator
+  hashed into the curve under
+  `privacy4all-pedersen-h-v1` by try-and-increment,
+  so nobody knows the discrete logarithm between
+  `G` and `H` — the unknown that makes the
+  commitment binding. The blinding `r` is a fresh
+  random scalar per commitment (zero refused, for
+  the same reason tool 32 refuses a zero nonce),
+  so the same value committed twice lands on two
+  unrelated points. Commitments are homomorphic:
+  `C(v₁, r₁) + C(v₂, r₂) = C(v₁ + v₂, (r₁ + r₂) mod n)`,
+  checked by a third form that adds two commitments
+  as points and verifies the sum opens to the total
+  value under the total blinding — the balance
+  check a shielded ledger runs without any amount
+  in the clear. Values are whole numbers from 0 to
+  1,000,000,000,000, so a sum of two can never wrap
+  the curve order. Honestly labelled: a commitment
+  hides a value but proves no range — real
+  confidential systems pair commitments with range
+  proofs; the opening is a secret of private-key
+  rank. Not a Compact circuit proof, and not a
+  format any chain or wallet checks. This tool
+  needs no keys at all.
 
 ## Guides
 

@@ -6177,6 +6177,263 @@ function findInvalidBatchEntries(entriesText) {
   return chain.then(function () { return invalid; });
 }
 
+/* ---------- 42. Hide the amount, keep the maths — Pedersen commitments ----------
+
+   Every commitment on this page before this one was a
+   hash (tool 8): commit to a secret, reveal it later,
+   and the hash says whether the reveal matches. That
+   shape can prove you did not change a VALUE, but it
+   can do no arithmetic on it — a hash of 750 and a
+   hash of 250 cannot be combined into anything a
+   verifier can check against 1000. A shielded ledger
+   needs exactly that combination: amounts stay hidden
+   from everyone watching, while the ledger still
+   proves no value was created or destroyed — inputs
+   and outputs must balance without any amount ever
+   being shown. A Pedersen commitment is the curve
+   version of the same promise, and it is homomorphic:
+
+     C(v, r) = r×G + v×H
+
+   G is the hub's usual base point. H is a second point
+   built below by hashing, under the label
+   privacy4all-pedersen-h-v1, into the curve —
+   try-and-increment until the digest lands on a valid
+   point, even root chosen. Nobody knows the discrete
+   logarithm between G and H — the number t with
+   H = t×G — and that unknown number is load-bearing:
+   if anyone knew it, they could re-open a commitment
+   as any value they liked (shift the value, correct
+   the blinding by the known multiple), and the binding
+   half of the promise would be gone. The hiding half
+   is the blinding r: a fresh random scalar per
+   commitment, so the same value committed twice lands
+   on two unrelated points, and a watcher who guesses
+   the value still cannot check the guess without r —
+   which is exactly tool 8's salt lesson, in curve form.
+
+   The homomorphism is plain addition. Commitments add
+   point-by-point, blindings add under the order,
+   values add as numbers:
+
+     C(v1, r1) + C(v2, r2) = C(v1 + v2, (r1 + r2) mod n)
+
+   so a verifier who is handed two commitments, the two
+   openings, and a claimed total never sees either
+   amount proved in the clear beyond the openings the
+   prover chooses to give — and in a real shielded
+   system the openings are themselves replaced by
+   proofs, which is Midnight's Compact territory, not
+   this page's. Values here are whole numbers from 0
+   to 1,000,000,000,000 — a teaching range, wide enough
+   for amounts in a currency's smallest unit, narrow
+   enough that a sum of two can never wrap the order
+   and quietly mean a different total.
+
+   The verdict keeps the house split. An opening check
+   is true when the recomputed commitment matches the
+   pasted one, false — never null — when every piece is
+   well-formed and the recomputation lands elsewhere,
+   and null when a piece cannot even be parsed: a
+   malformed commitment, a value outside the range, a
+   blinding that is not a whole scalar in [1, n−1].
+   A zero blinding is refused for the same reason tool
+   32 refuses a zero nonce: with r = 0 the commitment
+   is just v×H, a watcher can test guesses of v one by
+   one, and the hiding half is gone.
+
+   The honest limits are plain. A commitment hides a
+   value; it does not prove the value is in any range —
+   a commitment to a negative or absurd amount is
+   perfectly well-formed curve arithmetic, and real
+   confidential systems pair commitments with range
+   proofs for exactly that reason. This page is not
+   one of Midnight's Compact circuit proofs, the
+   commitment line here is the hub's own 91-byte SPKI
+   point spelling, not a format any chain or wallet
+   checks, and like tool 30 the curve code is a
+   teaching implementation — affine arithmetic written
+   to be read, not an audited library and not
+   side-channel resistant. The blinding is a private
+   number of the same rank as a private key: whoever
+   holds a commitment's opening can show its value to
+   anyone, so openings are shared the way tool 37 says
+   share lines are shared — deliberately, never pasted
+   around. Never paste a real wallet key or a
+   production private key into any web page, including
+   this one. */
+var PEDERSEN_H_PREFIX = "privacy4all-pedersen-h-v1";
+var PEDERSEN_MAX_VALUE = 1000000000000;
+
+/* A committable value: a whole decimal number in
+   [0, PEDERSEN_MAX_VALUE], canonicalised through
+   BigInt so leading zeros and surrounding space are
+   one spelling of one number. Signs, decimals,
+   exponents, hex and anything past the ceiling are
+   null — a commitment to a value this page cannot
+   state exactly is a commitment it will not make. */
+function parsePedersenValue(text) {
+  if (typeof text !== "string") return null;
+  var trimmed = text.trim();
+  if (!/^[0-9]+$/.test(trimmed)) return null;
+  var value = BigInt(trimmed);
+  if (value > BigInt(PEDERSEN_MAX_VALUE)) return null;
+  return value.toString();
+}
+
+/* The second generator H: hashed into the curve under
+   its own label by try-and-increment — the digest is
+   the x coordinate, the first counter whose x carries
+   an on-curve point wins, and the even root is chosen,
+   the same convention tool 35's hash-to-point uses.
+   Deterministic and reproducible by anyone from the
+   label alone, which is the whole point: a generator
+   whose discrete logarithm nobody knows because
+   nobody chose it — it fell out of a hash. */
+function pedersenGeneratorPoint() {
+  var sqrtExponent = (P256_P + P256_ONE) / BigInt(4);
+  var attempt = function (counter) {
+    if (counter > 255) return Promise.resolve(null);
+    return sha256Hex(PEDERSEN_H_PREFIX + "\n" + counter)
+      .then(function (digest) {
+        if (digest === null) return null;
+        var x = BigInt("0x" + digest) % P256_P;
+        var rhs = p256Mod(x * x * x - P256_THREE * x + P256_B);
+        var y = p256Pow(rhs, sqrtExponent);
+        if (p256Mod(y * y) !== rhs) return attempt(counter + 1);
+        if ((y & P256_ONE) === P256_ONE) y = P256_P - y;
+        return formatP256PublicKey({ x: x, y: y });
+      });
+  };
+  return attempt(0);
+}
+
+/* The point arithmetic once H exists: r×G + v×H, with
+   a zero value contributing no H term at all. Callers
+   gate the blinding to [1, n−1] first, so the r×G term
+   is never the identity here. */
+function pedersenPointFor(hPoint, value, blinding) {
+  var rPart = p256PointMultiply(blinding, { x: P256_GX, y: P256_GY });
+  if (rPart === null) return null;
+  if (value === P256_ZERO) return rPart;
+  var vPart = p256PointMultiply(value, hPoint);
+  if (vPart === null) return null;
+  return p256PointAdd(rPart, vPart);
+}
+
+/* One commitment, made to order: the value and the
+   blinding in, the commitment point — in the hub's
+   usual 91-byte SPKI spelling — out. Synchronous
+   pieces, one hash for H, so tests can pin the result
+   from independent arithmetic. */
+function pedersenCommitmentFor(valueText, blindingHex) {
+  var value = parsePedersenValue(valueText);
+  var blinding = parseProofScalar(blindingHex);
+  if (value === null || blinding === null) {
+    return Promise.resolve(null);
+  }
+  return pedersenGeneratorPoint().then(function (hHex) {
+    if (hHex === null) return null;
+    var hPoint = parseP256Point(hHex);
+    if (hPoint === null) return null;
+    var point = pedersenPointFor(hPoint, BigInt(value),
+      BigInt("0x" + blinding));
+    return point === null ? null : formatP256PublicKey(point);
+  });
+}
+
+/* The maker's move: draw a fresh blinding — a new one
+   every time, because a reused blinding across two
+   values exposes their difference to anyone holding
+   both commitments — and hand back the commitment
+   with its opening. The opening (value + blinding) is
+   the secret half: publish the commitment, keep the
+   opening until the moment you choose to reveal. */
+function makePedersenCommitment(valueText) {
+  var value = parsePedersenValue(valueText);
+  if (value === null) return Promise.resolve(null);
+  var blinding = randomProofScalar();
+  if (blinding === null) return Promise.resolve(null);
+  return pedersenCommitmentFor(value, blinding).then(function (c) {
+    if (c === null) return null;
+    return { commitment: c, blinding: blinding, value: value };
+  });
+}
+
+/* The opening check: recompute the commitment from
+   the claimed value and blinding and compare points.
+   True when they match, false when every piece is
+   well-formed and they do not, null when any piece
+   cannot be judged. */
+function verifyPedersenOpening(commitmentHex, valueText, blindingHex) {
+  var point = parseP256Point(commitmentHex);
+  if (point === null || parsePedersenValue(valueText) === null ||
+      parseProofScalar(blindingHex) === null) {
+    return Promise.resolve(null);
+  }
+  return pedersenCommitmentFor(valueText, blindingHex)
+    .then(function (recomputed) {
+      if (recomputed === null) return null;
+      return recomputed === formatP256PublicKey(point);
+    });
+}
+
+/* Two commitments added as points — the homomorphism's
+   left-hand side, on its own. Null when either point
+   is malformed, or when the two cancel to the identity
+   (a commitment to nothing, which this page will not
+   spell as a point). */
+function pedersenCommitmentSum(commitmentA, commitmentB) {
+  var a = parseP256Point(commitmentA);
+  var b = parseP256Point(commitmentB);
+  if (a === null || b === null) return null;
+  var sum = p256PointAdd(a, b);
+  return sum === null ? null : formatP256PublicKey(sum);
+}
+
+/* The balance check: add the two commitments as
+   points, add the two values as numbers and the two
+   blindings under the order, and ask whether the sum
+   opens exactly as the totals say. True when the
+   added commitments are a commitment to the total
+   under the added blinding; false — never null — when
+   every piece is well-formed and they are not; null
+   when any piece cannot be judged. A sum check judges
+   TOTALS only: swapping the two blindings between the
+   sides leaves the total blinding unchanged, so it
+   still balances — which opening belongs to which
+   commitment is the opening check's question, not
+   this one's, and the tests pin the split. */
+function checkPedersenSum(commitA, valueA, blindingA,
+                           commitB, valueB, blindingB) {
+  var aPoint = parseP256Point(commitA);
+  var bPoint = parseP256Point(commitB);
+  var vA = parsePedersenValue(valueA);
+  var vB = parsePedersenValue(valueB);
+  var rA = parseProofScalar(blindingA);
+  var rB = parseProofScalar(blindingB);
+  if (aPoint === null || bPoint === null || vA === null ||
+      vB === null || rA === null || rB === null) {
+    return Promise.resolve(null);
+  }
+  return pedersenGeneratorPoint().then(function (hHex) {
+    if (hHex === null) return null;
+    var hPoint = parseP256Point(hHex);
+    if (hPoint === null) return null;
+    var sumPoint = p256PointAdd(aPoint, bPoint);
+    var totalValue = BigInt(vA) + BigInt(vB);
+    var totalBlinding = (BigInt("0x" + rA) + BigInt("0x" + rB)) % P256_N;
+    var expected = totalBlinding === P256_ZERO ?
+      (totalValue === P256_ZERO ? null :
+        p256PointMultiply(totalValue, hPoint)) :
+      pedersenPointFor(hPoint, totalValue, totalBlinding);
+    if (sumPoint === null || expected === null) {
+      return sumPoint === null && expected === null;
+    }
+    return sumPoint.x === expected.x && sumPoint.y === expected.y;
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -6313,7 +6570,12 @@ if (typeof module !== "undefined" && module.exports) {
                      combineMusigResponses,
                      BATCH_COEFF_PREFIX, BATCH_MIN_ENTRIES, BATCH_MAX_ENTRIES,
                      parseBatchEntries, batchCoefficient,
-                     verifyBatchSignatures, findInvalidBatchEntries };
+                     verifyBatchSignatures, findInvalidBatchEntries,
+                     PEDERSEN_H_PREFIX, PEDERSEN_MAX_VALUE,
+                     parsePedersenValue, pedersenGeneratorPoint,
+                     pedersenCommitmentFor, makePedersenCommitment,
+                     verifyPedersenOpening, pedersenCommitmentSum,
+                     checkPedersenSum };
 }
 
 if (typeof document !== "undefined") {
@@ -8802,6 +9064,93 @@ if (typeof document !== "undefined") {
           "on their own — a wrong message, a nudged answer, or a " +
           "signature that belongs to a different key. The rest of " +
           "the pile passed individually.";
+      });
+    });
+
+    /* --- hide the amount, keep the maths (Pedersen commitments) --- */
+    document.getElementById("pedersen-make").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("pedersen-commitment-out");
+      var blindOut = document.getElementById("pedersen-blinding-out");
+      var status = document.getElementById("pedersen-make-result");
+      out.value = "";
+      blindOut.value = "";
+      status.textContent = "Working…";
+      makePedersenCommitment(document.getElementById("pedersen-value").value).then(function (made) {
+        if (made === null) {
+          status.textContent = "Nothing committed: the value must " +
+            "be a whole number from 0 to 1,000,000,000,000 — no " +
+            "sign, no decimals, no other characters.";
+          return;
+        }
+        out.value = made.commitment;
+        blindOut.value = made.blinding;
+        status.textContent = "Committed. The commitment above is " +
+          "the public half — publish it anywhere. The blinding " +
+          "below is the opening's secret half: whoever holds the " +
+          "value and the blinding can prove what this commitment " +
+          "hides, so keep it the way you keep a private key.";
+      });
+    });
+
+    document.getElementById("pedersen-verify").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("pedersen-verify-result");
+      status.textContent = "Working…";
+      verifyPedersenOpening(document.getElementById("pedersen-verify-commitment").value,
+        document.getElementById("pedersen-verify-value").value,
+        document.getElementById("pedersen-verify-blinding").value).then(function (verdict) {
+        if (verdict === null) {
+          status.textContent = "Cannot judge this opening: the " +
+            "commitment must be a whole 91-byte point, the value a " +
+            "whole number from 0 to 1,000,000,000,000, and the " +
+            "blinding a whole 64-hex scalar that is not zero.";
+          return;
+        }
+        status.textContent = verdict ?
+          "The opening checks out: this value and this blinding " +
+            "recompute exactly the commitment above. The " +
+            "commitment was bound to this value from the moment " +
+            "it was made." :
+          "The opening does not check out: this value and blinding " +
+            "recompute a different point. Either the value was " +
+            "changed, the blinding belongs to another commitment, " +
+            "or the commitment was never made from them.";
+      });
+    });
+
+    document.getElementById("pedersen-sum").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("pedersen-sum-out");
+      var status = document.getElementById("pedersen-sum-result");
+      var aCommit = document.getElementById("pedersen-sum-a-commitment").value;
+      var bCommit = document.getElementById("pedersen-sum-b-commitment").value;
+      out.value = pedersenCommitmentSum(aCommit, bCommit) || "";
+      status.textContent = "Working…";
+      checkPedersenSum(aCommit,
+        document.getElementById("pedersen-sum-a-value").value,
+        document.getElementById("pedersen-sum-a-blinding").value,
+        bCommit,
+        document.getElementById("pedersen-sum-b-value").value,
+        document.getElementById("pedersen-sum-b-blinding").value).then(function (verdict) {
+        if (verdict === null) {
+          status.textContent = "Cannot judge this sum: each side " +
+            "needs a whole 91-byte commitment point, a whole value " +
+            "from 0 to 1,000,000,000,000, and a whole 64-hex " +
+            "blinding that is not zero.";
+          return;
+        }
+        status.textContent = verdict ?
+          "It balances. The two commitments add — as points — to " +
+            "the summed commitment above, and that point opens to " +
+            "exactly the two values added together under the two " +
+            "blindings added together. The amounts never had to " +
+            "sit next to their commitments in public for the " +
+            "arithmetic to be checkable." :
+          "It does not balance: the added commitments are not a " +
+            "commitment to the added values under the added " +
+            "blindings. A value, a blinding or a commitment on one " +
+            "side does not belong with the others.";
       });
     });
 
