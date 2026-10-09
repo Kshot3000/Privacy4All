@@ -1475,9 +1475,11 @@ renewable resource that pays for shielded transactions.
   accusation to force a verdict, exclusion
   from the restarted round is the whole
   sanction, and the Pedersen bias caveat of
-  tools 38 and 59 stands whole. Not a
-  Compact circuit proof, and not a format
-  any chain or wallet checks. Tool 61 below
+  tools 38 and 59 stands whole. Tool 64
+  below judges the restarted round against
+  this qualified set. Not a Compact circuit
+  proof, and not a format any chain or
+  wallet checks. Tool 61 below
   runs the first of the added rounds that
   caveat names.
 
@@ -1614,6 +1616,55 @@ renewable resource that pays for shielded transactions.
   that absence is tool 60's missing-share
   ground. Not a Compact circuit proof, and
   not a format any chain or wallet checks.
+
+- **Run it again, without them — judge the
+  restarted round** — the step tool 60's
+  verdict orders but no form ran: when a
+  dealer stands disqualified, the qualified
+  trustees re-deal fresh in tool 59,
+  renumbered — yet tool 59's forms take any
+  commitment set from any group, so nothing
+  ties the restarted round to the order
+  that sent the old one back, and a
+  disqualified dealer dealing in under a
+  renumbered slot is just a dealer there.
+  This tool judges the restart against
+  tool 60's `p4a-jtqualified-v1` line using
+  tool 62's signing keys, published before
+  the original round under the original
+  numbers. A first form reads the plan off
+  the qualified set alone — restart needed
+  or not, viable at the quorum or not, the
+  renumbering — and publishes it as one
+  `p4a-jtrestart-v1` line. The restarted
+  round deals fresh in tool 59 under the
+  new numbers, each dealer signing their
+  new commitment line in tool 62 with the
+  same key as before; the remaining forms
+  check one restarted dealing and judge
+  the whole restarted round, deriving the
+  counting key and trustees line (tool
+  59's own derivations from the restarted
+  commitments) only when every slot's
+  signature verifies under the key the
+  renumbering assigns to it — the key that
+  held old number 3 signing the dealing
+  that carries new number 2. A slot whose
+  signature fails is named invalid, a slot
+  nobody signed is named missing, and the
+  disqualified dealer's own key signing
+  into a renumbered slot does not balance.
+  Honestly labelled: a signature proves
+  the key dealt it, not who holds the key
+  (tool 62's custody limit stands whole);
+  the restarted round's own rounds — tool
+  61's seals, tool 63's signed deliveries —
+  rerun on it unchanged; and a group that
+  re-deals without a published qualified
+  set has issued no order for a restart to
+  answer to. Not a Compact circuit proof,
+  and not a format any chain or wallet
+  checks.
 
 ## Guides
 

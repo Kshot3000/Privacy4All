@@ -14115,6 +14115,376 @@ function judgeSignedJointTallyShareEvidence(commitmentsText,
     });
 }
 
+/* ---------- 64. Run it again, without them — judge the restarted round ----------
+   Tool 60 ends a broken round with an order: the
+   disqualified dealer is out, and the qualified
+   trustees re-deal fresh in tool 59, renumbered in
+   their original order. But tool 59's forms take
+   any commitment set from any group — nothing ties
+   the round that comes back to the order that sent
+   the old one back. A disqualified dealer dealing
+   into the "restarted" round under a renumbered
+   slot is, to those forms, just a dealer; so is a
+   qualified trustee dealing in the wrong slot, or
+   a restarted round quietly dealt at a different
+   quorum or a different size than the qualified
+   set ordered.
+
+   This tool judges the restart against the
+   qualified set, using tool 62's signing keys —
+   the keys published before the ORIGINAL round,
+   under the ORIGINAL numbers. The plan is read
+   off tool 60's p4a-jtqualified-v1 line alone:
+   whether a restart is needed at all (nobody
+   disqualified — the original round stands and
+   there is nothing to judge), whether it is
+   viable at the round's quorum (fewer qualified
+   than the quorum — no restart exists at that
+   quorum, and choosing a smaller one is
+   governance), the renumbering the restarted
+   round deals under, and one p4a-jtrestart-v1
+   line publishing that plan.
+
+   The restarted round deals fresh in tool 59
+   under the new numbers, and each dealer signs
+   their new commitment line in tool 62 with the
+   SAME key as before. A restarted dealing is the
+   ordered one when its signature verifies under
+   the key of the trustee the renumbering assigns
+   to its slot: the key that held old number 3
+   signs the dealing carrying new number 2, and
+   no other key balances there — not a qualified
+   trustee's key in the wrong slot, and not the
+   disqualified dealer's key anywhere. The
+   whole-round judgement holds the record to the
+   house standard — the qualified line, the whole
+   published signing-key set (one key per trustee
+   of the OLD round, disqualified included: they
+   were published, and the record is the record),
+   the restarted commitment set of exactly the
+   ordered quorum and size, and every signature —
+   and derives the counting key and trustees line,
+   as tool 59's own derivations from the restarted
+   commitments, only when every slot verifies. A
+   slot whose signature fails is named invalid, a
+   slot nobody signed is named missing, kept apart
+   as everywhere on this page.
+
+   The honest limits are plain, and inherited. A
+   signature proves the key dealt it; it does not
+   prove who holds the key — tool 62's custody
+   limit stands whole, and a qualified trustee who
+   lends their key to the disqualified dealer has
+   defeated arithmetic with custody, as always.
+   That the signing keys really were published
+   before the original round is the group's own
+   discipline, exactly as in tool 62; this page
+   judges only the record it is given. The
+   restarted round re-opens the caveats of the
+   rounds it reruns — tool 61's seal round and
+   tool 63's signed deliveries apply to it
+   unchanged, as its own rounds, and nothing here
+   reruns them. And a group that re-deals WITHOUT
+   a published qualified set has issued no order
+   for a restart to answer to; this tool invents
+   none. The frame is the house one: a real restart
+   judgement computed locally, spelled in this
+   hub's own p4a-jtrestart-v1 lines around tools
+   33, 59, 60 and 62's unchanged formats — not a
+   format any chain or wallet checks, not one of
+   Midnight's Compact circuit proofs. Never paste
+   a real wallet key or a production private key
+   into any web page, including this one; this
+   tool needs no key at all. */
+var JTRESTART_FORMAT = "p4a-jtrestart-v1";
+
+/* A restart line: the format tag, the round's
+   quorum, the OLD round's trustee count, and the
+   qualified trustees in rising order — the list
+   IS the renumbering, position by position: the
+   trustee at position one deals as new dealer 1,
+   and so on. An empty qualified list spells no
+   restart at all, so it cannot be spelled here —
+   unlike tool 60's line, which must be able to
+   publish a round that disqualified everyone,
+   this line exists only to order a re-dealing. */
+function formatJointTallyRestartLine(threshold, count, qualified) {
+  if (!validThresholdValue(threshold) ||
+      !validTTallyCountValue(count) ||
+      !Array.isArray(qualified) || qualified.length === 0 ||
+      qualified.length > count) {
+    return null;
+  }
+  var seen = {};
+  for (var i = 0; i < qualified.length; i++) {
+    if (!validThresholdIndexValue(qualified[i]) ||
+        qualified[i] > count || seen[qualified[i]]) {
+      return null;
+    }
+    seen[qualified[i]] = true;
+  }
+  var q = qualified.slice().sort(function (a, b) { return a - b; });
+  return JTRESTART_FORMAT + ":" + threshold + ":" + count + ":" +
+    q.join(",");
+}
+
+function parseJointTallyRestartLine(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 4 || parts[0] !== JTRESTART_FORMAT) {
+    return null;
+  }
+  if (!/^[2-3]$/.test(parts[1]) || !/^[2-5]$/.test(parts[2])) {
+    return null;
+  }
+  if (!/^[1-5](,[1-5])*$/.test(parts[3])) return null;
+  var threshold = Number(parts[1]);
+  var count = Number(parts[2]);
+  var qualified = parts[3].split(",").map(Number);
+  if (formatJointTallyRestartLine(threshold, count, qualified) !==
+      text.trim()) {
+    return null;
+  }
+  return { threshold: threshold, count: count, qualified: qualified };
+}
+
+/* Planning the restart, from the qualified-set
+   line alone — no key, no dealing, nothing
+   secret is involved, because the plan is a
+   reading of a published verdict. Three honest
+   shapes come back. Nobody disqualified: no
+   restart is needed, the original round stands,
+   and there is no plan and no line — a restart
+   ordered against a clean round would be a
+   second round wearing the first one's name.
+   Some disqualified but fewer qualified than the
+   quorum: a restart is needed and impossible at
+   this quorum, said plainly, with no line — the
+   group changes the quorum or recruits, off-page.
+   Otherwise the plan is whole: the renumbering as
+   [old, new] pairs in the qualified trustees'
+   original order (the shape tool 60's verdict
+   already returns), the restarted round's size,
+   and the restart line that publishes it. */
+function planQualifiedJointTallyRestart(qualifiedText) {
+  var qualified = parseJointTallyQualifiedLine(qualifiedText);
+  if (qualified === null) return null;
+  var restartNeeded = qualified.disqualified.length > 0;
+  var viable = qualified.qualified.length >= qualified.threshold;
+  var restart = restartNeeded && viable;
+  return { threshold: qualified.threshold, count: qualified.count,
+           qualified: qualified.qualified,
+           disqualified: qualified.disqualified,
+           restartNeeded: restartNeeded, viable: viable,
+           newCount: qualified.qualified.length,
+           renumbering: restart ?
+             qualified.qualified.map(function (old, idx) {
+               return [old, idx + 1];
+             }) : null,
+           line: restart ?
+             formatJointTallyRestartLine(qualified.threshold,
+               qualified.count, qualified.qualified) : null };
+}
+
+/* The one signature verdict this tool is built
+   on, over parsed pieces the caller has already
+   aligned: the signing key names the OLD number,
+   the commitment and signature lines name the NEW
+   one, and the caller has established that the key
+   is exactly the one the renumbering assigns to
+   the commitment's slot. What is checked here is
+   tool 62's own equation — tool 33's Schnorr
+   verification under the published key over this
+   page's labelled transcript of the new commitment
+   line in its canonical spelling. True is the
+   assigned key dealt this line; false — never
+   null — is every piece well-formed and aligned
+   and the signature simply not balancing: another
+   key signed it. Null is a piece unparseable, or
+   the signature naming a different slot or quorum
+   than its commitment — evidence about a different
+   dealing judges nothing. */
+function qualifiedRestartSignatureVerdict(signKeyText, commitmentText,
+                                          signatureText) {
+  var key = parseJointTallySignKey(signKeyText);
+  var parsed = parseDkgCommitmentLine(commitmentText);
+  var signature = parseJointTallySignature(signatureText);
+  var message = jointTallySignedMessage(commitmentText);
+  if (key === null || parsed === null || signature === null ||
+      message === null) {
+    return Promise.resolve(null);
+  }
+  if (signature.dealer !== parsed.dealer ||
+      signature.threshold !== parsed.threshold ||
+      key.threshold !== parsed.threshold) {
+    return Promise.resolve(null);
+  }
+  return verifySchnorrSignature(key.publicKey, message,
+    signature.signature);
+}
+
+/* Checking one restarted dealing, publicly: the
+   qualified-set line, the signing-key line of the
+   trustee the renumbering assigns to this slot,
+   the restarted commitment line and its tool 62
+   signature line. The alignment is the verdict's
+   spine and is checked before the equation: the
+   qualified set must name a disqualification (a
+   clean round orders no restart, so a dealing
+   judged "for" one belongs to no order this tool
+   recognises), the commitment must carry the
+   round's quorum and a slot inside the restarted
+   round, and the key line must name exactly the
+   old trustee that slot was assigned to — a key
+   line for any other trustee, the disqualified
+   dealer included, is null, not false: it is the
+   wrong question. Only then does the equation
+   speak, true or false. */
+function checkQualifiedJointTallyRestartDealing(qualifiedText,
+    signKeyText, commitmentText, signatureText) {
+  var qualified = parseJointTallyQualifiedLine(qualifiedText);
+  var parsed = parseDkgCommitmentLine(commitmentText);
+  var key = parseJointTallySignKey(signKeyText);
+  if (qualified === null || parsed === null || key === null) {
+    return Promise.resolve(null);
+  }
+  if (qualified.disqualified.length === 0 ||
+      parsed.threshold !== qualified.threshold ||
+      parsed.dealer < 1 ||
+      parsed.dealer > qualified.qualified.length ||
+      key.dealer !== qualified.qualified[parsed.dealer - 1] ||
+      key.threshold !== qualified.threshold) {
+    return Promise.resolve(null);
+  }
+  return qualifiedRestartSignatureVerdict(signKeyText, commitmentText,
+    signatureText);
+}
+
+/* Judging the whole restarted round: the
+   qualified-set line, the whole signing-key set
+   published before the OLD round, the restarted
+   commitment set and every restarted signature,
+   matched to slots by the number they name. The
+   two honest early shapes come back without
+   judging the rest of the record, because there
+   is no restart in them to judge: nobody
+   disqualified (the old round stands; its key
+   comes from tools 59, 60 and 62, not from a
+   re-dealing), or a quorum the disqualifications
+   starved (no restarted round exists at that
+   quorum). Otherwise the record must be whole
+   before it is judged, as everywhere on this
+   page: the restarted set must be exactly the
+   ordered round — the old quorum, the qualified
+   count, dealers 1..newCount each once; the key
+   set exactly one key per trustee of the OLD
+   round under that quorum, the disqualified
+   dealer's key included, because it was published
+   and the record is the record; a signature
+   answering for no slot of the restarted round,
+   or a duplicated one, refuses the publication
+   as null. Each slot is then judged by the same
+   public check as the check form. The fork is
+   the honest one: every slot's signature
+   verifies under its assigned key, and the
+   restarted round stands — the key and trustees
+   lines come back as tool 59's own derivations
+   from the restarted commitments; any slot
+   invalid or missing, and NO key and NO trustees
+   line is derived — what comes back is the two
+   lists, in NEW numbers (the renumbering in the
+   same result translates them), kept apart
+   because a signature that does not balance and
+   an absent one are different facts. */
+function verifyQualifiedJointTallyRestart(qualifiedText, signKeysText,
+                                          commitmentsText,
+                                          signaturesText) {
+  var qualified = parseJointTallyQualifiedLine(qualifiedText);
+  if (qualified === null || typeof signKeysText !== "string" ||
+      typeof commitmentsText !== "string" ||
+      typeof signaturesText !== "string") {
+    return Promise.resolve(null);
+  }
+  var base = { threshold: qualified.threshold,
+               oldCount: qualified.count,
+               qualified: qualified.qualified,
+               disqualified: qualified.disqualified,
+               newCount: qualified.qualified.length,
+               restartNeeded: qualified.disqualified.length > 0,
+               viable: qualified.qualified.length >= qualified.threshold,
+               renumbering: null, invalid: [], missing: [],
+               stands: false, publicKey: null, trustees: null };
+  if (!base.restartNeeded || !base.viable) return Promise.resolve(base);
+  base.renumbering = qualified.qualified.map(function (old, idx) {
+    return [old, idx + 1];
+  });
+  var set = parseDkgCommitmentSet(commitmentsText);
+  if (set === null || set.threshold !== qualified.threshold ||
+      set.count !== qualified.qualified.length) {
+    return Promise.resolve(null);
+  }
+  var keyLines = {};
+  var keyCount = 0;
+  var keyParts = signKeysText.split(/\r?\n/);
+  for (var i = 0; i < keyParts.length; i++) {
+    var keyLine = keyParts[i].trim();
+    if (keyLine === "") continue;
+    var key = parseJointTallySignKey(keyLine);
+    if (key === null || key.threshold !== qualified.threshold ||
+        key.dealer < 1 || key.dealer > qualified.count ||
+        keyLines[key.dealer]) {
+      return Promise.resolve(null);
+    }
+    keyLines[key.dealer] = keyLine;
+    keyCount++;
+  }
+  if (keyCount !== qualified.count) return Promise.resolve(null);
+  var sigLines = {};
+  var sigParts = signaturesText.split(/\r?\n/);
+  for (var s = 0; s < sigParts.length; s++) {
+    var sigLine = sigParts[s].trim();
+    if (sigLine === "") continue;
+    var sig = parseJointTallySignature(sigLine);
+    if (sig === null || sig.threshold !== qualified.threshold ||
+        sig.dealer < 1 || sig.dealer > set.count ||
+        sigLines[sig.dealer]) {
+      return Promise.resolve(null);
+    }
+    sigLines[sig.dealer] = sigLine;
+  }
+  var invalid = [];
+  var missing = [];
+  var failed = false;
+  var step = function (dealer) {
+    if (dealer > set.count) return Promise.resolve(true);
+    if (!sigLines[dealer]) {
+      missing.push(dealer);
+      return step(dealer + 1);
+    }
+    var commitment = formatDkgCommitmentLine(set.threshold, dealer,
+      set.byDealer[dealer].commitments);
+    var keyLine = keyLines[qualified.qualified[dealer - 1]];
+    return qualifiedRestartSignatureVerdict(keyLine, commitment,
+        sigLines[dealer])
+      .then(function (verdict) {
+        if (verdict === null) { failed = true; return false; }
+        if (verdict === false) invalid.push(dealer);
+        return step(dealer + 1);
+      });
+  };
+  return step(1).then(function () {
+    if (failed) return null;
+    base.invalid = invalid;
+    base.missing = missing;
+    base.stands = invalid.length === 0 && missing.length === 0;
+    if (base.stands) {
+      base.publicKey = jointTallyKeyForCommitments(commitmentsText);
+      base.trustees = jointTallyTrusteesForCommitments(commitmentsText);
+    }
+    return base;
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -14397,7 +14767,13 @@ if (typeof module !== "undefined" && module.exports) {
                      jointTallySignedShareMessage,
                      signJointTallyShare,
                      checkJointTallyShareSignature,
-                     judgeSignedJointTallyShareEvidence };
+                     judgeSignedJointTallyShareEvidence,
+                     JTRESTART_FORMAT,
+                     formatJointTallyRestartLine,
+                     parseJointTallyRestartLine,
+                     planQualifiedJointTallyRestart,
+                     checkQualifiedJointTallyRestartDealing,
+                     verifyQualifiedJointTallyRestart };
 }
 
 if (typeof document !== "undefined") {
@@ -18819,6 +19195,191 @@ if (typeof document !== "undefined") {
             "answer is judged — the hole this tool exists to " +
             "close is closed only for deliveries that were " +
             "actually signed.";
+        });
+    });
+
+    /* --- run it again, without them (qualified restart) --- */
+    document.getElementById("joint-restart-plan").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("joint-restart-plan-result");
+      var out = document.getElementById("jtr-plan-out");
+      var plan = planQualifiedJointTallyRestart(
+        document.getElementById("jtr-plan-qualified").value);
+      if (plan === null) {
+        out.value = "";
+        status.textContent = "No plan: paste one whole " +
+          "p4a-jtqualified-v1 line from tool 60's publish " +
+          "form — a restart is planned from the published " +
+          "record, not from memory.";
+        return;
+      }
+      if (!plan.restartNeeded) {
+        out.value = "";
+        status.textContent = "No restart to plan: nobody " +
+          "stands disqualified in this round, so it stands " +
+          "as tools 59, 60 and 62 leave it, and there is " +
+          "nothing to re-deal.";
+        return;
+      }
+      if (!plan.viable) {
+        out.value = "";
+        status.textContent = "No restart at this quorum: " +
+          "only " + plan.qualified.length + " trustee(s) " +
+          "stand qualified, fewer than the quorum of " +
+          plan.threshold + " — the group must choose a " +
+          "smaller quorum or recruit a trustee before any " +
+          "re-dealing. Governance, off this page.";
+        return;
+      }
+      out.value = plan.line;
+      status.textContent = "Planned locally: the qualified " +
+        "trustees re-deal fresh in tool 59, at the same " +
+        "quorum of " + plan.threshold + ", renumbered in " +
+        "their original order — " +
+        plan.renumbering.map(function (pair) {
+          return "trustee " + pair[0] + " deals as " + pair[1];
+        }).join(", ") + ". Each signs their new commitment " +
+        "line in tool 62 with the same key as the old round. " +
+        "Publish the restart line with the qualified-set " +
+        "line; the forms below judge the restarted round " +
+        "against exactly this order.";
+    });
+
+    document.getElementById("joint-restart-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("joint-restart-check-result");
+      var out = document.getElementById("jtr-check-out");
+      var qualifiedText = document.getElementById("jtr-check-qualified").value;
+      var commitmentText = document.getElementById("jtr-check-commitment").value;
+      checkQualifiedJointTallyRestartDealing(qualifiedText,
+        document.getElementById("jtr-check-signkey").value,
+        commitmentText,
+        document.getElementById("jtr-check-signature").value)
+        .then(function (verdict) {
+          if (verdict === null) {
+            out.value = "";
+            status.textContent = "No verdict: the " +
+              "qualified-set line must name a " +
+              "disqualification, the signing-key line must " +
+              "be the one the renumbering assigns to this " +
+              "slot, and the commitment and signature whole " +
+              "lines for that slot — evidence about a " +
+              "different restart judges nothing.";
+            return;
+          }
+          var q = parseJointTallyQualifiedLine(qualifiedText);
+          var c = parseDkgCommitmentLine(commitmentText);
+          var old = q.qualified[c.dealer - 1];
+          if (verdict === true) {
+            out.value = "This restarted dealing is the " +
+              "ordered one: the key that held trustee " +
+              old + "'s place in the old round signed the " +
+              "dealing that carries new number " + c.dealer + ".";
+            status.textContent = "Checked locally, from " +
+              "the four lines alone: the signature balances " +
+              "under the assigned key over exactly this " +
+              "dealing. That proves the key dealt it — who " +
+              "holds the key is a custody question no page " +
+              "can answer.";
+            return;
+          }
+          out.value = "This signature does NOT verify " +
+            "under the key the renumbering assigns to slot " +
+            c.dealer + " (trustee " + old + " of the old " +
+            "round): the dealing was signed by another " +
+            "key — a disqualified trustee's, a qualified " +
+            "trustee in the wrong slot, or a stranger's.";
+          status.textContent = "Checked locally: this " +
+            "dealing is not the one the qualified set " +
+            "ordered for this slot, whoever dealt it.";
+        });
+    });
+
+    document.getElementById("joint-restart-judge").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("joint-restart-judge-result");
+      var keyOut = document.getElementById("jtr-judge-key-out");
+      var trusteesOut = document.getElementById("jtr-judge-trustees-out");
+      verifyQualifiedJointTallyRestart(
+        document.getElementById("jtr-judge-qualified").value,
+        document.getElementById("jtr-judge-signkeys").value,
+        document.getElementById("jtr-judge-commitments").value,
+        document.getElementById("jtr-judge-signatures").value)
+        .then(function (judged) {
+          if (judged === null) {
+            keyOut.value = "";
+            trusteesOut.value = "";
+            status.textContent = "No judgement: the " +
+              "restarted commitment set must be exactly " +
+              "the restarted round the qualified set " +
+              "ordered — its quorum, its size — the " +
+              "signing-key set the whole set published " +
+              "before the old round, one key per trustee, " +
+              "and every signature a whole line for a slot " +
+              "of the restarted round, once — a verdict " +
+              "drawn from a partial record is worse than none.";
+            return;
+          }
+          if (!judged.restartNeeded) {
+            keyOut.value = "";
+            trusteesOut.value = "";
+            status.textContent = "No restart to judge: " +
+              "nobody stands disqualified in the old " +
+              "round, so it stands as tools 59, 60 and 62 " +
+              "leave it — its counting key comes from " +
+              "those tools, not from a re-dealing.";
+            return;
+          }
+          if (!judged.viable) {
+            keyOut.value = "";
+            trusteesOut.value = "";
+            status.textContent = "No restart to judge: " +
+              "only " + judged.qualified.length +
+              " trustee(s) stand qualified, fewer than " +
+              "the quorum of " + judged.threshold + " — " +
+              "there is no restarted round at this quorum " +
+              "to judge. The group chooses a smaller " +
+              "quorum or recruits, off this page.";
+            return;
+          }
+          if (judged.stands) {
+            keyOut.value = judged.publicKey;
+            trusteesOut.value = judged.trustees;
+            status.textContent = "Judged locally: every " +
+              "restarted dealing was signed by the key " +
+              "the renumbering assigns to its slot, so the " +
+              "restarted round stands — the counting key " +
+              "and trustees line above are tool 59's own " +
+              "derivations from the restarted commitments, " +
+              "and no disqualified key dealt into them. " +
+              "Finalize in tool 59, and sign the new " +
+              "deliveries in tool 63.";
+            return;
+          }
+          keyOut.value = "";
+          trusteesOut.value = "";
+          var name = function (dealer) {
+            return "new dealer " + dealer + " (trustee " +
+              judged.qualified[dealer - 1] + " of the old round)";
+          };
+          var bits = [];
+          if (judged.invalid.length) {
+            bits.push(judged.invalid.map(name).join(", ") +
+              " offered a signature that does not verify " +
+              "under the key the renumbering assigns");
+          }
+          if (judged.missing.length) {
+            bits.push(judged.missing.map(name).join(", ") +
+              " never signed");
+          }
+          status.textContent = "Judged locally: " +
+            bits.join("; ") + ". NO key is derived from " +
+            "this restarted round — a dealing that cannot " +
+            "be attributed to the trustee the qualified " +
+            "set assigned to its slot is not a dealing " +
+            "the restart can sum. The named slots re-deal " +
+            "and re-sign, or the group publishes a fresh " +
+            "qualified set — governance, off this page.";
         });
     });
 
