@@ -851,6 +851,29 @@ renewable resource that pays for shielded transactions.
   rank. Not a Compact circuit proof, and not a
   format any chain or wallet checks. This tool
   needs no keys at all.
+- **In range, and I can prove it — range proofs**
+  — the answer to tool 42's named limit: prove the
+  value inside a Pedersen commitment is a whole
+  number from 0 to 255, revealing neither the value
+  nor its blinding. The value is decomposed into
+  eight bits, each with its own Pedersen commitment
+  under the same `privacy4all-pedersen-h-v1`
+  generator; the bit blindings are solved so the
+  weighted sum of the bit commitments is the
+  commitment itself, and each bit is proved to be
+  0 or 1 with a Cramer–Damgård–Schoenmakers OR
+  proof — the true branch answered like tool 32,
+  the other simulated backwards — all bound by one
+  Fiat–Shamir challenge hashed under
+  `privacy4all-rangeproof-v1`, each bit's two branch
+  challenges summing to it. The proof line is
+  `p4a-rangeproof-v1`. Honestly labelled: eight
+  bits is a teaching range — production proofs
+  (Bulletproofs, Compact circuits) cover 64-bit
+  amounts in logarithmic space; not a Compact
+  circuit proof, and not a format any chain or
+  wallet checks. The opening it is made from stays
+  a secret of private-key rank.
 
 ## Guides
 

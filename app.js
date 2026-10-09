@@ -6434,6 +6434,426 @@ function checkPedersenSum(commitA, valueA, blindingA,
   });
 }
 
+/* ---------- 43. In range, and I can prove it — range proofs ----------
+
+   Tool 42 ends on a named limit: a Pedersen commitment
+   hides a value, but it does not prove the value is in
+   any range. A commitment built as curve arithmetic
+   for a negative amount, or for a million when the
+   ledger's rule is a maximum of 255, is perfectly
+   well-formed — and a shielded system that accepted
+   commitments without a range proof would let value
+   be created out of the wrap-around, which is why real
+   confidential systems (Midnight's shielded design
+   among them) pair every commitment with one. This
+   tool is the textbook construction those systems
+   optimise: prove, bit by bit, that the hidden value
+   is a whole number from 0 to 255, revealing neither
+   the value nor its blinding.
+
+   The value is written in binary, v = Σ 2^i·b_i over
+   eight bits, and every bit gets a Pedersen commitment
+   of its own, D_i = s_i×G + b_i×H, built with tool
+   42's own generator H. The bit blindings are chosen
+   so the weighted sum lands exactly on the commitment
+   being proved: s_0…s_6 are fresh random scalars, and
+   s_7 is solved from (r − Σ_{i<7} 2^i·s_i) × (128⁻¹
+   mod n), so Σ 2^i·D_i = C as points — a sum the
+   verifier recomputes for themselves, which pins the
+   bits to THIS commitment and no other. What remains
+   is to prove each D_i hides a bit — 0 or 1, nothing
+   between — without opening it. That is an OR proof
+   in the Cramer–Damgård–Schoenmakers shape, run over
+   the two statements a bit commitment can make:
+
+     branch 0: D_i itself is s_i×G         (the bit is 0)
+     branch 1: D_i − H is s_i×G            (the bit is 1)
+
+   Exactly one branch's discrete logarithm is known to
+   the prover — the true one, whose witness is s_i;
+   the other branch's logarithm runs through H, whose
+   logarithm nobody knows. The prover answers the true
+   branch the way tool 32 answers a challenge, and
+   SIMULATES the other branch backwards from a
+   self-chosen challenge and response, the same
+   backwards move tool 5's simulator makes — except
+   here the simulation is half of an honest proof, not
+   a fake one. One Fiat–Shamir challenge binds the
+   whole proof: c = SHA-256 under the label
+   privacy4all-rangeproof-v1 over the commitment, the
+   eight bit commitments and all sixteen branch
+   commitments, reduced under the order; each bit's
+   two branch challenges must sum to that same c,
+   which is what stops a prover choosing both branches
+   freely — they can pre-build one branch per bit, and
+   the hash chooses how the rest must go. A verifier
+   needs no secret at all: add the bit commitments
+   with their weights and compare against the pasted
+   commitment, rebuild every branch commitment from
+   its challenge and response (R = s×G − c×X), re-hash,
+   and check each bit's pair sums to the hash.
+
+   The verdict keeps the house split. True when the
+   weighted sum matches and every pair sums to the
+   challenge; false — never null — when every piece is
+   well-formed and one of those checks fails: a proof
+   transplanted to another commitment, one nudged
+   response, two bit records swapped. Null when a
+   piece cannot even be parsed: a malformed point, a
+   proof line with the wrong number of fields, a
+   scalar at or past the order. Making a proof also
+   refuses as null what it cannot honestly prove: a
+   value outside 0…255 (a commitment to 256 is a fine
+   tool-42 commitment and an unprovable statement
+   here — that refusal IS the range doing its work),
+   and an opening whose value and blinding do not
+   recompute the pasted commitment.
+
+   The honest limits are plain. Eight bits is a
+   teaching range, chosen so the whole proof fits on
+   one page and every step can be followed; production
+   range proofs (Bulletproofs, and the proofs a
+   Compact circuit makes) cover 64-bit amounts in
+   logarithmic space instead of one OR proof per bit,
+   and they are circuit or protocol proofs, not this
+   page's transcript. The proof line here is the hub's
+   own p4a-rangeproof-v1 spelling over P-256 teaching
+   arithmetic — not a format any chain or wallet
+   checks, not one of Midnight's Compact circuit
+   proofs, and the curve code is a teaching
+   implementation: affine arithmetic written to be
+   read, not an audited library and not side-channel
+   resistant. The proof reveals the commitment and
+   nothing else — not the value, not the blinding, not
+   even which branch was real for any bit — but the
+   opening it is made from stays a private number of
+   the same rank as a private key, shared the way tool
+   42 says openings are shared. Never paste a real
+   wallet key or a production private key into any web
+   page, including this one. */
+var RANGEPROOF_FORMAT = "p4a-rangeproof-v1";
+var RANGEPROOF_CHALLENGE_PREFIX = "privacy4all-rangeproof-v1";
+var RANGE_BITS = 8;
+var RANGE_MAX_VALUE = 255;
+
+/* A value this tool can prove things about: a whole
+   decimal number in [0, RANGE_MAX_VALUE], canonicalised
+   through BigInt exactly the way tool 42 canonicalises
+   its wider range. Anything past 255 is null here even
+   though tool 42 would happily commit to it — the
+   refusal is the range, stated as code. */
+function parseRangeValue(text) {
+  if (typeof text !== "string") return null;
+  var trimmed = text.trim();
+  if (!/^[0-9]+$/.test(trimmed)) return null;
+  var value = BigInt(trimmed);
+  if (value > BigInt(RANGE_MAX_VALUE)) return null;
+  return value.toString();
+}
+
+function rangeModN(value) {
+  var r = value % P256_N;
+  return r < P256_ZERO ? r + P256_N : r;
+}
+
+/* (2^7)^-1 and friends under the order, by Fermat:
+   the order is prime, so a^(n−2) is the inverse.
+   Used once per proof, to solve the last bit's
+   blinding from the weighted-sum equation. */
+function rangeScalarPow(base, exponent) {
+  var result = P256_ONE;
+  var b = rangeModN(base);
+  var e = exponent;
+  while (e > P256_ZERO) {
+    if ((e & P256_ONE) === P256_ONE) result = rangeModN(result * b);
+    b = rangeModN(b * b);
+    e = e >> P256_ONE;
+  }
+  return result;
+}
+
+/* The one challenge for the whole proof: SHA-256 over
+   the label, the commitment being proved, the eight
+   bit commitments and the sixteen branch commitments,
+   every point canonicalised first so the hash names
+   points and not spellings. Reduced under the order;
+   a reduced digest of zero is null — with c = 0 both
+   branch challenges would be chosen freely and the
+   proof would bind nothing, the same refusal tool 33
+   makes. Inputs are arrays of point hexes of exactly
+   the labelled lengths; anything else is null. */
+function rangeProofChallenge(commitmentHex, bitCommitments, branchCommitments) {
+  var commitment = parseP256Point(commitmentHex);
+  if (commitment === null || !Array.isArray(bitCommitments) ||
+      !Array.isArray(branchCommitments) ||
+      bitCommitments.length !== RANGE_BITS ||
+      branchCommitments.length !== RANGE_BITS * 2) {
+    return Promise.resolve(null);
+  }
+  var canonicalBits = [];
+  var i;
+  for (i = 0; i < bitCommitments.length; i++) {
+    var bitPoint = parseP256Point(bitCommitments[i]);
+    if (bitPoint === null) return Promise.resolve(null);
+    canonicalBits.push(formatP256PublicKey(bitPoint));
+  }
+  var canonicalBranches = [];
+  for (i = 0; i < branchCommitments.length; i++) {
+    var branchPoint = parseP256Point(branchCommitments[i]);
+    if (branchPoint === null) return Promise.resolve(null);
+    canonicalBranches.push(formatP256PublicKey(branchPoint));
+  }
+  var transcript = RANGEPROOF_CHALLENGE_PREFIX + "\n" +
+    formatP256PublicKey(commitment) + "\n" +
+    canonicalBits.join("\n") + "\n" + canonicalBranches.join("\n");
+  return sha256Hex(transcript).then(function (digest) {
+    if (digest === null) return null;
+    var value = BigInt("0x" + digest) % P256_N;
+    if (value === P256_ZERO) return null;
+    return p256IntToHex(value);
+  });
+}
+
+/* The proof line: the format tag, then per bit the
+   bit commitment (a whole 91-byte point) and the two
+   branches' challenges and responses (c0, s0, c1, s1),
+   challenges and responses gated as responses — zero
+   allowed, the order refused — because a branch
+   challenge honestly can be the difference that lands
+   on zero. Pieces that do not check out are null,
+   never a half-built line. */
+function formatRangeProof(bitCommitments, branches) {
+  if (!Array.isArray(bitCommitments) || !Array.isArray(branches) ||
+      bitCommitments.length !== RANGE_BITS ||
+      branches.length !== RANGE_BITS) {
+    return null;
+  }
+  var parts = [RANGEPROOF_FORMAT];
+  for (var i = 0; i < RANGE_BITS; i++) {
+    var point = parseP256Point(bitCommitments[i]);
+    var branch = branches[i];
+    if (point === null || branch === null ||
+        typeof branch !== "object") return null;
+    var c0 = parseProofResponse(branch.challenge0);
+    var s0 = parseProofResponse(branch.response0);
+    var c1 = parseProofResponse(branch.challenge1);
+    var s1 = parseProofResponse(branch.response1);
+    if (c0 === null || s0 === null || c1 === null || s1 === null) {
+      return null;
+    }
+    parts.push(formatP256PublicKey(point));
+    parts.push(c0); parts.push(s0); parts.push(c1); parts.push(s1);
+  }
+  return parts.join(":");
+}
+
+function parseRangeProof(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 1 + RANGE_BITS * 5 ||
+      parts[0] !== RANGEPROOF_FORMAT) return null;
+  var bitCommitments = [];
+  var branches = [];
+  for (var i = 0; i < RANGE_BITS; i++) {
+    var base = 1 + i * 5;
+    var point = parseP256Point(parts[base]);
+    var c0 = parseProofResponse(parts[base + 1]);
+    var s0 = parseProofResponse(parts[base + 2]);
+    var c1 = parseProofResponse(parts[base + 3]);
+    var s1 = parseProofResponse(parts[base + 4]);
+    if (point === null || c0 === null || s0 === null ||
+        c1 === null || s1 === null) return null;
+    bitCommitments.push(formatP256PublicKey(point));
+    branches.push({ challenge0: c0, response0: s0,
+                    challenge1: c1, response1: s1 });
+  }
+  return { bitCommitments: bitCommitments, branches: branches };
+}
+
+/* One attempt at a proof, with all randomness drawn
+   fresh inside the attempt. Any impossible point — a
+   bit commitment or branch commitment landing on the
+   identity, the solved last blinding coming out zero —
+   fails the attempt as null and the caller redraws,
+   the same discipline tool 33's signer follows. */
+function rangeProofAttempt(hPoint, commitmentHex, value, blindingHex) {
+  var numericValue = BigInt(value);
+  var bits = [];
+  var i;
+  for (i = 0; i < RANGE_BITS; i++) {
+    bits.push(Number((numericValue >> BigInt(i)) & P256_ONE));
+  }
+  var blindings = [];
+  for (i = 0; i < RANGE_BITS - 1; i++) {
+    var drawn = randomProofScalar();
+    if (drawn === null) return Promise.resolve(null);
+    blindings.push(BigInt("0x" + drawn));
+  }
+  var weighted = P256_ZERO;
+  for (i = 0; i < RANGE_BITS - 1; i++) {
+    weighted = rangeModN(weighted + BigInt(2 ** i) * blindings[i]);
+  }
+  var inverse = rangeScalarPow(BigInt(2 ** (RANGE_BITS - 1)), P256_N - P256_TWO);
+  var last = rangeModN((BigInt("0x" + blindingHex) - weighted) * inverse);
+  if (last === P256_ZERO) return Promise.resolve(null);
+  blindings.push(last);
+  var bitPoints = [];
+  var bitHexes = [];
+  for (i = 0; i < RANGE_BITS; i++) {
+    var bitPoint = pedersenPointFor(hPoint, BigInt(bits[i]), blindings[i]);
+    if (bitPoint === null) return Promise.resolve(null);
+    bitPoints.push(bitPoint);
+    bitHexes.push(formatP256PublicKey(bitPoint));
+  }
+  var negH = { x: hPoint.x, y: P256_P - hPoint.y };
+  var branchHexes = [];
+  var simulated = [];
+  for (i = 0; i < RANGE_BITS; i++) {
+    var statements = [bitPoints[i], p256PointAdd(bitPoints[i], negH)];
+    if (statements[1] === null) return Promise.resolve(null);
+    var simChallenge = randomProofScalar();
+    var simResponse = randomProofScalar();
+    var nonce = randomProofScalar();
+    if (simChallenge === null || simResponse === null || nonce === null) {
+      return Promise.resolve(null);
+    }
+    var simScalar = BigInt("0x" + simChallenge);
+    var realPoint = p256PointMultiply(BigInt("0x" + nonce),
+      { x: P256_GX, y: P256_GY });
+    var simPoint = p256PointAdd(
+      p256PointMultiply(BigInt("0x" + simResponse),
+        { x: P256_GX, y: P256_GY }),
+      p256PointMultiply(rangeModN(-simScalar), statements[1 - bits[i]]));
+    if (realPoint === null || simPoint === null) {
+      return Promise.resolve(null);
+    }
+    simulated.push({ challenge: simScalar, response: simResponse,
+                     nonce: nonce, statements: statements });
+    var ordered = bits[i] === 0 ? [realPoint, simPoint] : [simPoint, realPoint];
+    branchHexes.push(formatP256PublicKey(ordered[0]));
+    branchHexes.push(formatP256PublicKey(ordered[1]));
+  }
+  return rangeProofChallenge(commitmentHex, bitHexes, branchHexes)
+    .then(function (challenge) {
+      if (challenge === null) return null;
+      var challengeValue = BigInt("0x" + challenge);
+      var branches = [];
+      for (var j = 0; j < RANGE_BITS; j++) {
+        var realChallenge = rangeModN(challengeValue - simulated[j].challenge);
+        var realResponse = rangeModN(BigInt("0x" + simulated[j].nonce) +
+          realChallenge * blindings[j]);
+        var realPair = { challenge: p256IntToHex(realChallenge),
+                         response: p256IntToHex(realResponse) };
+        var simPair = { challenge: p256IntToHex(simulated[j].challenge),
+                        response: simulated[j].response };
+        var first = bits[j] === 0 ? realPair : simPair;
+        var second = bits[j] === 0 ? simPair : realPair;
+        branches.push({ challenge0: first.challenge,
+                        response0: first.response,
+                        challenge1: second.challenge,
+                        response1: second.response });
+      }
+      return formatRangeProof(bitHexes, branches);
+    });
+}
+
+/* The prover's move: given a tool-42 commitment and
+   its opening, prove the hidden value lies in
+   0…255. The opening is checked first — a value and
+   blinding that do not recompute the commitment are
+   refused as null, because a proof built on a false
+   opening would be a lie with good formatting. The
+   value's range is checked by parseRangeValue before
+   any of that: outside 0…255 there is nothing here
+   to prove, whatever the commitment hides. */
+function makeRangeProof(commitmentHex, valueText, blindingHex) {
+  var point = parseP256Point(commitmentHex);
+  var value = parseRangeValue(valueText);
+  var blinding = parseProofScalar(blindingHex);
+  if (point === null || value === null || blinding === null) {
+    return Promise.resolve(null);
+  }
+  var canonical = formatP256PublicKey(point);
+  return pedersenCommitmentFor(value, blinding).then(function (recomputed) {
+    if (recomputed === null || recomputed !== canonical) return null;
+    return pedersenGeneratorPoint().then(function (hHex) {
+      if (hHex === null) return null;
+      var hPoint = parseP256Point(hHex);
+      if (hPoint === null) return null;
+      var attempt = function (triesLeft) {
+        return rangeProofAttempt(hPoint, canonical, value, blinding)
+          .then(function (proof) {
+            if (proof !== null) return proof;
+            return triesLeft > 1 ? attempt(triesLeft - 1) : null;
+          });
+      };
+      return attempt(4);
+    });
+  });
+}
+
+/* The verifier's verdict, needing no secret at all:
+   the weighted sum of the bit commitments must be
+   the pasted commitment itself, point for point, and
+   every bit's two branch challenges must sum to the
+   one Fiat–Shamir challenge re-hashed from the branch
+   commitments the responses rebuild. True when both
+   hold; false — never null — when every piece is
+   well-formed and either fails; null when a piece
+   cannot even be parsed, or a rebuilt branch lands
+   on the identity and cannot be named in the hash. */
+function verifyRangeProof(commitmentHex, proofText) {
+  var point = parseP256Point(commitmentHex);
+  var proof = parseRangeProof(proofText);
+  if (point === null || proof === null) return Promise.resolve(null);
+  return pedersenGeneratorPoint().then(function (hHex) {
+    if (hHex === null) return null;
+    var hPoint = parseP256Point(hHex);
+    if (hPoint === null) return null;
+    var negH = { x: hPoint.x, y: P256_P - hPoint.y };
+    var sum = null;
+    var i;
+    for (i = 0; i < RANGE_BITS; i++) {
+      var weighted = p256PointMultiply(BigInt(2 ** i),
+        parseP256Point(proof.bitCommitments[i]));
+      if (weighted === null) return null;
+      sum = p256PointAdd(sum, weighted);
+    }
+    if (sum === null || sum.x !== point.x || sum.y !== point.y) {
+      return false;
+    }
+    var branchHexes = [];
+    for (i = 0; i < RANGE_BITS; i++) {
+      var bitPoint = parseP256Point(proof.bitCommitments[i]);
+      var statements = [bitPoint, p256PointAdd(bitPoint, negH)];
+      if (statements[1] === null) return null;
+      var branch = proof.branches[i];
+      var responses = [branch.response0, branch.response1];
+      var challenges = [branch.challenge0, branch.challenge1];
+      for (var j = 0; j < 2; j++) {
+        var rebuilt = p256PointAdd(
+          p256PointMultiply(BigInt("0x" + responses[j]),
+            { x: P256_GX, y: P256_GY }),
+          p256PointMultiply(
+            rangeModN(-BigInt("0x" + challenges[j])), statements[j]));
+        if (rebuilt === null) return null;
+        branchHexes.push(formatP256PublicKey(rebuilt));
+      }
+    }
+    return rangeProofChallenge(formatP256PublicKey(point),
+      proof.bitCommitments, branchHexes).then(function (challenge) {
+      if (challenge === null) return null;
+      var challengeValue = BigInt("0x" + challenge);
+      for (var k = 0; k < RANGE_BITS; k++) {
+        var pairSum = rangeModN(BigInt("0x" + proof.branches[k].challenge0) +
+          BigInt("0x" + proof.branches[k].challenge1));
+        if (pairSum !== challengeValue) return false;
+      }
+      return true;
+    });
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -6575,7 +6995,12 @@ if (typeof module !== "undefined" && module.exports) {
                      parsePedersenValue, pedersenGeneratorPoint,
                      pedersenCommitmentFor, makePedersenCommitment,
                      verifyPedersenOpening, pedersenCommitmentSum,
-                     checkPedersenSum };
+                     checkPedersenSum,
+                     RANGEPROOF_FORMAT, RANGEPROOF_CHALLENGE_PREFIX,
+                     RANGE_BITS, RANGE_MAX_VALUE,
+                     parseRangeValue, rangeProofChallenge,
+                     formatRangeProof, parseRangeProof,
+                     makeRangeProof, verifyRangeProof };
 }
 
 if (typeof document !== "undefined") {
@@ -9151,6 +9576,64 @@ if (typeof document !== "undefined") {
             "commitment to the added values under the added " +
             "blindings. A value, a blinding or a commitment on one " +
             "side does not belong with the others.";
+      });
+    });
+
+    /* --- in range, and I can prove it (range proofs) --- */
+    document.getElementById("range-make").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = document.getElementById("range-proof-out");
+      var status = document.getElementById("range-make-result");
+      out.value = "";
+      status.textContent = "Working…";
+      makeRangeProof(document.getElementById("range-commitment").value,
+        document.getElementById("range-value").value,
+        document.getElementById("range-blinding").value).then(function (proof) {
+        if (proof === null) {
+          status.textContent = "No proof made: the commitment must " +
+            "be a whole 91-byte point, the value a whole number " +
+            "from 0 to 255, the blinding its whole 64-hex opening — " +
+            "and the value and blinding must actually open the " +
+            "commitment. A value past 255 cannot be proved in " +
+            "range here, however good its commitment is.";
+          return;
+        }
+        out.value = proof;
+        status.textContent = "Proved. The line above says, in a " +
+          "form anyone can check with the second form: the value " +
+          "inside this commitment is a whole number from 0 to " +
+          "255. It does not say which number, and the blinding " +
+          "stays secret — keep it the way you keep a private key.";
+      });
+    });
+
+    document.getElementById("range-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("range-check-result");
+      status.textContent = "Working…";
+      verifyRangeProof(document.getElementById("range-check-commitment").value,
+        document.getElementById("range-check-proof").value).then(function (verdict) {
+        if (verdict === null) {
+          status.textContent = "Cannot judge this proof: the " +
+            "commitment must be a whole 91-byte point and the " +
+            "proof a whole p4a-rangeproof-v1 line — eight bit " +
+            "commitments, each with two branch challenges and " +
+            "two responses, nothing missing and nothing extra.";
+          return;
+        }
+        status.textContent = verdict ?
+          "In range, proved. The bit commitments add up — with " +
+            "their powers of two — to exactly this commitment, " +
+            "and every bit's two branch challenges sum to the " +
+            "one challenge the whole transcript hashes to: the " +
+            "hidden value is a whole number from 0 to 255, and " +
+            "you learned nothing else about it." :
+          "Not proved. Either the bit commitments do not add " +
+            "up to this commitment — the proof belongs to a " +
+            "different value or was transplanted — or a branch " +
+            "challenge pair does not sum to the transcript's " +
+            "challenge, which is what a nudged response, a " +
+            "swapped bit or a forged branch does to a proof.";
       });
     });
 
