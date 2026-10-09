@@ -10625,6 +10625,450 @@ function thresholdTallyOpen(keyText, trusteesText, tallyText, partialsText) {
   return null;
 }
 
+/* One person, one vote — an election nullifier
+   with an anonymous eligibility proof (tool 54).
+
+   Tools 51, 52 and 53 each keep two limits whole,
+   named in their own text: eligibility — who may
+   vote at all — and double voting, a ballot (or a
+   voter) counted twice. This tool builds the
+   standard answer to both, for this page's own
+   keys, in this page's own arithmetic. The voter
+   roll is public: the P-256 public keys of the
+   eligible voters, two to six of them at this
+   page's teaching size, in an agreed order. Each
+   election names itself with a short identifier,
+   and the identifier is hashed into a curve point
+   H_e whose discrete log nobody knows, by the
+   try-and-increment of tool 35 under this tool's
+   own label — an independent generator for this
+   election alone. A voter's nullifier for the
+   election is N = x×H_e, where x is the secret
+   behind their roll key Y = x×G. Three facts
+   about N carry the whole tool. It is
+   deterministic: the same voter in the same
+   election always produces the same N, so a
+   counting board that records the nullifiers it
+   has accepted can refuse a second cast carrying
+   the same one — one person, one vote, enforced
+   by equality alone. It is unlinkable across
+   elections: a different identifier hashes to an
+   unrelated generator, and tying x×H_e1 to
+   x×H_e2, or either to Y, is a decisional
+   Diffie–Hellman problem. And it is provable: the
+   cast below attaches a proof that N was made by
+   SOME roll member's secret — the statement
+   log_G(Y_i) = log_{H_e}(N) for some i — proved
+   as a Cramer–Damgård–Schoenmakers OR over the
+   roll of Chaum–Pedersen equal-log statements
+   (tool 44's statement, over two bases at once,
+   as tool 52 composes it): the voter's own branch
+   is answered from a fresh nonce, every other
+   branch is simulated backwards, and one
+   Fiat–Shamir challenge hashed over the election,
+   the roll in order, the nullifier and every
+   branch's two nonce points is split between the
+   branches, which must sum to it. The verifier
+   needs no secret, learns that an eligible voter
+   cast and that this nullifier is theirs, and
+   learns nothing about which member it was.
+
+   The honest limits, stated before the code.
+   First, the roll is public and the anonymity set
+   is exactly the roll: eligibility here is not a
+   secret, only the casting is anonymous, and a
+   roll of two makes each cast a coin flip between
+   two named people. Second, the nullifier stops
+   a second cast in THIS election and nothing
+   else: it does not hide the ballot (tools 51 and
+   52 do that work), it does not stop coercion or
+   vote-selling — a voter can still be made to
+   reveal their key or cast under observation, and
+   receipt-freeness is not offered — and it says
+   nothing about network timing or metadata.
+   Third, the key is the eligibility: whoever
+   holds a roll member's private key can cast as
+   that member, once, and a voter who loses their
+   key cannot cast at all; how the roll itself is
+   agreed and published is governance this page
+   does not do. Fourth, the proof binds the roll
+   AS ORDERED and the election AS NAMED: the same
+   keys in another order, or the same cast checked
+   under another election's name, fail — order and
+   name are part of the statement, as they are in
+   tools 34 and 52. The frame is the house one: a
+   real proof computed locally, but the line is
+   this hub's own p4a-votenull-v1 spelling — not a
+   format any chain or wallet checks, not one of
+   Midnight's Compact circuit proofs. Never paste
+   a real wallet key or a production private key
+   into any web page, including this one. */
+var VOTENULL_FORMAT = "p4a-votenull-v1";
+var VOTENULL_BASE_PREFIX = "privacy4all-votenull-base-v1";
+var VOTENULL_CHALLENGE_PREFIX = "privacy4all-votenull-proof-v1";
+var VOTENULL_MIN_ROLL = 2;
+var VOTENULL_MAX_ROLL = 6;
+
+/* An election's name, as typed: one to sixty-four
+   characters once trimmed, with no colon and no
+   line break — the name is hashed line by line
+   into transcripts, so a name carrying the
+   separator could blur one election into another.
+   Anything else is null. */
+function parseVoteElectionId(text) {
+  if (typeof text !== "string") return null;
+  var trimmed = text.trim();
+  if (trimmed.length < 1 || trimmed.length > 64) return null;
+  if (/[\r\n:]/.test(trimmed)) return null;
+  return trimmed;
+}
+
+/* The voter roll: the eligible voters' public
+   keys, canonicalised, duplicates refused — a
+   doubled key would fake a bigger anonymity set
+   than exists — and held to this page's limits,
+   exactly the discipline tools 34 and 35 keep for
+   a ring, because a roll here plays the ring's
+   part. */
+function parseVoteRoll(text) {
+  return parseRingPublicKeys(text);
+}
+
+/* The election's own generator: try-and-increment
+   over a labelled counter, the digest read as an
+   x coordinate, kept when it lands on the curve
+   (P-256's prime is 3 mod 4, so the root is one
+   exponentiation), the even root chosen so every
+   caller lands on the same point — tool 35's
+   construction, hashed from the election's name
+   under this tool's own label instead of from a
+   key. Nobody knows this point's discrete log,
+   and that unknown is what makes a nullifier
+   unlinkable to the roll key it came from. */
+function voteNullifierBasePoint(electionId) {
+  var id = parseVoteElectionId(electionId);
+  if (id === null) return Promise.resolve(null);
+  var sqrtExponent = (P256_P + P256_ONE) / BigInt(4);
+  var attempt = function (counter) {
+    if (counter > 255) return Promise.resolve(null);
+    return sha256Hex(VOTENULL_BASE_PREFIX + "\n" + id + "\n" + counter)
+      .then(function (digest) {
+        if (digest === null) return null;
+        var x = BigInt("0x" + digest) % P256_P;
+        var rhs = p256Mod(x * x * x - P256_THREE * x + P256_B);
+        var y = p256Pow(rhs, sqrtExponent);
+        if (p256Mod(y * y) !== rhs) return attempt(counter + 1);
+        if ((y & P256_ONE) === P256_ONE) y = P256_P - y;
+        return formatP256PublicKey({ x: x, y: y });
+      });
+  };
+  return attempt(0);
+}
+
+/* The one challenge for an eligibility proof:
+   SHA-256 over the label, the election's name,
+   the roll in order, the nullifier and every
+   branch's two nonce points — base side first,
+   election side second, in roll order — every
+   point canonicalised first, so the hash names
+   the statement and not a spelling of it.
+   Reduced under the order; a reduced digest of
+   zero is null, the refusal every Fiat–Shamir
+   challenge on this page makes. */
+function voteNullifierChallenge(electionId, rollText, nullifierHex,
+                                noncePairs) {
+  var id = parseVoteElectionId(electionId);
+  var keys = parseRingPublicKeys(rollText);
+  var nullifier = parseP256Point(nullifierHex);
+  if (id === null || keys === null || nullifier === null ||
+      !Array.isArray(noncePairs) || noncePairs.length !== keys.length) {
+    return Promise.resolve(null);
+  }
+  var flat = [];
+  for (var i = 0; i < noncePairs.length; i++) {
+    if (!Array.isArray(noncePairs[i]) || noncePairs[i].length !== 2) {
+      return Promise.resolve(null);
+    }
+    var first = parseP256Point(noncePairs[i][0]);
+    var second = parseP256Point(noncePairs[i][1]);
+    if (first === null || second === null) return Promise.resolve(null);
+    flat.push(formatP256PublicKey(first));
+    flat.push(formatP256PublicKey(second));
+  }
+  var transcript = VOTENULL_CHALLENGE_PREFIX + "\n" + id + "\n" +
+    keys.join("\n") + "\n" + formatP256PublicKey(nullifier) + "\n" +
+    flat.join("\n");
+  return sha256Hex(transcript).then(function (digest) {
+    if (digest === null) return null;
+    var value = BigInt("0x" + digest) % P256_N;
+    if (value === P256_ZERO) return null;
+    return p256IntToHex(value);
+  });
+}
+
+/* A cast line: the format tag, the nullifier
+   point, then per roll member — in roll order —
+   that branch's challenge and response, gated as
+   responses: zero allowed, the order refused,
+   because a branch challenge honestly can be the
+   difference that lands on zero. The line carries
+   no key material and no marker of the voter's
+   position — the branches are deliberately
+   indistinguishable, the voter's included. */
+function formatVoteNullifier(nullifierHex, branches) {
+  var nullifier = parseP256Point(nullifierHex);
+  if (nullifier === null || !Array.isArray(branches) ||
+      branches.length < VOTENULL_MIN_ROLL ||
+      branches.length > VOTENULL_MAX_ROLL) {
+    return null;
+  }
+  var parts = [VOTENULL_FORMAT, formatP256PublicKey(nullifier)];
+  for (var i = 0; i < branches.length; i++) {
+    var branch = branches[i];
+    if (branch === null || typeof branch !== "object") return null;
+    var challenge = parseProofResponse(branch.challenge);
+    var response = parseProofResponse(branch.response);
+    if (challenge === null || response === null) return null;
+    parts.push(challenge); parts.push(response);
+  }
+  return parts.join(":");
+}
+
+function parseVoteNullifier(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length < 2 + 2 * VOTENULL_MIN_ROLL ||
+      parts.length > 2 + 2 * VOTENULL_MAX_ROLL ||
+      (parts.length - 2) % 2 !== 0 || parts[0] !== VOTENULL_FORMAT) {
+    return null;
+  }
+  var nullifier = parseP256Point(parts[1]);
+  if (nullifier === null) return null;
+  var branches = [];
+  for (var i = 0; i < (parts.length - 2) / 2; i++) {
+    var challenge = parseProofResponse(parts[2 + i * 2]);
+    var response = parseProofResponse(parts[3 + i * 2]);
+    if (challenge === null || response === null) return null;
+    branches.push({ challenge: challenge, response: response });
+  }
+  return { nullifier: formatP256PublicKey(nullifier),
+           branches: branches };
+}
+
+/* The nullifier itself, from the voter's secret
+   alone: the secret times the election's
+   generator. Synchronous in everything but the
+   hashing that finds the generator, and
+   deterministic — the property the whole tool
+   rests on: run it twice and the same point
+   comes back, so a board can recognise a repeat;
+   run it under another election and an unrelated
+   point comes back, so nobody can follow a voter
+   from one election to the next. */
+function voteNullifierForScalar(electionId, scalarHex) {
+  var scalar = parseProofScalar(scalarHex);
+  if (parseVoteElectionId(electionId) === null || scalar === null) {
+    return Promise.resolve(null);
+  }
+  return voteNullifierBasePoint(electionId).then(function (baseHex) {
+    if (baseHex === null) return null;
+    var base = parseP256Point(baseHex);
+    if (base === null) return null;
+    var point = p256PointMultiply(BigInt("0x" + scalar), base);
+    if (point === null) return null;
+    return formatP256PublicKey(point);
+  });
+}
+
+/* One attempt at a cast, with all randomness
+   drawn fresh inside the attempt: every branch
+   but the voter's is simulated backwards on both
+   bases, the voter's nonce pair is committed,
+   the hash chooses the voter's challenge as
+   whatever the simulated ones leave, and the
+   voter's branch answers with their own secret.
+   Any impossible point — a simulated branch
+   landing on the identity — fails the attempt as
+   null and the caller redraws, the discipline
+   tools 43, 45 and 52 follow. */
+function voteNullifierAttempt(id, keys, scalarHex, voterIndex,
+                              basePoint, nullifierHex) {
+  var x = BigInt("0x" + scalarHex);
+  var nullifierPoint = parseP256Point(nullifierHex);
+  if (nullifierPoint === null) return Promise.resolve(null);
+  var branches = new Array(keys.length);
+  var pairs = new Array(keys.length);
+  for (var i = 0; i < keys.length; i++) {
+    if (i === voterIndex) continue;
+    var simChallenge = randomProofScalar();
+    var simResponse = randomProofScalar();
+    if (simChallenge === null || simResponse === null) {
+      return Promise.resolve(null);
+    }
+    var simC = BigInt("0x" + simChallenge);
+    var simS = BigInt("0x" + simResponse);
+    var rollPoint = parseP256Point(keys[i]);
+    if (rollPoint === null) return Promise.resolve(null);
+    var nonceG = p256PointAdd(p256PointMultiply(simS,
+        { x: P256_GX, y: P256_GY }),
+      p256PointMultiply(rangeModN(-simC), rollPoint));
+    var nonceH = p256PointAdd(p256PointMultiply(simS, basePoint),
+      p256PointMultiply(rangeModN(-simC), nullifierPoint));
+    if (nonceG === null || nonceH === null) {
+      return Promise.resolve(null);
+    }
+    branches[i] = { challenge: simChallenge, response: simResponse };
+    pairs[i] = [formatP256PublicKey(nonceG),
+      formatP256PublicKey(nonceH)];
+  }
+  var nonceHex = randomProofScalar();
+  if (nonceHex === null) return Promise.resolve(null);
+  var trueNonceG = proofCommitmentForNonce(nonceHex);
+  var trueNonceH = p256PointMultiply(BigInt("0x" + nonceHex), basePoint);
+  if (trueNonceG === null || trueNonceH === null) {
+    return Promise.resolve(null);
+  }
+  pairs[voterIndex] = [trueNonceG, formatP256PublicKey(trueNonceH)];
+  return voteNullifierChallenge(id, keys, nullifierHex, pairs)
+    .then(function (challenge) {
+      if (challenge === null) return null;
+      var others = P256_ZERO;
+      for (var j = 0; j < keys.length; j++) {
+        if (j === voterIndex) continue;
+        others = rangeModN(others + BigInt("0x" + branches[j].challenge));
+      }
+      var trueChallenge = rangeModN(BigInt("0x" + challenge) - others);
+      var trueResponse = rangeModN(BigInt("0x" + nonceHex) +
+        trueChallenge * x);
+      branches[voterIndex] = {
+        challenge: p256IntToHex(trueChallenge),
+        response: p256IntToHex(trueResponse) };
+      return formatVoteNullifier(nullifierHex, branches);
+    });
+}
+
+/* The voter's whole move: their private key, the
+   published roll and the election's name in, the
+   cast line out. The key must be a roll member's
+   own — its public point is found in the roll
+   the way tool 34 finds its signer — and a key
+   that stands on no roll gets null: eligibility
+   is the roll, and this page mints none. The
+   private key is read for this one step and
+   stored nowhere, as everywhere on this page. */
+function castVoteNullifier(privateKeyHex, rollText, electionId) {
+  var id = parseVoteElectionId(electionId);
+  var keys = parseVoteRoll(rollText);
+  if (id === null || keys === null) return Promise.resolve(null);
+  return agreementPrivateParts(privateKeyHex).then(function (parts) {
+    if (!parts) return null;
+    var points = [];
+    for (var i = 0; i < keys.length; i++) points.push(parseP256Point(keys[i]));
+    var voterIndex = ringSignerIndex(points, parts);
+    if (voterIndex < 0) return null;
+    return voteNullifierBasePoint(id).then(function (baseHex) {
+      if (baseHex === null) return null;
+      var basePoint = parseP256Point(baseHex);
+      if (basePoint === null) return null;
+      var nullifierPoint = p256PointMultiply(
+        BigInt("0x" + parts.scalarHex), basePoint);
+      if (nullifierPoint === null) return null;
+      var nullifierHex = formatP256PublicKey(nullifierPoint);
+      var attempt = function (triesLeft) {
+        return voteNullifierAttempt(id, keys, parts.scalarHex,
+          voterIndex, basePoint, nullifierHex)
+          .then(function (line) {
+            if (line !== null) return line;
+            return triesLeft > 1 ? attempt(triesLeft - 1) : null;
+          });
+      };
+      return attempt(4);
+    });
+  });
+}
+
+/* The checker's verdict, needing no secret of any
+   kind: rebuild every branch's two nonce points
+   from its challenge and response — on the base
+   point against the roll key, on the election's
+   generator against the nullifier — re-hash the
+   challenge from them, and check that the branch
+   challenges sum to it. True when it all holds;
+   false — never null — when every piece is
+   well-formed and one fails: a proof checked
+   under another election's name, against a
+   reordered roll, with a response nudged, or
+   transplanted onto another voter's nullifier —
+   including the both-branches-simulated forgery
+   a stranger assembles from random numbers, which
+   fails the challenge sum except with negligible
+   probability. Null when a piece cannot even be
+   parsed, or the branch count is not the roll's,
+   so "not proved" and "cannot be checked" never
+   blur. A branch whose rebuilt nonce point is
+   the identity is false: an honest cast never
+   produces one — its prover redraws — and the
+   identity cannot be spelled into the hash. */
+function verifyVoteNullifier(rollText, electionId, lineText) {
+  var id = parseVoteElectionId(electionId);
+  var keys = parseVoteRoll(rollText);
+  var cast = parseVoteNullifier(lineText);
+  if (id === null || keys === null || cast === null ||
+      cast.branches.length !== keys.length) {
+    return Promise.resolve(null);
+  }
+  return voteNullifierBasePoint(id).then(function (baseHex) {
+    if (baseHex === null) return null;
+    var basePoint = parseP256Point(baseHex);
+    var nullifierPoint = parseP256Point(cast.nullifier);
+    if (basePoint === null || nullifierPoint === null) return null;
+    var pairs = [];
+    for (var i = 0; i < keys.length; i++) {
+      var branch = cast.branches[i];
+      var c = BigInt("0x" + branch.challenge);
+      var s = BigInt("0x" + branch.response);
+      var rollPoint = parseP256Point(keys[i]);
+      if (rollPoint === null) return null;
+      var nonceG = p256PointAdd(p256PointMultiply(s,
+          { x: P256_GX, y: P256_GY }),
+        p256PointMultiply(rangeModN(-c), rollPoint));
+      var nonceH = p256PointAdd(p256PointMultiply(s, basePoint),
+        p256PointMultiply(rangeModN(-c), nullifierPoint));
+      if (nonceG === null || nonceH === null) return false;
+      pairs.push([formatP256PublicKey(nonceG),
+        formatP256PublicKey(nonceH)]);
+    }
+    return voteNullifierChallenge(id, keys, cast.nullifier, pairs)
+      .then(function (challenge) {
+        if (challenge === null) return null;
+        var sum = P256_ZERO;
+        for (var j = 0; j < cast.branches.length; j++) {
+          sum = rangeModN(sum + BigInt("0x" + cast.branches[j].challenge));
+        }
+        return sum === BigInt("0x" + challenge);
+      });
+  });
+}
+
+/* The board's whole double-vote check, and the
+   simplest function on this page: two cast lines
+   in, whether they carry the same nullifier out.
+   True means the same voter casting in the same
+   election a second time — the nullifier is
+   deterministic, so a repeat cannot disguise
+   itself — and a board that has accepted the
+   first must refuse the second. False means two
+   different nullifiers: two different voters, or
+   one voter in two different elections, whose
+   nullifiers are unrelated points by design.
+   Null when either line cannot even be read. */
+function voteNullifiersMatch(lineA, lineB) {
+  var a = parseVoteNullifier(lineA);
+  var b = parseVoteNullifier(lineB);
+  if (a === null || b === null) return null;
+  return a.nullifier === b.nullifier;
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -10845,7 +11289,15 @@ if (typeof module !== "undefined" && module.exports) {
                      splitTTallySecretFor, makeThresholdTally,
                      checkTTallyShare, formatTTallyPartial,
                      parseTTallyPartial, parseTTallyPartials,
-                     thresholdTallyPartial, thresholdTallyOpen };
+                     thresholdTallyPartial, thresholdTallyOpen,
+                     VOTENULL_FORMAT, VOTENULL_BASE_PREFIX,
+                     VOTENULL_CHALLENGE_PREFIX,
+                     VOTENULL_MIN_ROLL, VOTENULL_MAX_ROLL,
+                     parseVoteElectionId, parseVoteRoll,
+                     voteNullifierBasePoint, voteNullifierChallenge,
+                     formatVoteNullifier, parseVoteNullifier,
+                     voteNullifierForScalar, castVoteNullifier,
+                     verifyVoteNullifier, voteNullifiersMatch };
 }
 
 if (typeof document !== "undefined") {
@@ -14210,6 +14662,109 @@ if (typeof document !== "undefined") {
         "into the tally's mask. Only the total was read; no " +
         "single ballot was opened, and no trustee under the " +
         "quorum could have produced this answer.";
+    });
+
+    /* --- one person, one vote (election nullifier) --- */
+    document.getElementById("votenull-cast").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("votenull-cast-result");
+      var out = document.getElementById("vn-cast-out");
+      status.textContent = "Casting locally…";
+      castVoteNullifier(
+        document.getElementById("vn-cast-priv").value,
+        document.getElementById("vn-cast-roll").value,
+        document.getElementById("vn-cast-election").value)
+        .then(function (line) {
+          if (line === null) {
+            out.value = "";
+            status.textContent = "No cast was made: the " +
+              "election name must be 1 to 64 characters with no " +
+              "colon, the roll must be 2 to 6 whole public keys " +
+              "with no repeats, and the private key must be the " +
+              "private half of one of the roll's keys — a key " +
+              "that stands on no roll is not eligible here, and " +
+              "this page mints no eligibility.";
+            return;
+          }
+          out.value = line;
+          status.textContent = "Cast. Hand this line to the " +
+            "counting board with your ballot from tools 51 and " +
+            "52. It proves a roll member cast, and carries the " +
+            "nullifier the board records — it does not name " +
+            "you, and casting again in this same election " +
+            "produces the same nullifier, so a second cast " +
+            "cannot slip past the board. Your private key was " +
+            "read for this step only and stored nowhere.";
+        });
+    });
+
+    document.getElementById("votenull-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("votenull-check-result");
+      var out = document.getElementById("vn-check-out");
+      status.textContent = "Checking locally…";
+      verifyVoteNullifier(
+        document.getElementById("vn-check-roll").value,
+        document.getElementById("vn-check-election").value,
+        document.getElementById("vn-check-line").value)
+        .then(function (ok) {
+          if (ok === null) {
+            out.value = "";
+            status.textContent = "Cannot judge this: the " +
+              "election name must be 1 to 64 characters with no " +
+              "colon, the roll must be 2 to 6 whole public keys, " +
+              "and the cast must be a whole p4a-votenull-v1 line " +
+              "with one branch per roll member — a line that " +
+              "cannot be read gets no verdict, rather than a " +
+              "wrong one.";
+            return;
+          }
+          out.value = ok
+            ? "Eligible — a member of this roll cast this nullifier in this election."
+            : "Not proved — this cast does not hold for this roll in this election.";
+          status.textContent = ok
+            ? "Eligible — without naming anyone: every branch " +
+              "balances on both bases, and the branch challenges " +
+              "sum to the challenge rehashed from the election, " +
+              "the roll, the nullifier and the proof's own " +
+              "nonce points. Record the nullifier: a second " +
+              "cast carrying it is the same voter again."
+            : "Not proved: something here does not balance — a " +
+              "cast made under another election's name, a roll " +
+              "in another order, a nudged challenge or response, " +
+              "or a proof transplanted onto another voter's " +
+              "nullifier.";
+        });
+    });
+
+    document.getElementById("votenull-twice").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("votenull-twice-result");
+      var out = document.getElementById("vn-twice-out");
+      var same = voteNullifiersMatch(
+        document.getElementById("vn-twice-a").value,
+        document.getElementById("vn-twice-b").value);
+      if (same === null) {
+        out.value = "";
+        status.textContent = "Cannot compare these: both " +
+          "must be whole p4a-votenull-v1 cast lines — a line " +
+          "that cannot be read gets no verdict, rather than a " +
+          "wrong one.";
+        return;
+      }
+      out.value = same
+        ? "Same nullifier — the same voter, casting again in the same election."
+        : "Different nullifiers — two different voters, or one voter in two different elections.";
+      status.textContent = same
+        ? "The same voter again: a nullifier is deterministic " +
+          "in the voter and the election, so a repeat cast " +
+          "cannot disguise itself. A board that accepted the " +
+          "first of these must refuse the second."
+        : "No repeat here: different nullifiers are different " +
+          "voters in this election — or the same voter in a " +
+          "different election, whose nullifier is an unrelated " +
+          "point by design, so nobody can follow them from one " +
+          "election to the next.";
     });
 
     /* --- copy donation address --- */

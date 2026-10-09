@@ -1215,11 +1215,47 @@ renewable resource that pays for shielded transactions.
   pooling partials computed over a single
   ballot, holds the secret, while no one
   trustee and no sub-quorum group can open
-  anything; eligibility, double voting,
-  coercion and receipts stay out of scope, and
-  validity still comes from tool 52. Not a
-  Compact circuit proof, and not a format any
-  chain or wallet checks.
+  anything; coercion and receipts stay out of
+  scope, and validity still comes from tool
+  52. Eligibility and the voted-twice problem
+  are tool 54's subject, below. Not a Compact
+  circuit proof, and not a format any chain or
+  wallet checks.
+- **One person, one vote — an election
+  nullifier** — the eligibility and
+  double-voting answer tools 51, 52 and 53
+  each leave open. The voter roll is public
+  (2–6 eligible voters' keys, in an agreed
+  order); the election's name is hashed into a
+  curve point whose discrete log nobody knows
+  (tool 35's try-and-increment, under this
+  tool's own label), an independent generator
+  for that election alone. A voter's
+  nullifier is their secret times that
+  generator, carried in a `p4a-votenull-v1`
+  cast line with a Cramer–Damgård–Schoenmakers
+  OR proof (tool 44's equal-log statement over
+  two bases, composed as tool 52 composes it)
+  that some roll member's secret made it — the
+  checker learns that an eligible voter cast
+  and which nullifier to record, and nothing
+  about which member. Deterministic, so a
+  second cast in the same election carries
+  the same nullifier and a board can refuse
+  it by equality alone; unrelated across
+  elections, so nobody can follow a voter
+  from one election to the next. Honestly
+  labelled: the roll is public and the
+  anonymity set is exactly the roll (a roll
+  of two is a coin flip); the nullifier does
+  not hide the ballot (tools 51 and 52 do
+  that) and does not stop coercion or
+  vote-selling — receipt-freeness is not
+  offered; whoever holds a roll key can cast
+  as that member, once; roll order and the
+  election's name are part of the statement.
+  Not a Compact circuit proof, and not a
+  format any chain or wallet checks.
 
 ## Guides
 
