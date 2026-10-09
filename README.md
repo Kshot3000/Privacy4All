@@ -1569,7 +1569,51 @@ renewable resource that pays for shielded transactions.
   hands back is a practice key that exists
   only in the page. Not a Compact circuit
   proof, and not a format any chain or
-  wallet checks.
+  wallet checks. Tool 63 below signs the
+  share deliveries too.
+
+- **Prove you sent that share — sign the
+  share delivery** — the answer to tool 60's
+  named hole: the accused dealer answers a
+  complaint by broadcasting the share they
+  *claim* to have dealt, and because the
+  private deliveries were unsigned, a dealer
+  who dealt a bad share can answer with a
+  different share than the one they sent —
+  the honest one, computed in a moment from
+  their own polynomial — and stand dismissed,
+  while the recipient cannot prove what
+  arrived. Now the signing key of tool 62
+  signs every private `p4a-dkgshare-v1`
+  share line a dealer deals, with tool 33's
+  own Schnorr signature over a labelled
+  transcript of the line's canonical
+  spelling, spelled as one
+  `p4a-jtsharesig-v1` line naming quorum,
+  dealer and recipient, travelling with the
+  share over the same private channel. A
+  signed bad share is evidence that needs
+  no answer: the signature verifies over
+  exactly the share that fails its Feldman
+  check, so the bad delivery is attributable
+  to the dealer's key, and a later honest
+  broadcast does not balance against the
+  held signature. A signed honest share
+  clears the delivery on its face; an
+  unsigned or badly signed pair attributes
+  nothing, and that recipient is back to
+  tool 60's round. Honestly labelled: the
+  evidence is the share itself, so
+  publishing it in a complaint shows that
+  one dealt share to everyone (one summand,
+  opening nothing — the same broadcast
+  tool 60's answer already makes); a
+  signature proves the key sent the share,
+  not who holds the key; and a dealer who
+  never signs cannot be convicted here —
+  that absence is tool 60's missing-share
+  ground. Not a Compact circuit proof, and
+  not a format any chain or wallet checks.
 
 ## Guides
 

@@ -13876,6 +13876,245 @@ function verifySignedJointTallyRound(signKeysText, commitmentsText,
   });
 }
 
+/* ---------- 63. Prove you sent that share — sign the share delivery ----------
+   Tool 60's complaint round has one soft step, and
+   its page states it without flinching: the accused
+   dealer answers a complaint by broadcasting "the
+   very share line they claim to have dealt". Claim
+   is the load-bearing word. The share itself
+   travelled privately, unsigned, so a dealer who
+   dealt a bad share can simply compute the honest
+   share for that recipient — they hold the whole
+   polynomial — broadcast THAT, watch it pass the
+   Feldman check, and stand dismissed, while the
+   recipient holds a bad share they cannot prove
+   was ever sent to them. Their word against the
+   dealer's broadcast, and the broadcast wins.
+
+   This tool closes the hole at the delivery, with
+   tool 62's own machinery. The signing key a
+   trustee published before the round signs not
+   only their broadcast commitment line but every
+   private share line they deal: the signature is
+   tool 33's Schnorr signature, unchanged, over
+   this tool's labelled transcript of the share
+   line in its canonical spelling, published to
+   the recipient with the share as one
+   p4a-jtsharesig-v1 line naming quorum, dealer
+   and recipient. The recipient keeps the pair.
+   From then on the evidence needs no answer: if
+   the dealt share fails its Feldman check AND
+   the signature over exactly that line verifies
+   under the dealer's published key, the bad
+   share is attributable — the dealer's key sent
+   that share — and a different, honest share
+   broadcast later proves nothing about what was
+   sent, because the held signature does not
+   balance over it. If the signature verifies and
+   the share passes, the delivery was honest and
+   a complaint over it is false on its face. If
+   the signature does not verify, the pair
+   attributes nothing: a recipient holding an
+   unsigned or badly signed share is back in tool
+   60's world, which is why a group that wants
+   this evidence requires signed deliveries as
+   its discipline from the first dealing.
+
+   The honest limits are plain, and inherited.
+   The evidence IS the share: publishing the pair
+   in a complaint shows that one dealt share to
+   everyone — exactly what tool 60's answer
+   already broadcasts, and one summand of one
+   trustee's final share, which alone opens
+   nothing — but until the moment a recipient
+   chooses to accuse, a signed share line is a
+   secret of the same rank as the share itself
+   and travels just as privately. A signature
+   proves the key sent that share; it does not
+   prove who holds the key — tool 62's custody
+   limit stands whole. A dealer who simply never
+   signs a delivery cannot be convicted by this
+   tool; absence is tool 60's missing-share
+   ground, not this tool's bad-share verdict.
+   And the frame is the house one: a real Schnorr
+   signature computed and judged locally, spelled
+   in this hub's own p4a-jtsharesig-v1 lines
+   around tools 33, 38, 59, 60 and 62's unchanged
+   formats — not a format any chain or wallet
+   checks, not one of Midnight's Compact circuit
+   proofs. Never paste a real wallet key or a
+   production private key into any web page,
+   including this one. */
+var JTSHARESIG_FORMAT = "p4a-jtsharesig-v1";
+var JTSHARESIG_PREFIX = "privacy4all-jtsharesig-v1";
+
+/* A share-signature line: the format tag, the
+   round's quorum, the dealer's number, the
+   RECIPIENT's number, and tool 33's signature
+   flattened to its two pieces, exactly as tool
+   62's signature line flattens them. Naming the
+   recipient in the line is what stops a signature
+   made for one trustee's delivery being re-labelled
+   as another's: the check below holds the line's
+   recipient against the share line's own. */
+function formatJointTallyShareSignature(threshold, dealer, recipient,
+                                        signatureText) {
+  var parsed = parseSchnorrSignature(signatureText);
+  if (!validThresholdValue(threshold) ||
+      !validThresholdIndexValue(dealer) ||
+      !validThresholdIndexValue(recipient) || parsed === null) {
+    return null;
+  }
+  return JTSHARESIG_FORMAT + ":" + threshold + ":" + dealer + ":" +
+    recipient + ":" + parsed.commitment + ":" + parsed.response;
+}
+
+function parseJointTallyShareSignature(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 6 || parts[0] !== JTSHARESIG_FORMAT) {
+    return null;
+  }
+  if (!/^[2-3]$/.test(parts[1])) return null;
+  var dealer = parseThresholdIndexText(parts[2]);
+  var recipient = parseThresholdIndexText(parts[3]);
+  var signature = formatSchnorrSignature(parts[4], parts[5]);
+  if (dealer === null || recipient === null || signature === null) {
+    return null;
+  }
+  var parsed = parseSchnorrSignature(signature);
+  return { threshold: Number(parts[1]), dealer: dealer,
+           recipient: recipient, commitment: parsed.commitment,
+           response: parsed.response, signature: signature };
+}
+
+/* The signed message: this tool's label over the
+   share line in its canonical spelling — re-spelled
+   from its parse, as tools 61 and 62 canonicalise
+   theirs — so the signature names the delivery and
+   not one dealer's whitespace or casing. A share
+   line that does not parse signs nothing. The
+   label is this tool's own, domain-separated from
+   tool 62's commitment transcript: a signature
+   over a dealing can never be read as a signature
+   over a delivery, or the reverse. */
+function jointTallySignedShareMessage(shareText) {
+  var parsed = parseDkgShareLine(shareText);
+  if (parsed === null) return null;
+  var canonical = formatDkgShareLine(parsed.threshold, parsed.dealer,
+    parsed.recipient, parsed.share);
+  if (canonical === null) return null;
+  return JTSHARESIG_PREFIX + "\n" + canonical;
+}
+
+/* Signing one delivery: the dealer's private key
+   (tool 62's practice key, made for this round)
+   and the share line they are about to send in,
+   the signature line out — tool 33's own signer
+   over this tool's labelled message, nonce drawn
+   fresh inside it. The line goes to the recipient
+   WITH the share, over the same private channel;
+   it is a secret of the same rank until the
+   recipient chooses to publish it as evidence. */
+function signJointTallyShare(privateKeyHex, shareText) {
+  var parsed = parseDkgShareLine(shareText);
+  var message = jointTallySignedShareMessage(shareText);
+  if (parsed === null || message === null) {
+    return Promise.resolve(null);
+  }
+  return signSchnorrMessage(privateKeyHex, message)
+    .then(function (signature) {
+      if (signature === null) return null;
+      return formatJointTallyShareSignature(parsed.threshold,
+        parsed.dealer, parsed.recipient, signature);
+    });
+}
+
+/* Checking one signed delivery, publicly: the
+   dealer's published signing-key line, the share
+   line and the signature line in, a verdict out.
+   True when tool 33's equation balances under the
+   published key over this tool's message — the
+   key sent this share to this recipient. False —
+   never null — when every piece is well-formed
+   and names the same dealer, recipient and quorum,
+   and the signature simply does not balance: it
+   was made by another key, or over another share.
+   Null when a piece cannot be parsed, or the lines
+   name different dealers, recipients or quorums —
+   evidence about a different delivery judges
+   nothing. */
+function checkJointTallyShareSignature(signKeyText, shareText,
+                                        signatureText) {
+  var key = parseJointTallySignKey(signKeyText);
+  var parsed = parseDkgShareLine(shareText);
+  var signature = parseJointTallyShareSignature(signatureText);
+  var message = jointTallySignedShareMessage(shareText);
+  if (key === null || parsed === null || signature === null ||
+      message === null) {
+    return Promise.resolve(null);
+  }
+  if (key.dealer !== parsed.dealer ||
+      key.threshold !== parsed.threshold ||
+      signature.dealer !== parsed.dealer ||
+      signature.recipient !== parsed.recipient ||
+      signature.threshold !== parsed.threshold) {
+    return Promise.resolve(null);
+  }
+  return verifySchnorrSignature(key.publicKey, message,
+    signature.signature);
+}
+
+/* Judging the evidence, whole: the round's
+   broadcast commitment set, the dealer's signing-
+   key line, the share line the recipient says
+   they were dealt, and the signature line that
+   arrived with it. Two independent recomputations
+   meet here — the signature check above, and
+   tool 38's Feldman check of the share against
+   the dealer's broadcast commitments — and the
+   verdict is their combination, spelled out:
+   signed and shareValid is an honest delivery
+   (a complaint over it is false on its face);
+   signed and NOT shareValid is the attributable
+   bad share — the dealer's key provably sent a
+   share their own commitments condemn, and no
+   later broadcast of a different share answers
+   it; NOT signed is unattributed — the pair
+   proves nothing about the dealer, whatever the
+   share's Feldman verdict, and the recipient is
+   back to tool 60's round. Null when the record
+   cannot be judged at all: a malformed line, a
+   dealer outside the commitment set, a signing
+   key naming another dealer or quorum, a share
+   addressed outside the round. */
+function judgeSignedJointTallyShareEvidence(commitmentsText,
+                                              signKeyText, shareText,
+                                              signatureText) {
+  var set = parseDkgCommitmentSet(commitmentsText);
+  var share = parseDkgShareLine(shareText);
+  if (set === null || share === null ||
+      share.threshold !== set.threshold ||
+      !set.byDealer[share.dealer] ||
+      share.recipient < 1 || share.recipient > set.count) {
+    return Promise.resolve(null);
+  }
+  return checkJointTallyShareSignature(signKeyText, shareText,
+      signatureText)
+    .then(function (signed) {
+      if (signed === null) return null;
+      var shareValid = verifyDkgShareParsed(
+        set.byDealer[share.dealer], share);
+      if (shareValid === null) return null;
+      return { threshold: set.threshold, dealer: share.dealer,
+               recipient: share.recipient, signed: signed,
+               shareValid: shareValid,
+               verdict: signed ?
+                 (shareValid ? "attributable-good-share" :
+                   "attributable-bad-share") : "unattributed" };
+    });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -14151,7 +14390,14 @@ if (typeof module !== "undefined" && module.exports) {
                      makeJointTallySigningKey,
                      signJointTallyCommitment,
                      checkJointTallySignature,
-                     verifySignedJointTallyRound };
+                     verifySignedJointTallyRound,
+                     JTSHARESIG_FORMAT, JTSHARESIG_PREFIX,
+                     formatJointTallyShareSignature,
+                     parseJointTallyShareSignature,
+                     jointTallySignedShareMessage,
+                     signJointTallyShare,
+                     checkJointTallyShareSignature,
+                     judgeSignedJointTallyShareEvidence };
 }
 
 if (typeof document !== "undefined") {
@@ -18444,6 +18690,135 @@ if (typeof document !== "undefined") {
             "the round with signatures in place, or excludes " +
             "the named dealers, in tool 60's shape — " +
             "governance, off this page.";
+        });
+    });
+
+    /* --- prove you sent that share (signed share delivery) --- */
+    document.getElementById("joint-share-sign-sign").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("joint-share-sign-sign-result");
+      var out = document.getElementById("jss-sig-out");
+      signJointTallyShare(
+        document.getElementById("jss-sign-private").value,
+        document.getElementById("jss-sign-share").value)
+        .then(function (signed) {
+          if (signed === null) {
+            out.value = "";
+            status.textContent = "Nothing signed: paste your " +
+              "whole private key line and one whole " +
+              "p4a-dkgshare-v1 share line you are about to " +
+              "deal — a signature over a partial line attributes " +
+              "a delivery that never happened.";
+            return;
+          }
+          out.value = signed;
+          status.textContent = "Signed locally: send the " +
+            "signature line to the recipient WITH the share " +
+            "line, over the same private channel. The pair is " +
+            "a secret of the same rank as the share until the " +
+            "recipient chooses to publish it as evidence.";
+        });
+    });
+
+    document.getElementById("joint-share-sign-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("joint-share-sign-check-result");
+      var out = document.getElementById("jss-check-out");
+      checkJointTallyShareSignature(
+        document.getElementById("jss-check-signkey").value,
+        document.getElementById("jss-check-share").value,
+        document.getElementById("jss-check-signature").value)
+        .then(function (verdict) {
+          if (verdict === null) {
+            out.value = "";
+            status.textContent = "No verdict: the signing-key " +
+              "line, the share line and the signature line must " +
+              "all be whole lines naming the same dealer, the " +
+              "same recipient and the same quorum — evidence " +
+              "about a different delivery judges nothing.";
+            return;
+          }
+          if (verdict === true) {
+            out.value = "This signature verifies: the dealer's " +
+              "key sent exactly this share to this recipient.";
+            status.textContent = "Checked locally, from the " +
+              "three lines alone: the private key behind the " +
+              "published signing key sent exactly this share " +
+              "line to the recipient it names. That proves the " +
+              "key sent it — who holds the key is a custody " +
+              "question no page can answer.";
+            return;
+          }
+          out.value = "This signature does NOT verify under " +
+            "the signing-key line: it was made by another key, " +
+            "or over another share.";
+          status.textContent = "Checked locally: this share " +
+            "cannot be attributed to the dealer whose key this " +
+            "is — the signature offered for it does not " +
+            "balance. An unattributed share is tool 60's " +
+            "world, not evidence in the next form.";
+        });
+    });
+
+    document.getElementById("joint-share-sign-evidence").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("joint-share-sign-evidence-result");
+      var out = document.getElementById("jss-evidence-out");
+      judgeSignedJointTallyShareEvidence(
+        document.getElementById("jss-evidence-commitments").value,
+        document.getElementById("jss-evidence-signkey").value,
+        document.getElementById("jss-evidence-share").value,
+        document.getElementById("jss-evidence-signature").value)
+        .then(function (judged) {
+          if (judged === null) {
+            out.value = "";
+            status.textContent = "No judgement: the commitment " +
+              "set must be the whole round, the signing key " +
+              "the accused dealer's own line under its quorum, " +
+              "and the share and signature whole lines for a " +
+              "dealer and recipient of that round — evidence " +
+              "from a partial record judges nothing.";
+            return;
+          }
+          if (judged.verdict === "attributable-bad-share") {
+            out.value = "Attributable bad share: dealer " +
+              judged.dealer + "'s key signed this share for " +
+              "trustee " + judged.recipient + ", and the share " +
+              "FAILS its Feldman check against the dealer's own " +
+              "broadcast commitments.";
+            status.textContent = "Judged locally: the bad " +
+              "share is attributable — no answer the dealer " +
+              "broadcasts later can outweigh the signature " +
+              "they sent with it, because that signature does " +
+              "not balance over any other share. This is the " +
+              "evidence tool 60's complaint round was missing: " +
+              "file the complaint there with this pair on the " +
+              "record.";
+            return;
+          }
+          if (judged.verdict === "attributable-good-share") {
+            out.value = "Attributable honest delivery: dealer " +
+              judged.dealer + "'s key signed this share for " +
+              "trustee " + judged.recipient + ", and the share " +
+              "PASSES its Feldman check.";
+            status.textContent = "Judged locally: the delivery " +
+              "was honest and is attributable — a complaint " +
+              "over this share is false on its face, and the " +
+              "round can see it without taking anyone's word.";
+            return;
+          }
+          out.value = "Unattributed: the signature does NOT " +
+            "verify under dealer " + judged.dealer + "'s " +
+            "published key, so this pair proves nothing about " +
+            "what that dealer sent — whatever the share's own " +
+            "check says.";
+          status.textContent = "Judged locally: an " +
+            "unattributed pair is not evidence against the " +
+            "dealer. The recipient is back to tool 60's " +
+            "complaint round, where the dealer's broadcast " +
+            "answer is judged — the hole this tool exists to " +
+            "close is closed only for deliveries that were " +
+            "actually signed.";
         });
     });
 
