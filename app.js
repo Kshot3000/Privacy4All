@@ -8626,6 +8626,463 @@ function finishPsiCardinality(stateText, replyText) {
   return psiCardinalityFor(state.scalar, replyText);
 }
 
+/* ---------- 49. Common ground, with the note attached — PSI with payloads ----------
+
+   Tools 47 and 48 answer questions ABOUT the
+   overlap — which entries, or only how many. Often
+   the overlap is not the end of the question: a
+   shared contact is worth having because of what
+   comes WITH it — a room number, a handle on
+   another network, "ask for the blue folder". The
+   responder holds a short note for each of their
+   entries, and the initiator should receive the
+   notes for the shared entries and no others:
+   delivering every note would hand over the
+   private part of the responder's list in all but
+   name, and delivering none makes the overlap a
+   list of names with nothing to act on. This is
+   the labelled shape of a private set
+   intersection, and it turns on one point the
+   earlier tools never needed: b×H(entry).
+
+   Read the exchange as an oblivious evaluation.
+   The responder's scalar b is a key, and
+   b×H(entry) is its output on that entry. The
+   responder can compute that output for every one
+   of their own entries directly. The initiator
+   can obtain it for exactly the entries THEY sent,
+   and no others: the reply's double-blinded point
+   for entry i is b×(a×H(entry)), and dividing out
+   the initiator's own scalar — multiplying by
+   a^-1 under the curve order — leaves b×H(entry).
+   For an entry the responder holds but the
+   initiator did not send, the initiator never
+   holds that point in any form they can unblind:
+   the request they made simply never contained
+   it. So each note is sealed under the point
+   b×H(its entry): labelled SHA-256 pad blocks
+   (privacy4all-psi-payload-v1) XORed with the
+   note, plus a truncated SHA-256 tag under
+   privacy4all-psi-payload-mac-v1 over the point
+   and the ciphertext, so a wrong key fails closed
+   instead of yielding gibberish. The initiator
+   tries each of their unblinded points against
+   each sealed note; a note opens exactly when its
+   entry stands on both lists.
+
+   Two shape decisions carry the privacy, and
+   both are stated because both are easy to miss.
+   The double-blinded half stays in the request's
+   own order, as in tool 47 — the initiator sent
+   that order, it names nothing to the responder,
+   and it is what ties each unblinded point to the
+   entry it belongs to. The sealed notes are
+   shuffled: their order would echo the order the
+   responder typed their list in. And the reply
+   contains NO blinded list at all. In tool 47 the
+   responder's blinded points are harmless cargo —
+   raised by a they name candidate matches. Here
+   those same points ARE the note keys: a reply
+   that carried them alongside the sealed notes
+   would let anyone holding the reply open every
+   note, shared or not, and the whole construction
+   would be theatre. What is absent from this
+   reply is the security property.
+
+   What each side learns, stated plainly. The
+   initiator learns the shared entries WITH their
+   notes, the SIZE of the responder's list (one
+   sealed note per entry — the count travels even
+   though the entries do not), and roughly each
+   note's length, because a pad cipher's length is
+   its message's length. The responder learns the
+   size of the initiator's list and nothing else
+   at all, exactly as in tool 47. The honest
+   limits are plain. This is the semi-honest core:
+   the tag proves a note was sealed under the
+   entry's true point, never that the note is
+   TRUE — a responder can write anything in a
+   note, and the initiator who acts on one trusts
+   the responder, not the maths, for its content.
+   A note's length leaks as stated; set sizes and
+   the fact and timing of the exchange leak as in
+   tool 47. The state line holds a and its inverse
+   unblinds the double-blinded points, so it is
+   kept the way tool 47 says: with a copy of the
+   reply it recomputes the shared notes — and
+   nothing beyond them. The frame is the house
+   one: a real labelled intersection computed
+   locally, but the lines are this hub's own
+   spellings over P-256 teaching arithmetic — the
+   p4a-psib-v1 request and p4a-psistate-v1 state of
+   tool 47, a p4a-psid-v1 double-blinded line, and
+   this tool's own p4a-psip-v1 line of sealed
+   notes — not a format any chain or wallet
+   checks, not one of Midnight's Compact circuit
+   proofs, and the curve code is the same teaching
+   implementation as tool 30's, not an audited
+   library and not side-channel resistant. Never
+   paste a real wallet key or a production private
+   key into any web page, including this one. */
+var PSI_PAYLOAD_FORMAT = "p4a-psip-v1";
+var PSI_PAYLOAD_PREFIX = "privacy4all-psi-payload-v1";
+var PSI_PAYLOAD_MAC_PREFIX = "privacy4all-psi-payload-mac-v1";
+var PSI_PAYLOAD_MAC_HEX = 32;
+var PSI_MAX_PAYLOAD_CHARS = 120;
+var PSI_MAX_PAYLOAD_BYTES = 480;
+
+/* One note, as typed beside its entry: trimmed —
+   a note is one line of a textarea, and its
+   surrounding whitespace is the line's spelling,
+   not the note — then one to
+   PSI_MAX_PAYLOAD_CHARS characters whose UTF-8
+   spelling fits PSI_MAX_PAYLOAD_BYTES. Blank,
+   over the caps, or not a string: null. Notes may
+   repeat — two entries can honestly carry the same
+   note — so no uniqueness is asked here, unlike
+   the entries themselves. */
+function parsePsiPayload(text) {
+  if (typeof text !== "string") return null;
+  var payload = text.trim();
+  if (payload === "" || payload.length > PSI_MAX_PAYLOAD_CHARS) return null;
+  if (secretToBytes(payload).length > PSI_MAX_PAYLOAD_BYTES) return null;
+  return payload;
+}
+
+/* The notes as a block: one per line, trailing
+   blank lines ignored (a textarea's final newline
+   is not a note), any other blank line a null —
+   a gap would silently shift every later note
+   onto the wrong entry. One to PSI_MAX_ITEMS
+   notes; matching them against the entries is the
+   answering function's gate, not this one's. */
+function parsePsiPayloads(text) {
+  if (typeof text !== "string") return null;
+  var pieces = text.split(/\r?\n/);
+  while (pieces.length > 0 && pieces[pieces.length - 1].trim() === "") {
+    pieces.pop();
+  }
+  if (pieces.length < 1 || pieces.length > PSI_MAX_ITEMS) return null;
+  var out = [];
+  for (var i = 0; i < pieces.length; i++) {
+    var payload = parsePsiPayload(pieces[i]);
+    if (payload === null) return null;
+    out.push(payload);
+  }
+  return out;
+}
+
+/* The pad for one note: labelled SHA-256 blocks of
+   the sealing point's spelling, counted from
+   zero — tool 46's pad shape under this tool's
+   own label, so no other tool's hash can stand
+   in, and the point alone is the key. */
+function psiPayloadPadBytes(pointHex, length) {
+  var point = parseP256Point(pointHex);
+  if (point === null || typeof length !== "number" ||
+      !isFinite(length) || Math.floor(length) !== length ||
+      length < 1 || length > PSI_MAX_PAYLOAD_BYTES) {
+    return Promise.resolve(null);
+  }
+  var canonical = formatP256PublicKey(point);
+  var blocks = [];
+  var produced = 0;
+  var step = function (counter) {
+    if (produced >= length) {
+      var out = new Uint8Array(length);
+      var offset = 0;
+      for (var i = 0; i < blocks.length && offset < length; i++) {
+        var take = Math.min(blocks[i].length, length - offset);
+        out.set(blocks[i].subarray(0, take), offset);
+        offset += take;
+      }
+      return Promise.resolve(out);
+    }
+    return sha256Hex(PSI_PAYLOAD_PREFIX + "\n" + canonical + "\n" + counter)
+      .then(function (digest) {
+        if (digest === null) return null;
+        var bytes = hexToBytes(digest);
+        if (bytes === null) return null;
+        blocks.push(bytes);
+        produced += bytes.length;
+        return step(counter + 1);
+      });
+  };
+  return step(0);
+}
+
+/* Seal one note under one point: the note XORed
+   with the point's pad, prefixed with the first
+   PSI_PAYLOAD_MAC_HEX hex of the tag hash over
+   the point and the ciphertext — one hex string,
+   tag first, so a reader can split it at a fixed
+   offset. Deterministic given point and note,
+   which is what lets tests pin a sealed note
+   against independent arithmetic; the privacy
+   does not rest on the seal being random, because
+   the point behind it is fresh per exchange. */
+function sealPsiPayload(pointHex, payloadText) {
+  var point = parseP256Point(pointHex);
+  var payload = parsePsiPayload(payloadText);
+  if (point === null || payload === null) return Promise.resolve(null);
+  var canonical = formatP256PublicKey(point);
+  var msgBytes = secretToBytes(payload);
+  return psiPayloadPadBytes(canonical, msgBytes.length).then(function (pad) {
+    if (pad === null) return null;
+    var cipher = new Uint8Array(msgBytes.length);
+    for (var i = 0; i < msgBytes.length; i++) cipher[i] = msgBytes[i] ^ pad[i];
+    var cipherHex = shareBytesToHex(cipher);
+    return sha256Hex(PSI_PAYLOAD_MAC_PREFIX + "\n" + canonical + "\n" + cipherHex)
+      .then(function (tag) {
+        if (tag === null) return null;
+        return tag.slice(0, PSI_PAYLOAD_MAC_HEX) + cipherHex;
+      });
+  });
+}
+
+/* A sealed note's spelling, checked: lowercase
+   hex, even length, the fixed tag plus at least
+   one ciphertext byte and at most a full note's
+   worth. Returns the split pieces, or null. */
+function parsePsiPayloadBlob(blobHex) {
+  if (typeof blobHex !== "string") return null;
+  var blob = blobHex.trim().toLowerCase();
+  if (!/^[0-9a-f]+$/.test(blob) || blob.length % 2 !== 0 ||
+      blob.length < PSI_PAYLOAD_MAC_HEX + 2 ||
+      blob.length > PSI_PAYLOAD_MAC_HEX + PSI_MAX_PAYLOAD_BYTES * 2) {
+    return null;
+  }
+  return { tag: blob.slice(0, PSI_PAYLOAD_MAC_HEX),
+    cipher: blob.slice(PSI_PAYLOAD_MAC_HEX) };
+}
+
+/* Open one sealed note with one point: the tag is
+   recomputed and compared BEFORE anything is
+   un-XORed, so a wrong point — every unshared
+   entry's point, every stranger's point — returns
+   null, never a garbled note presented as real.
+   Bytes that are not valid UTF-8, or a "note"
+   this page would not have sealed, are null too:
+   the opening fails closed, in the house style. */
+function openPsiPayload(pointHex, blobHex) {
+  var point = parseP256Point(pointHex);
+  var blob = parsePsiPayloadBlob(blobHex);
+  if (point === null || blob === null) return Promise.resolve(null);
+  var canonical = formatP256PublicKey(point);
+  return sha256Hex(PSI_PAYLOAD_MAC_PREFIX + "\n" + canonical + "\n" + blob.cipher)
+    .then(function (tag) {
+      if (tag === null || tag.slice(0, PSI_PAYLOAD_MAC_HEX) !== blob.tag) {
+        return null;
+      }
+      var cipher = hexToBytes(blob.cipher);
+      if (cipher === null) return null;
+      return psiPayloadPadBytes(canonical, cipher.length).then(function (pad) {
+        if (pad === null) return null;
+        var plain = new Uint8Array(cipher.length);
+        for (var i = 0; i < cipher.length; i++) plain[i] = cipher[i] ^ pad[i];
+        var payload = bytesToSecret(plain);
+        if (payload === null) return null;
+        return parsePsiPayload(payload);
+      });
+    });
+}
+
+/* The sealed notes as a line: the format tag, then
+   the notes in order, colon-joined — notes are hex
+   and carry no colon, so the spelling is exact.
+   One to PSI_MAX_ITEMS notes, no note repeated: a
+   repeated sealed note would be the same point
+   sealing the same text twice, which distinct
+   entries cannot honestly produce. */
+function formatPsiPayloadLine(blobs) {
+  if (!Array.isArray(blobs)) return null;
+  if (blobs.length < 1 || blobs.length > PSI_MAX_ITEMS) return null;
+  var canonical = [];
+  var seen = {};
+  for (var i = 0; i < blobs.length; i++) {
+    if (parsePsiPayloadBlob(blobs[i]) === null) return null;
+    var blob = blobs[i].trim().toLowerCase();
+    if (seen[blob]) return null;
+    seen[blob] = true;
+    canonical.push(blob);
+  }
+  return PSI_PAYLOAD_FORMAT + ":" + canonical.join(":");
+}
+
+function parsePsiPayloadLine(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length < 2 || parts.length > PSI_MAX_ITEMS + 1) return null;
+  if (parts[0] !== PSI_PAYLOAD_FORMAT) return null;
+  var blobs = [];
+  var seen = {};
+  for (var i = 1; i < parts.length; i++) {
+    if (parsePsiPayloadBlob(parts[i]) === null) return null;
+    var blob = parts[i].trim().toLowerCase();
+    if (seen[blob]) return null;
+    seen[blob] = true;
+    blobs.push(blob);
+  }
+  return blobs;
+}
+
+/* The payload reply as a text: two lines — first
+   the double-blinded line, in the request's own
+   order, then the sealed-notes line, shuffled.
+   Deliberately NOT tool 47's reply shape: there
+   is no blinded line here, because the responder's
+   blinded points are this exchange's note keys
+   and must never travel with the notes. A reader
+   who compares the two replies line by line sees
+   the security property as an absence. */
+function formatPsiPayloadReply(doublePoints, blobs) {
+  var doubleLine = formatPsiDouble(doublePoints);
+  var payloadLine = formatPsiPayloadLine(blobs);
+  if (doubleLine === null || payloadLine === null) return null;
+  return doubleLine + "\n" + payloadLine;
+}
+
+function parsePsiPayloadReply(text) {
+  if (typeof text !== "string") return null;
+  var lines = text.trim().split(/\r?\n/);
+  if (lines.length !== 2) return null;
+  var doublePoints = parsePsiDouble(lines[0]);
+  var payloadBlobs = parsePsiPayloadLine(lines[1]);
+  if (doublePoints === null || payloadBlobs === null) return null;
+  return { doublePoints: doublePoints, payloadBlobs: payloadBlobs };
+}
+
+/* The responder's move, from pieces: the request
+   line, their own list, their notes — one per
+   entry, in the list's order — and a caller-chosen
+   scalar in, the two-line payload reply out. The
+   request's points are double-blinded IN THE
+   REQUEST'S ORDER, as in tool 47: that order is
+   the initiator's own and it is what will tie
+   each unblinded key to its entry at the finish.
+   Their own entries are blinded once and each
+   note is sealed under its entry's blinded point
+   — a point that is computed here and then kept
+   off the reply entirely. The sealed notes are
+   shuffled before they travel, so their order
+   echoes nothing about the list they were typed
+   in. A note count that does not match the entry
+   count is refused whole: a shifted note is a
+   wrong note delivered with a valid tag, the one
+   failure this page CAN prevent. */
+function psiPayloadAnswerFor(requestText, itemsText, payloadsText, scalarHex) {
+  var requestPoints = parsePsiBlinded(requestText);
+  var items = parsePsiItems(itemsText);
+  var payloads = parsePsiPayloads(payloadsText);
+  var scalar = parseProofScalar(scalarHex);
+  if (requestPoints === null || items === null || payloads === null ||
+      scalar === null || payloads.length !== items.length) {
+    return Promise.resolve(null);
+  }
+  var doublePoints = [];
+  for (var i = 0; i < requestPoints.length; i++) {
+    var doubled = psiBlindPointHex(scalar, requestPoints[i]);
+    if (doubled === null) return Promise.resolve(null);
+    doublePoints.push(doubled);
+  }
+  return psiBlindItems(items, scalar).then(function (ownPoints) {
+    if (ownPoints === null) return null;
+    var blobs = [];
+    var step = function (index) {
+      if (index >= ownPoints.length) return Promise.resolve(blobs);
+      return sealPsiPayload(ownPoints[index], payloads[index])
+        .then(function (blob) {
+          if (blob === null) return null;
+          blobs.push(blob);
+          return step(index + 1);
+        });
+    };
+    return step(0).then(function (sealed) {
+      if (sealed === null) return null;
+      var shuffled = shufflePsiPoints(sealed);
+      if (shuffled === null) return null;
+      return formatPsiPayloadReply(doublePoints, shuffled);
+    });
+  });
+}
+
+/* The responder's move, whole: draw a fresh scalar
+   and answer. The responder keeps nothing, as in
+   tool 47 — and here that also means the note keys
+   exist only for the length of this call. */
+function answerPsiPayloads(requestText, itemsText, payloadsText) {
+  var scalar = randomProofScalar();
+  if (scalar === null) return Promise.resolve(null);
+  return psiPayloadAnswerFor(requestText, itemsText, payloadsText, scalar);
+}
+
+/* The finish, from pieces: the initiator's scalar,
+   their list AS THEY SENT IT, and the payload
+   reply in, the shared entries WITH their notes
+   out — in the list's own order, each a record of
+   the normalised entry and the note exactly as
+   the responder sealed it. Entry i's key is its
+   double-blinded point unblinded by a^-1 under
+   the curve order — thresholdScalarInvert, tool
+   37's Fermat inverse — which is b×H(entry i)
+   itself, obtained for the initiator's own
+   entries and no others. Each key is tried
+   against each unopened note; the tag decides,
+   and a note some key has opened is not tried
+   again. An empty list is a real answer — no
+   shared entries — never null; null is reserved
+   for inputs this page cannot judge, including a
+   reply whose double-blinded half does not answer
+   every entry the list names. A sealed note no
+   key opens is simply not delivered: it belongs
+   to an entry the initiator did not send, and its
+   content stays exactly as private as tool 47
+   keeps an unmatched entry. */
+function psiPayloadsFor(scalarHex, itemsText, replyText) {
+  var scalar = parseProofScalar(scalarHex);
+  var items = parsePsiItems(itemsText);
+  var reply = parsePsiPayloadReply(replyText);
+  if (scalar === null || items === null || reply === null) {
+    return Promise.resolve(null);
+  }
+  if (reply.doublePoints.length !== items.length) {
+    return Promise.resolve(null);
+  }
+  var inverse = thresholdScalarInvert(BigInt("0x" + scalar));
+  if (inverse === null) return Promise.resolve(null);
+  var inverseHex = p256IntToHex(inverse);
+  var used = {};
+  var found = [];
+  var stepItem = function (index) {
+    if (index >= items.length) return Promise.resolve(found);
+    var keyPoint = psiBlindPointHex(inverseHex, reply.doublePoints[index]);
+    if (keyPoint === null) return Promise.resolve(null);
+    var stepBlob = function (blobIndex) {
+      if (blobIndex >= reply.payloadBlobs.length) {
+        return stepItem(index + 1);
+      }
+      if (used[blobIndex]) return stepBlob(blobIndex + 1);
+      return openPsiPayload(keyPoint, reply.payloadBlobs[blobIndex])
+        .then(function (payload) {
+          if (payload === null) return stepBlob(blobIndex + 1);
+          used[blobIndex] = true;
+          found.push({ item: items[index], payload: payload });
+          return stepItem(index + 1);
+        });
+    };
+    return stepBlob(0);
+  };
+  return stepItem(0);
+}
+
+/* The finish, whole: the kept state line supplies
+   the scalar, and the rest is psiPayloadsFor. */
+function finishPsiPayloads(stateText, itemsText, replyText) {
+  var state = parsePsiState(stateText);
+  if (state === null) return Promise.resolve(null);
+  return psiPayloadsFor(state.scalar, itemsText, replyText);
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -8801,7 +9258,16 @@ if (typeof module !== "undefined" && module.exports) {
                      psiAnswerFor, answerPsiRequest, psiIntersectionFor,
                      finishPsiIntersection,
                      psiCardinalityAnswerFor, answerPsiCardinality,
-                     psiCardinalityFor, finishPsiCardinality };
+                     psiCardinalityFor, finishPsiCardinality,
+                     PSI_PAYLOAD_FORMAT, PSI_PAYLOAD_PREFIX,
+                     PSI_PAYLOAD_MAC_PREFIX, PSI_PAYLOAD_MAC_HEX,
+                     PSI_MAX_PAYLOAD_CHARS, PSI_MAX_PAYLOAD_BYTES,
+                     parsePsiPayload, parsePsiPayloads,
+                     psiPayloadPadBytes, sealPsiPayload, openPsiPayload,
+                     formatPsiPayloadLine, parsePsiPayloadLine,
+                     formatPsiPayloadReply, parsePsiPayloadReply,
+                     psiPayloadAnswerFor, answerPsiPayloads,
+                     psiPayloadsFor, finishPsiPayloads };
 }
 
 if (typeof document !== "undefined") {
@@ -11771,6 +12237,69 @@ if (typeof document !== "undefined") {
             " this exchange does not say, and from these inputs " +
             "it cannot be recovered: no position survived the " +
             "shuffle, and this form never held your list.";
+      });
+    });
+
+    document.getElementById("psipayload-answer").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("psipayload-answer-result");
+      status.textContent = "Working\u2026";
+      answerPsiPayloads(document.getElementById("psipayload-answer-request").value,
+        document.getElementById("psipayload-answer-items").value,
+        document.getElementById("psipayload-answer-payloads").value).then(function (reply) {
+        if (reply === null) {
+          status.textContent = "No reply was made: the request " +
+            "must be a whole p4a-psib-v1 line, your list one to " +
+            "eight entries with no repeats once normalised, and " +
+            "your notes exactly one per entry — a non-blank line " +
+            "of at most 120 characters each, in the same order " +
+            "as the entries they belong to.";
+          return;
+        }
+        document.getElementById("psipayload-answer-out").value = reply;
+        status.textContent = "Answered with notes attached — and " +
+          "notice what this reply does NOT contain: no blinded " +
+          "list. Your blinded points are the keys these notes are " +
+          "sealed under, so they stay on this device; the notes " +
+          "travel shuffled, and only a key the other side can " +
+          "unblind — one for an entry they sent — opens one. " +
+          "Send both lines back, together.";
+      });
+    });
+
+    document.getElementById("psipayload-finish").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("psipayload-finish-result");
+      var out = document.getElementById("psipayload-finish-out");
+      status.textContent = "Working\u2026";
+      finishPsiPayloads(document.getElementById("psipayload-finish-state").value,
+        document.getElementById("psipayload-finish-items").value,
+        document.getElementById("psipayload-finish-reply").value).then(function (found) {
+        if (found === null) {
+          out.value = "";
+          status.textContent = "Cannot finish this: the state " +
+            "must be a whole p4a-psistate-v1 line, your list the " +
+            "same list you sent in the same order, and the reply " +
+            "a whole two-line answer from the payload form above " +
+            "— a reply to a different request, or a tool-47 reply " +
+            "whose second line is a blinded list rather than " +
+            "sealed notes, finishes nothing here.";
+          return;
+        }
+        out.value = found.map(function (entry) {
+          return entry.item + " \u2014 " + entry.payload;
+        }).join("\n");
+        status.textContent = found.length === 0 ?
+          "No shared entries — so no notes. Every sealed note " +
+            "in that reply belongs to an entry you did not send, " +
+            "and not one of them opened: their content is as " +
+            "private after this exchange as before it." :
+          found.length + (found.length === 1 ? " shared entry, with its note" :
+            " shared entries, with their notes") +
+            " — and those are all the notes this exchange gave " +
+            "you. The remaining sealed notes never opened, " +
+            "because the only keys you can unblind belong to " +
+            "entries you sent.";
       });
     });
 

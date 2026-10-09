@@ -1036,7 +1036,45 @@ renewable resource that pays for shielded transactions.
   shuffle, not in the counting: a tool-47 reply
   counted here still carried its positions. Not
   a Compact circuit proof, and not a format any
-  chain or wallet checks.
+  chain or wallet checks. Tool 49 starts from
+  tool 47's exchange again and adds the
+  responder's notes for shared entries instead.
+- **Common ground, with the note attached —
+  private set intersection with payloads** —
+  tool 47's exchange, delivering more on
+  purpose: the responder holds a short note for
+  each of their entries — a room number, a
+  handle, "ask for the blue folder" — and the
+  initiator receives the notes for the shared
+  entries and no others. The key is a point the
+  earlier tools never needed, `b×H(entry)`: the
+  responder computes it for every one of their
+  entries directly, and the initiator obtains
+  it for exactly the entries they sent by
+  unblinding the reply's double-blinded points
+  with `a`'s inverse under the curve order —
+  for an entry they did not send, no unblindable
+  form of that point ever reaches them. Each
+  note is sealed under its entry's point:
+  labelled SHA-256 pad blocks under
+  `privacy4all-psi-payload-v1`, a truncated
+  SHA-256 tag under
+  `privacy4all-psi-payload-mac-v1`, the sealed
+  notes shuffled on a `p4a-psip-v1` line. The
+  reply pointedly carries NO blinded list: in
+  tool 47 those points are harmless cargo, here
+  they are the note keys, and a reply carrying
+  them would open every note, shared or not.
+  Honestly labelled: the initiator learns the
+  shared entries with their notes, the
+  responder's list size and roughly each note's
+  length; the responder learns the initiator's
+  list size and nothing else; the tag proves a
+  note was sealed under its entry's true point,
+  never that the note is true; the core is
+  still semi-honest. Not a Compact circuit
+  proof, and not a format any chain or wallet
+  checks.
 
 ## Guides
 
