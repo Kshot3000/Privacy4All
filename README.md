@@ -969,7 +969,44 @@ renewable resource that pays for shielded transactions.
   about the transfer itself is out of scope, and
   the state line is a secret of private-key rank.
   Not a Compact circuit proof, and not a format
-  any chain or wallet checks.
+  any chain or wallet checks. Tool 47 builds the
+  private set intersection this primitive is
+  famous for.
+- **Common ground, nothing else — private set
+  intersection** — two lists meet and only the
+  entries they already share are named: the
+  classic Diffie–Hellman private set
+  intersection, the contact-discovery shape tool
+  46 pointed at. Each entry is hashed into the
+  curve under `privacy4all-psi-item-v1` by
+  try-and-increment, so an entry becomes a point
+  whose logarithm nobody knows and both sides
+  land on the same point for the same entry. The
+  initiator blinds every entry point with one
+  fresh secret scalar `a` and sends a
+  `p4a-psib-v1` line; the responder blinds their
+  own entries with their own scalar `b`, blinds
+  the initiator's points a second time, and
+  answers with a `p4a-psid-v1` line in the
+  request's own order plus their blinded list,
+  shuffled. The initiator finishes on
+  commutativity, `a×(b×H(entry)) = b×(a×H(entry))`:
+  an entry is shared exactly when its
+  double-blinded point stands among the
+  responder's points raised by `a`. The
+  initiator's kept secret is a `p4a-psistate-v1`
+  line. Honestly labelled: the initiator learns
+  the overlap and the other list's size and
+  nothing else — unmatched points cannot be
+  unblinded or dictionary-tested without `b` —
+  and the responder learns the initiator's list
+  size and nothing else at all. Semi-honest
+  core: the double-blinded order is taken on
+  trust, set sizes and the exchange itself leak,
+  and entries are normalised (trimmed,
+  lower-cased, whitespace collapsed) before any
+  maths. Not a Compact circuit proof, and not a
+  format any chain or wallet checks.
 
 ## Guides
 

@@ -7975,6 +7975,493 @@ function openOtResponse(stateText, responseText) {
     otDecryptSlot(state.scalar, response.ephemeral1, response.cipher1);
 }
 
+/* ---------- 47. Common ground, nothing else — private set intersection ----------
+
+   Tool 46 named this construction as the thing
+   oblivious transfer is built for; here it is, whole.
+   Two people each hold a short list — contacts,
+   handles, names — and exactly one question is
+   worth answering together: which entries do we
+   already share? Answering it the obvious way means
+   handing over the whole list, including every
+   entry the other side does NOT have, which is
+   usually the private part. Private set intersection
+   answers the overlap and nothing else, and this is
+   the classic Diffie–Hellman shape of it.
+
+   Each entry is hashed into the curve under its own
+   label, privacy4all-psi-item-v1, by the same
+   try-and-increment tool 42 uses for its generator:
+   the digest is an x coordinate, the first counter
+   whose x carries an on-curve point wins, the even
+   root is chosen. An entry therefore becomes a point
+   H(item) whose logarithm nobody knows — nobody
+   chose it, it fell out of a hash of the entry
+   itself, and both sides land on the same point for
+   the same entry because the recipe is public.
+
+   The initiator picks one fresh secret scalar a and
+   blinds every entry point with it: a×H(item). The
+   blinded list is what travels. The responder picks
+   their own fresh scalar b and does two things:
+   blinds their own entries the same way, b×H(item),
+   and blinds the initiator's already-blinded points
+   a second time, b×(a×H(item)). Both halves travel
+   back. The initiator finishes with the one equation
+   the whole protocol hangs on — scalar multiplication
+   commutes:
+
+     a×(b×H(item)) = b×(a×H(item))
+
+   Raising the responder's blinded points by a gives
+   a candidate set; the double-blinded points are
+   that same set exactly for the shared entries, so
+   an entry is shared precisely when its
+   double-blinded point appears among the candidates.
+   The double-blinded half comes back in the
+   request's own order — the initiator sent that
+   order, so it names nothing new, and it is what
+   lets the initiator say WHICH of their entries
+   matched, rather than merely how many.
+
+   What each side learns, stated plainly because the
+   tool's honesty is the boundary of its promise.
+   The initiator learns the overlap and the SIZE of
+   the responder's list, and nothing else about it:
+   an unmatched responder point cannot be unblinded
+   without b, and cannot be dictionary-tested either
+   — testing a guessed entry would need a point to
+   compare, and the only comparable points require
+   the responder's scalar. The responder learns the
+   SIZE of the initiator's list and nothing else at
+   all — not the overlap, not one entry — because
+   every point they ever hold is blinded by a scalar
+   they do not have. Entries are normalised before
+   anything is computed (trimmed, lower-cased,
+   internal whitespace collapsed), so "Alice " and
+   "alice" are the same entry on both sides — and
+   that normalisation is itself a disclosure about
+   spelling: two entries that differ only in case
+   or spacing are one entry here.
+
+   The honest limits are structural, like tool 46's.
+   This is the semi-honest core: both sides are
+   assumed to follow the steps, and a responder who
+   quietly returns the double-blinded half in a
+   different order can scramble WHICH entries the
+   initiator counts as shared — they cannot invent a
+   match for an entry they do not hold, because a
+   point enters the candidate set only by being
+   raised from their own blinded list, but order is
+   taken on trust, and real protocols add proofs of
+   correct behaviour where that trust is not given.
+   Set sizes leak, as stated; the fact and timing of
+   the exchange leak, as they do for tool 9. One page
+   plays both sides, so here it demonstrates the
+   maths, not a live exchange between two devices.
+   The initiator's state line holds a: whoever holds
+   it, together with a copy of the reply, can
+   recompute the overlap — and nothing beyond the
+   overlap — so it is kept the way tool 37 says share
+   lines are kept. And the frame is the house one: a
+   real private set intersection computed locally,
+   but the lines are this hub's own spellings — not
+   a format any chain or wallet checks, not one of
+   Midnight's Compact circuit proofs, and the curve
+   code is the same teaching implementation as tool
+   30's, affine arithmetic written to be read, not
+   an audited library and not side-channel
+   resistant. Never paste a real wallet key or a
+   production private key into any web page,
+   including this one. */
+var PSI_BLINDED_FORMAT = "p4a-psib-v1";
+var PSI_DOUBLE_FORMAT = "p4a-psid-v1";
+var PSI_STATE_FORMAT = "p4a-psistate-v1";
+var PSI_ITEM_PREFIX = "privacy4all-psi-item-v1";
+var PSI_MAX_ITEMS = 8;
+var PSI_MAX_ITEM_CHARS = 40;
+
+/* One entry, normalised: trimmed, lower-cased, every
+   run of internal whitespace collapsed to one space.
+   Two spellings that normalise to the same string
+   ARE the same entry everywhere in this tool — that
+   is what lets two people who typed a name
+   differently still meet on it. Blank, over the
+   character cap, or not a string: null. */
+function normalizePsiItem(text) {
+  if (typeof text !== "string") return null;
+  var item = text.trim().toLowerCase().replace(/\s+/g, " ");
+  if (item === "" || item.length > PSI_MAX_ITEM_CHARS) return null;
+  return item;
+}
+
+/* A whole list, as typed: entries separated by
+   newlines or commas, blank pieces ignored, each
+   entry normalised. One to PSI_MAX_ITEMS entries,
+   no duplicates after normalisation — a set with a
+   repeated entry is not a set, and a duplicate
+   would make its blinded point appear twice and
+   say nothing twice. Anything else: null. */
+function parsePsiItems(text) {
+  if (typeof text !== "string") return null;
+  var pieces = text.split(/\r?\n|,/);
+  var out = [];
+  var seen = {};
+  for (var i = 0; i < pieces.length; i++) {
+    if (pieces[i].trim() === "") continue;
+    var item = normalizePsiItem(pieces[i]);
+    if (item === null) return null;
+    if (seen[item]) return null;
+    seen[item] = true;
+    out.push(item);
+  }
+  if (out.length < 1 || out.length > PSI_MAX_ITEMS) return null;
+  return out;
+}
+
+/* An array offered directly (by the functions below)
+   must be one to PSI_MAX_ITEMS already-normalised
+   entries with no repeats — the same gate
+   parsePsiItems applies to text, applied to pieces
+   a caller already split. */
+function normalizePsiItemArray(items) {
+  if (!Array.isArray(items)) return null;
+  if (items.length < 1 || items.length > PSI_MAX_ITEMS) return null;
+  var out = [];
+  var seen = {};
+  for (var i = 0; i < items.length; i++) {
+    if (typeof items[i] !== "string" || normalizePsiItem(items[i]) !== items[i]) {
+      return null;
+    }
+    if (seen[items[i]]) return null;
+    seen[items[i]] = true;
+    out.push(items[i]);
+  }
+  return out;
+}
+
+/* The entry's point: hashed into the curve under
+   this tool's own label by try-and-increment — the
+   digest of label, entry and counter is the x
+   coordinate, the first counter whose x carries an
+   on-curve point wins, the even root is chosen, the
+   same convention as tool 42's generator. Public
+   and deterministic: both sides land on the same
+   point for the same entry, and its logarithm is
+   known to nobody, because nobody chose it. */
+function psiItemPoint(item) {
+  var normalized = normalizePsiItem(item);
+  if (normalized === null) return Promise.resolve(null);
+  var sqrtExponent = (P256_P + P256_ONE) / BigInt(4);
+  var attempt = function (counter) {
+    if (counter > 255) return Promise.resolve(null);
+    return sha256Hex(PSI_ITEM_PREFIX + "\n" + normalized + "\n" + counter)
+      .then(function (digest) {
+        if (digest === null) return null;
+        var x = BigInt("0x" + digest) % P256_P;
+        var rhs = p256Mod(x * x * x - P256_THREE * x + P256_B);
+        var y = p256Pow(rhs, sqrtExponent);
+        if (p256Mod(y * y) !== rhs) return attempt(counter + 1);
+        if ((y & P256_ONE) === P256_ONE) y = P256_P - y;
+        return formatP256PublicKey({ x: x, y: y });
+      });
+  };
+  return attempt(0);
+}
+
+/* One blinding: a scalar times a point, in the hub's
+   SPKI spelling — the single operation the whole
+   protocol is built from, applied three times per
+   entry across the exchange. A zero or over-order
+   scalar, or a point that is not a point: null. */
+function psiBlindPointHex(scalarHex, pointHex) {
+  var scalar = parseProofScalar(scalarHex);
+  var point = parseP256Point(pointHex);
+  if (scalar === null || point === null) return null;
+  var blinded = p256PointMultiply(BigInt("0x" + scalar), point);
+  if (blinded === null) return null;
+  return formatP256PublicKey(blinded);
+}
+
+/* A whole list blinded under one scalar, in list
+   order: each entry's point raised by the scalar.
+   Deterministic given the scalar, so tests can pin
+   every point against independent arithmetic. */
+function psiBlindItems(items, scalarHex) {
+  var list = normalizePsiItemArray(items);
+  var scalar = parseProofScalar(scalarHex);
+  if (list === null || scalar === null) return Promise.resolve(null);
+  var out = [];
+  var step = function (index) {
+    if (index >= list.length) return Promise.resolve(out);
+    return psiItemPoint(list[index]).then(function (pointHex) {
+      if (pointHex === null) return null;
+      var blinded = psiBlindPointHex(scalar, pointHex);
+      if (blinded === null) return null;
+      out.push(blinded);
+      return step(index + 1);
+    });
+  };
+  return step(0);
+}
+
+/* A point list as a line: the format tag, then the
+   points in order, colon-joined — points are hex
+   and carry no colon, so the spelling is exact.
+   Every point must be a whole on-curve point, the
+   count within bounds, and no point may repeat:
+   a repeated blinded point is a repeated entry
+   wearing a point's clothes. */
+function formatPsiPointList(format, points) {
+  if (format !== PSI_BLINDED_FORMAT && format !== PSI_DOUBLE_FORMAT) {
+    return null;
+  }
+  if (!Array.isArray(points)) return null;
+  if (points.length < 1 || points.length > PSI_MAX_ITEMS) return null;
+  var canonical = [];
+  var seen = {};
+  for (var i = 0; i < points.length; i++) {
+    var point = parseP256Point(points[i]);
+    if (point === null) return null;
+    var hex = formatP256PublicKey(point);
+    if (hex === null || seen[hex]) return null;
+    seen[hex] = true;
+    canonical.push(hex);
+  }
+  return format + ":" + canonical.join(":");
+}
+
+function parsePsiPointList(text, format) {
+  if (typeof text !== "string") return null;
+  if (format !== PSI_BLINDED_FORMAT && format !== PSI_DOUBLE_FORMAT) {
+    return null;
+  }
+  var parts = text.trim().split(":");
+  if (parts.length < 2 || parts.length > PSI_MAX_ITEMS + 1) return null;
+  if (parts[0] !== format) return null;
+  var points = [];
+  var seen = {};
+  for (var i = 1; i < parts.length; i++) {
+    var point = parseP256Point(parts[i]);
+    if (point === null) return null;
+    var hex = formatP256PublicKey(point);
+    if (hex === null || seen[hex]) return null;
+    seen[hex] = true;
+    points.push(hex);
+  }
+  return points;
+}
+
+function formatPsiBlinded(points) {
+  return formatPsiPointList(PSI_BLINDED_FORMAT, points);
+}
+
+function parsePsiBlinded(text) {
+  return parsePsiPointList(text, PSI_BLINDED_FORMAT);
+}
+
+function formatPsiDouble(points) {
+  return formatPsiPointList(PSI_DOUBLE_FORMAT, points);
+}
+
+function parsePsiDouble(text) {
+  return parsePsiPointList(text, PSI_DOUBLE_FORMAT);
+}
+
+/* The initiator-only state line: the format tag and
+   the scalar behind the request's blinded points.
+   It never travels — together with a copy of the
+   reply it recomputes the overlap, and nothing
+   beyond the overlap. */
+function formatPsiState(scalarHex) {
+  var scalar = parseProofScalar(scalarHex);
+  if (scalar === null) return null;
+  return PSI_STATE_FORMAT + ":" + scalar;
+}
+
+function parsePsiState(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 2 || parts[0] !== PSI_STATE_FORMAT) return null;
+  var scalar = parseProofScalar(parts[1]);
+  if (scalar === null) return null;
+  return { scalar: scalar };
+}
+
+/* A uniform index below bound, drawn from Web
+   Crypto with rejection sampling, for the reply's
+   shuffle — modulo reduction of a raw draw would
+   favour small indices, slightly and needlessly. */
+function psiRandomBelow(bound) {
+  var cryptoObj = (typeof globalThis !== "undefined" && globalThis.crypto) || null;
+  if (!cryptoObj || typeof cryptoObj.getRandomValues !== "function") return null;
+  if (typeof bound !== "number" || bound < 2) return null;
+  var limit = Math.floor(4294967296 / bound) * bound;
+  var draw = new Uint32Array(1);
+  for (var attempt = 0; attempt < 16; attempt++) {
+    cryptoObj.getRandomValues(draw);
+    if (draw[0] < limit) return draw[0] % bound;
+  }
+  return null;
+}
+
+/* A shuffled copy of a point list, Fisher–Yates from
+   the end. Used for exactly one list in the reply —
+   the responder's own blinded points, whose order
+   in the reply would otherwise echo the order they
+   were typed in, a fact about the responder this
+   protocol does not need to carry. */
+function shufflePsiPoints(points) {
+  var out = points.slice();
+  for (var i = out.length - 1; i > 0; i--) {
+    var j = psiRandomBelow(i + 1);
+    if (j === null) return null;
+    var tmp = out[i];
+    out[i] = out[j];
+    out[j] = tmp;
+  }
+  return out;
+}
+
+/* The initiator's move, from pieces: a list and a
+   caller-chosen scalar in, the blinded request line
+   to send and the state line to keep out. Synchronous
+   pieces apart from the item hashes, so tests can
+   pin a fixed-scalar exchange end to end. */
+function psiRequestFor(itemsText, scalarHex) {
+  var items = parsePsiItems(itemsText);
+  var scalar = parseProofScalar(scalarHex);
+  if (items === null || scalar === null) return Promise.resolve(null);
+  return psiBlindItems(items, scalar).then(function (points) {
+    if (points === null) return null;
+    var request = formatPsiBlinded(points);
+    var state = formatPsiState(scalar);
+    if (request === null || state === null) return null;
+    return { request: request, state: state };
+  });
+}
+
+/* The initiator's move, whole: draw a fresh scalar
+   and build the request. One scalar per exchange —
+   a scalar reused across exchanges would let the
+   two replies be compared point for point. */
+function makePsiRequest(itemsText) {
+  var scalar = randomProofScalar();
+  if (scalar === null) return Promise.resolve(null);
+  return psiRequestFor(itemsText, scalar);
+}
+
+/* The reply as a text: two lines — first the
+   double-blinded line, in the request's own order,
+   then the responder's blinded line. Two lines
+   rather than one long line because each half has
+   its own format tag and its own job, and a reader
+   should be able to check which is which. */
+function formatPsiReply(doublePoints, blindedPoints) {
+  var doubleLine = formatPsiDouble(doublePoints);
+  var blindedLine = formatPsiBlinded(blindedPoints);
+  if (doubleLine === null || blindedLine === null) return null;
+  return doubleLine + "\n" + blindedLine;
+}
+
+function parsePsiReply(text) {
+  if (typeof text !== "string") return null;
+  var lines = text.trim().split(/\r?\n/);
+  if (lines.length !== 2) return null;
+  var doublePoints = parsePsiDouble(lines[0]);
+  var blindedPoints = parsePsiBlinded(lines[1]);
+  if (doublePoints === null || blindedPoints === null) return null;
+  return { doublePoints: doublePoints, blindedPoints: blindedPoints };
+}
+
+/* The responder's move, from pieces: the request
+   line, their own list, and a caller-chosen scalar
+   in, the two-line reply out. Their own points are
+   blinded once; the request's points are blinded a
+   second time, IN THE REQUEST'S ORDER — that order
+   is the initiator's own, it names nothing the
+   responder learned, and it is what lets the
+   initiator name the matches at the end. The
+   responder's own blinded half is shuffled, because
+   its order WOULD name something: the order the
+   responder typed their list in. */
+function psiAnswerFor(requestText, itemsText, scalarHex) {
+  var requestPoints = parsePsiBlinded(requestText);
+  var items = parsePsiItems(itemsText);
+  var scalar = parseProofScalar(scalarHex);
+  if (requestPoints === null || items === null || scalar === null) {
+    return Promise.resolve(null);
+  }
+  var doublePoints = [];
+  for (var i = 0; i < requestPoints.length; i++) {
+    var doubled = psiBlindPointHex(scalar, requestPoints[i]);
+    if (doubled === null) return Promise.resolve(null);
+    doublePoints.push(doubled);
+  }
+  return psiBlindItems(items, scalar).then(function (ownPoints) {
+    if (ownPoints === null) return null;
+    var shuffled = shufflePsiPoints(ownPoints);
+    if (shuffled === null) return null;
+    return formatPsiReply(doublePoints, shuffled);
+  });
+}
+
+/* The responder's move, whole: draw a fresh scalar
+   and answer. The responder keeps nothing — no
+   state line exists on this side, because the
+   responder learns nothing from the exchange and
+   needs nothing to finish it. */
+function answerPsiRequest(requestText, itemsText) {
+  var scalar = randomProofScalar();
+  if (scalar === null) return Promise.resolve(null);
+  return psiAnswerFor(requestText, itemsText, scalar);
+}
+
+/* The finish, from pieces: the initiator's scalar,
+   their list AS THEY SENT IT, and the reply in, the
+   shared entries out — normalised, in the list's own
+   order. The candidate set is the responder's
+   blinded points raised by the scalar; entry i is
+   shared exactly when the reply's i-th
+   double-blinded point stands in that set, by the
+   commutativity the header states. An empty list is
+   a real answer — no overlap — and is returned as
+   one, never as null: null is reserved for inputs
+   this page cannot judge, including a reply whose
+   double-blinded half does not answer every entry
+   the list names, which is a reply to some other
+   request. */
+function psiIntersectionFor(scalarHex, itemsText, replyText) {
+  var scalar = parseProofScalar(scalarHex);
+  var items = parsePsiItems(itemsText);
+  var reply = parsePsiReply(replyText);
+  if (scalar === null || items === null || reply === null) {
+    return Promise.resolve(null);
+  }
+  if (reply.doublePoints.length !== items.length) {
+    return Promise.resolve(null);
+  }
+  var candidates = {};
+  for (var i = 0; i < reply.blindedPoints.length; i++) {
+    var raised = psiBlindPointHex(scalar, reply.blindedPoints[i]);
+    if (raised === null) return Promise.resolve(null);
+    candidates[raised] = true;
+  }
+  var overlap = [];
+  for (var j = 0; j < items.length; j++) {
+    if (candidates[reply.doublePoints[j]]) overlap.push(items[j]);
+  }
+  return Promise.resolve(overlap);
+}
+
+/* The finish, whole: the kept state line supplies
+   the scalar, and the rest is psiIntersectionFor. */
+function finishPsiIntersection(stateText, itemsText, replyText) {
+  var state = parsePsiState(stateText);
+  if (state === null) return Promise.resolve(null);
+  return psiIntersectionFor(state.scalar, itemsText, replyText);
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -8139,7 +8626,16 @@ if (typeof module !== "undefined" && module.exports) {
                      parseOtRequest, formatOtState, parseOtState,
                      otSharedPointHex, otPadBytes, otEncryptSlot,
                      otDecryptSlot, makeOtRequest, formatOtResponse,
-                     parseOtResponse, answerOtRequest, openOtResponse };
+                     parseOtResponse, answerOtRequest, openOtResponse,
+                     PSI_BLINDED_FORMAT, PSI_DOUBLE_FORMAT, PSI_STATE_FORMAT,
+                     PSI_ITEM_PREFIX, PSI_MAX_ITEMS, PSI_MAX_ITEM_CHARS,
+                     normalizePsiItem, parsePsiItems, psiItemPoint,
+                     psiBlindPointHex, psiBlindItems, formatPsiBlinded,
+                     parsePsiBlinded, formatPsiDouble, parsePsiDouble,
+                     formatPsiState, parsePsiState, formatPsiReply,
+                     parsePsiReply, psiRequestFor, makePsiRequest,
+                     psiAnswerFor, answerPsiRequest, psiIntersectionFor,
+                     finishPsiIntersection };
 }
 
 if (typeof document !== "undefined") {
@@ -10977,6 +11473,84 @@ if (typeof document !== "undefined") {
           "to you: opening it would take the logarithm of the key " +
           "you did not build, and the request's sum to the public " +
           "point is what guarantees you never had it.";
+      });
+    });
+
+    document.getElementById("psi-start").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("psi-start-result");
+      status.textContent = "Working\u2026";
+      makePsiRequest(document.getElementById("psi-items").value).then(function (made) {
+        if (made === null) {
+          status.textContent = "No request was made: the list " +
+            "must hold one to eight entries, each a non-blank " +
+            "line of at most 40 characters, with no entry " +
+            "repeated once case and spacing are normalised.";
+          return;
+        }
+        document.getElementById("psi-request-out").value = made.request;
+        document.getElementById("psi-state-out").value = made.state;
+        status.textContent = "Blinded. Send the request line to " +
+          "the other side — every point on it is your list raised " +
+          "by a secret number, and without that number the points " +
+          "name nothing, not even to a guess: a guessed entry " +
+          "cannot be checked against them. Keep the state line " +
+          "where you keep private keys.";
+      });
+    });
+
+    document.getElementById("psi-answer").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("psi-answer-result");
+      status.textContent = "Working\u2026";
+      answerPsiRequest(document.getElementById("psi-answer-request").value,
+        document.getElementById("psi-answer-items").value).then(function (reply) {
+        if (reply === null) {
+          status.textContent = "No reply was made: the request " +
+            "must be a whole p4a-psib-v1 line and your list one " +
+            "to eight entries, each a non-blank line of at most " +
+            "40 characters, with no repeats once normalised.";
+          return;
+        }
+        document.getElementById("psi-answer-out").value = reply;
+        status.textContent = "Answered — and notice what this " +
+          "form cannot tell you: not one entry on their list, and " +
+          "not whether any entry matched, because every point you " +
+          "handled was blinded by a number you never saw. Your " +
+          "own half went back shuffled, so its order echoes " +
+          "nothing about the order you typed. Send both lines " +
+          "back, together.";
+      });
+    });
+
+    document.getElementById("psi-finish").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("psi-finish-result");
+      var out = document.getElementById("psi-finish-out");
+      status.textContent = "Working\u2026";
+      finishPsiIntersection(document.getElementById("psi-finish-state").value,
+        document.getElementById("psi-finish-items").value,
+        document.getElementById("psi-finish-reply").value).then(function (overlap) {
+        if (overlap === null) {
+          out.value = "";
+          status.textContent = "Cannot finish this: the state " +
+            "must be a whole p4a-psistate-v1 line, the list the " +
+            "same list you sent, and the reply a whole two-line " +
+            "answer whose first line answers every entry on it — " +
+            "a reply to a different request finishes nothing.";
+          return;
+        }
+        out.value = overlap.join("\n");
+        status.textContent = overlap.length === 0 ?
+          "No overlap: not one of your entries stands on their " +
+            "list — and that, plus the size of their list, is all " +
+            "this exchange told you. Their other entries stay " +
+            "points you cannot name." :
+          "Overlap found: " + overlap.length + (overlap.length === 1 ?
+            " entry is" : " entries are") + " on both lists, " +
+            "named above. Everything else on their list stays a " +
+            "point you cannot name, and they learned nothing at " +
+            "all — not even this.";
       });
     });
 
