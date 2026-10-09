@@ -1477,6 +1477,51 @@ renewable resource that pays for shielded transactions.
   sanction, and the Pedersen bias caveat of
   tools 38 and 59 stands whole. Not a
   Compact circuit proof, and not a format
+  any chain or wallet checks. Tool 61 below
+  runs the first of the added rounds that
+  caveat names.
+
+- **Commit before you look — a sealed
+  commitment round before the jointly made
+  counting key** — the first of the production
+  rounds the Pedersen bias caveat of tools
+  38, 59 and 60 names: a dealer who waits to
+  see the others' commitments before choosing
+  their own can bias the key. Before any
+  commitment line is revealed, every trustee
+  seals theirs — a real SHA-256 digest, under
+  the tool's own label, over the canonical
+  spelling of their tool 59
+  `p4a-dkgcommit-v1` line and a fresh random
+  blinding scalar only they hold — spelled
+  as one `p4a-jtseal-v1` line carrying the
+  quorum, the dealer's number and the digest,
+  and nothing else. Once every seal is in,
+  each dealer reveals their commitment line
+  with a `p4a-jtreveal-v1` line carrying the
+  blinding, and anyone can re-hash the pair
+  and compare it against the sealed digest:
+  a match means the dealer dealt what they
+  sealed; a mismatch is proof the dealing
+  changed after the seal, recomputed from
+  public lines alone. If every dealer
+  sealed, revealed and matched, the round
+  stands and the key and trustees lines are
+  tool 59's own derivations, unchanged. If a
+  dealer mismatches or never reveals, NO
+  key is derived — the mismatched and the
+  silent are named separately, because a
+  changed dealing and an absent one are
+  different facts. Honestly labelled: the
+  page cannot hold a clock or police the
+  seal-before-reveal order; sealing fixes
+  only the adaptive move, not a pre-seal
+  grind (worth nothing against unseen
+  contributions), an abort at reveal
+  (answered by exclusion, in tool 60's
+  shape), or a blinding leaked early; and a
+  seal is a hash, not a signature. Not a
+  Compact circuit proof, and not a format
   any chain or wallet checks.
 
 ## Guides

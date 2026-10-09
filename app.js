@@ -13188,6 +13188,344 @@ function qualifiedJointTallySet(commitmentsText, complaintsText,
              null };
 }
 
+/* ---------- 61. Commit before you look — a sealed
+   commitment round before the jointly made key ----------
+
+   Tools 38, 59 and 60 all end on the same named
+   caveat, stated plainly in each: a dealer who
+   waits to see the others' commitments before
+   choosing their own can bias the jointly made
+   key's distribution — the Pedersen-scheme flaw
+   production distributed key generation answers
+   with extra rounds. This tool runs the first of
+   those rounds for tool 59's counting key: commit
+   before you look.
+
+   Before any commitment line is revealed, every
+   trustee seals theirs: a SHA-256 digest, under
+   this tool's own label, over the canonical
+   spelling of their tool 59 commitment line and
+   a fresh random blinding scalar only they hold.
+   The sealed line — the quorum, the dealer's
+   number and the digest — is published first, by
+   everyone. It shows nothing about the commitment
+   behind it: the digest of a labelled transcript
+   is all anyone sees, and without the blinding a
+   bystander cannot even test a guessed commitment
+   line against it. But it binds absolutely: once
+   the seals are in, the reveal phase is a
+   recomputation, not a choice. Each dealer
+   publishes their commitment line together with
+   a reveal line carrying the blinding, and
+   anyone can re-hash the pair and compare it
+   against the sealed digest. A dealer who dealt
+   what they sealed passes; a dealer whose
+   revealed line hashes to anything else changed
+   their dealing after seeing the others' — the
+   exact move the caveat names — and the mismatch
+   is evidence anyone can recompute, not a vote.
+
+   The published verdict mirrors tool 60's fork.
+   If every dealer sealed, revealed, and matched,
+   the sealed round stands: the counting key and
+   the trustees line are tool 59's own derivations
+   from the revealed commitments, unchanged, and
+   its dealing was never up for revision. If a
+   dealer mismatches or never reveals, this tool
+   derives NO key from the round: the revealed
+   commitments are no longer the set the seals
+   were made over, so summing them would spell a
+   key for a round that never happened. The
+   mismatched and the silent are named separately,
+   because they are different facts — a mismatch
+   is proof of a changed dealing, silence is only
+   an absence — and what the group does about
+   either (re-seal fresh, exclude and restart, in
+   tool 60's shape) is governance this page names
+   instead of papering over.
+
+   The honest limits are plain. This page cannot
+   hold a clock or police an order: that every
+   seal really was published before any reveal is
+   the group's own discipline, judged here only
+   from the record it is given. Sealing also fixes
+   only the adaptive move — choosing after seeing
+   — not every bias: a dealer can still grind
+   their own contribution before sealing (which
+   buys them nothing about the others' unseen
+   contributions), refuse to reveal once the
+   others have (an abort, answered by exclusion,
+   not arithmetic), or leak their own blinding
+   early and weaken their own seal. And a seal is
+   a hash, not a signature: it binds a dealer by
+   their number in the round, it does not prove
+   who typed it. The frame is the house one: a
+   real hash commitment computed and judged
+   locally, spelled in this hub's own
+   p4a-jtseal-v1 and p4a-jtreveal-v1 lines around
+   tools 38, 59 and 60's unchanged formats — not
+   a format any chain or wallet checks, not one
+   of Midnight's Compact circuit proofs. Never
+   paste a real wallet key or a production
+   private key into any web page, including this
+   one; this tool needs no existing key at all. */
+var JTSEAL_FORMAT = "p4a-jtseal-v1";
+var JTREVEAL_FORMAT = "p4a-jtreveal-v1";
+var JTSEAL_PREFIX = "privacy4all-jtseal-v1";
+
+/* A sealed line: the format tag, the round's
+   quorum, the dealer's number and the digest.
+   Nothing else travels in it — no commitment
+   point, no blinding, nothing a bystander could
+   test a guess against. The digest is any whole
+   SHA-256 hex: unlike a scalar it may honestly
+   start with any digit, zero included in
+   principle, so its gate is the hex shape alone. */
+function formatJointTallySeal(threshold, dealer, digestHex) {
+  if (!validThresholdValue(threshold) ||
+      !validThresholdIndexValue(dealer) ||
+      typeof digestHex !== "string") {
+    return null;
+  }
+  var digest = digestHex.trim().toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(digest)) return null;
+  return JTSEAL_FORMAT + ":" + threshold + ":" + dealer + ":" +
+    digest;
+}
+
+function parseJointTallySeal(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 4 || parts[0] !== JTSEAL_FORMAT) {
+    return null;
+  }
+  if (!/^[2-3]$/.test(parts[1])) return null;
+  var dealer = parseThresholdIndexText(parts[2]);
+  var digest = parts[3].trim().toLowerCase();
+  if (dealer === null || !/^[0-9a-f]{64}$/.test(digest)) {
+    return null;
+  }
+  return { threshold: Number(parts[1]), dealer: dealer,
+           digest: digest };
+}
+
+/* A reveal line: the format tag, the dealer's
+   number and the blinding scalar they sealed
+   with, gated as a proof scalar — a blinding of
+   zero would seal nothing, and the order is not
+   a scalar. The blinding is a secret only until
+   the reveal: after it is broadcast anyone can
+   recompute the seal, which is the point, and it
+   unlocks nothing else — it was drawn for this
+   one seal and is spent by revealing it. */
+function formatJointTallyReveal(dealer, blindingHex) {
+  var blinding = parseProofScalar(blindingHex);
+  if (!validThresholdIndexValue(dealer) || blinding === null) {
+    return null;
+  }
+  return JTREVEAL_FORMAT + ":" + dealer + ":" + blinding;
+}
+
+function parseJointTallyReveal(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 3 || parts[0] !== JTREVEAL_FORMAT) {
+    return null;
+  }
+  var dealer = parseThresholdIndexText(parts[1]);
+  var blinding = parseProofScalar(parts[2]);
+  if (dealer === null || blinding === null) return null;
+  return { dealer: dealer, blinding: blinding };
+}
+
+/* The seal's digest, to order: SHA-256 over this
+   tool's label, the commitment line in its
+   canonical spelling — re-spelled from its parse,
+   so the hash names the dealing and not one
+   dealer's whitespace or casing — and the
+   blinding. Synchronous spellings in, a promise
+   of the digest out, because the hash itself is
+   the platform's. A commitment line that does not
+   parse, or a blinding that is not a scalar, is
+   null: there is nothing to seal. */
+function jointTallySealDigest(commitmentText, blindingHex) {
+  var parsed = parseDkgCommitmentLine(commitmentText);
+  var blinding = parseProofScalar(blindingHex);
+  if (parsed === null || blinding === null) {
+    return Promise.resolve(null);
+  }
+  var canonical = formatDkgCommitmentLine(parsed.threshold,
+    parsed.dealer, parsed.commitments);
+  if (canonical === null) return Promise.resolve(null);
+  return sha256Hex(JTSEAL_PREFIX + "\n" + canonical + "\n" +
+    blinding);
+}
+
+/* Sealing, deterministically: a commitment line
+   and a chosen blinding in, the sealed line out,
+   so tests can pin the digest against an
+   independent SHA-256. The blinding itself is
+   NOT part of what comes back — it travels only
+   in the reveal line, when the dealer chooses to
+   make it. */
+function sealJointTallyCommitmentFor(commitmentText, blindingHex) {
+  var parsed = parseDkgCommitmentLine(commitmentText);
+  if (parsed === null) return Promise.resolve(null);
+  return jointTallySealDigest(commitmentText, blindingHex)
+    .then(function (digest) {
+      if (digest === null) return null;
+      return formatJointTallySeal(parsed.threshold, parsed.dealer,
+        digest);
+    });
+}
+
+/* A trustee's whole sealing move: draw a fresh
+   blinding, seal the commitment line they dealt
+   in tool 59, and hand back the sealed line to
+   publish now and the reveal line to keep until
+   every seal is in. A fresh blinding per seal, as
+   everywhere on this page: one reused across
+   rounds would tie those rounds' seals together
+   and let a bystander test whether two rounds
+   sealed the same dealing. */
+function makeJointTallySeal(commitmentText) {
+  var parsed = parseDkgCommitmentLine(commitmentText);
+  if (parsed === null) return Promise.resolve(null);
+  var blinding = randomProofScalar();
+  if (blinding === null) return Promise.resolve(null);
+  return sealJointTallyCommitmentFor(commitmentText, blinding)
+    .then(function (sealed) {
+      if (sealed === null) return null;
+      return { sealed: sealed,
+               reveal: formatJointTallyReveal(parsed.dealer,
+                 blinding),
+               dealer: parsed.dealer,
+               threshold: parsed.threshold };
+    });
+}
+
+/* Checking one reveal, publicly: the sealed line,
+   the revealed commitment line and the reveal
+   line in, a verdict out. True when the pair
+   re-hashes to exactly the sealed digest — the
+   dealer dealt what they sealed, before they
+   could see anyone else's dealing. False — never
+   null — when every piece is well-formed, the
+   three lines name the same dealer and quorum,
+   and the digest simply is not the sealed one:
+   the dealing changed after the seal. Null when
+   a piece cannot be parsed, or the lines name
+   different dealers or quorums — evidence about
+   a different seal judges nothing. */
+function checkJointTallyReveal(sealedText, commitmentText,
+                               revealText) {
+  var seal = parseJointTallySeal(sealedText);
+  var parsed = parseDkgCommitmentLine(commitmentText);
+  var reveal = parseJointTallyReveal(revealText);
+  if (seal === null || parsed === null || reveal === null) {
+    return Promise.resolve(null);
+  }
+  if (seal.dealer !== parsed.dealer ||
+      seal.threshold !== parsed.threshold ||
+      reveal.dealer !== parsed.dealer) {
+    return Promise.resolve(null);
+  }
+  return jointTallySealDigest(commitmentText, reveal.blinding)
+    .then(function (digest) {
+      if (digest === null) return null;
+      return digest === seal.digest;
+    });
+}
+
+/* Publishing the sealed round: every dealer's
+   sealed line, the whole revealed commitment set
+   and every reveal line, in any order — reveals
+   are matched to seals by the dealer they name.
+   The record must be whole before it is judged:
+   a seal missing, duplicated, or naming a dealer
+   or quorum outside the revealed round, a reveal
+   answering no seal, or a duplicated reveal
+   refuses the whole publication as null, because
+   a verdict drawn from a partial record is worse
+   than none. Each reveal is judged by the same
+   public check as the check form. The fork is
+   the honest one stated in the header: every
+   dealer matched, and the round stands — the key
+   and trustees lines come back as tool 59's own
+   derivations from the revealed commitments,
+   unchanged; any dealer mismatched or silent,
+   and NO key and NO trustees line is derived —
+   what comes back is the two lists, mismatched
+   and missing, kept apart because a changed
+   dealing and an absent one are different facts. */
+function verifySealedJointTallyRound(sealsText, commitmentsText,
+                                     revealsText) {
+  var set = parseDkgCommitmentSet(commitmentsText);
+  if (set === null || typeof sealsText !== "string" ||
+      typeof revealsText !== "string") {
+    return Promise.resolve(null);
+  }
+  var sealLines = {};
+  var sealCount = 0;
+  var sealParts = sealsText.split(/\r?\n/);
+  for (var i = 0; i < sealParts.length; i++) {
+    var sealLine = sealParts[i].trim();
+    if (sealLine === "") continue;
+    var seal = parseJointTallySeal(sealLine);
+    if (seal === null || seal.threshold !== set.threshold ||
+        seal.dealer < 1 || seal.dealer > set.count ||
+        sealLines[seal.dealer]) {
+      return Promise.resolve(null);
+    }
+    sealLines[seal.dealer] = sealLine;
+    sealCount++;
+  }
+  if (sealCount !== set.count) return Promise.resolve(null);
+  var revealLines = {};
+  var revealParts = revealsText.split(/\r?\n/);
+  for (var r = 0; r < revealParts.length; r++) {
+    var revealLine = revealParts[r].trim();
+    if (revealLine === "") continue;
+    var reveal = parseJointTallyReveal(revealLine);
+    if (reveal === null || reveal.dealer < 1 ||
+        reveal.dealer > set.count || revealLines[reveal.dealer]) {
+      return Promise.resolve(null);
+    }
+    revealLines[reveal.dealer] = revealLine;
+  }
+  var mismatched = [];
+  var missing = [];
+  var failed = false;
+  var step = function (dealer) {
+    if (dealer > set.count) return Promise.resolve(true);
+    if (!revealLines[dealer]) {
+      missing.push(dealer);
+      return step(dealer + 1);
+    }
+    var commitment = formatDkgCommitmentLine(set.threshold,
+      dealer, set.byDealer[dealer].commitments);
+    return checkJointTallyReveal(sealLines[dealer], commitment,
+        revealLines[dealer])
+      .then(function (verdict) {
+        if (verdict === null) { failed = true; return false; }
+        if (verdict === false) mismatched.push(dealer);
+        return step(dealer + 1);
+      });
+  };
+  return step(1).then(function () {
+    if (failed) return null;
+    var stands = mismatched.length === 0 && missing.length === 0;
+    return { threshold: set.threshold, count: set.count,
+             mismatched: mismatched, missing: missing,
+             stands: stands,
+             publicKey: stands ?
+               jointTallyKeyForCommitments(commitmentsText) : null,
+             trustees: stands ?
+               jointTallyTrusteesForCommitments(commitmentsText) :
+               null };
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -13447,7 +13785,14 @@ if (typeof module !== "undefined" && module.exports) {
                      resolveJointTallyComplaint,
                      formatJointTallyQualifiedLine,
                      parseJointTallyQualifiedLine,
-                     qualifiedJointTallySet };
+                     qualifiedJointTallySet,
+                     JTSEAL_FORMAT, JTREVEAL_FORMAT, JTSEAL_PREFIX,
+                     formatJointTallySeal, parseJointTallySeal,
+                     formatJointTallyReveal, parseJointTallyReveal,
+                     jointTallySealDigest,
+                     sealJointTallyCommitmentFor, makeJointTallySeal,
+                     checkJointTallyReveal,
+                     verifySealedJointTallyRound };
 }
 
 if (typeof document !== "undefined") {
@@ -17456,6 +17801,135 @@ if (typeof document !== "undefined") {
         "original order: " + published.renumbering.map(function (pair) {
           return "trustee " + pair[0] + " deals as trustee " + pair[1];
         }).join("; ") + ".";
+    });
+
+    /* --- commit before you look (sealed commitment round) --- */
+    document.getElementById("joint-seal-make").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("joint-seal-make-result");
+      var sealOut = document.getElementById("jts-seal-out");
+      var revealOut = document.getElementById("jts-reveal-out");
+      makeJointTallySeal(
+        document.getElementById("jts-make-commitment").value)
+        .then(function (made) {
+          if (made === null) {
+            sealOut.value = "";
+            revealOut.value = "";
+            status.textContent = "No seal made: paste one " +
+              "whole p4a-dkgcommit-v1 commitment line from " +
+              "tool 59 — a seal over a partial or broken line " +
+              "would bind you to nothing this round can judge.";
+            return;
+          }
+          sealOut.value = made.sealed;
+          revealOut.value = made.reveal;
+          status.textContent = "Sealed locally: publish the " +
+            "sealed line now, before anyone reveals a " +
+            "commitment line — that order is the whole point, " +
+            "and it is the group's discipline, not something " +
+            "this page can enforce. Keep the reveal line " +
+            "private until every trustee's seal is in: " +
+            "broadcast it in the reveal phase so anyone can " +
+            "recompute that you dealt what you sealed.";
+        });
+    });
+
+    document.getElementById("joint-seal-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("joint-seal-check-result");
+      var out = document.getElementById("jts-check-out");
+      checkJointTallyReveal(
+        document.getElementById("jts-check-seal").value,
+        document.getElementById("jts-check-commitment").value,
+        document.getElementById("jts-check-reveal").value)
+        .then(function (verdict) {
+          if (verdict === null) {
+            out.value = "";
+            status.textContent = "No verdict: the sealed " +
+              "line, the commitment line and the reveal line " +
+              "must all be whole lines naming the same dealer " +
+              "under the same quorum — evidence about a " +
+              "different seal judges nothing.";
+            return;
+          }
+          if (verdict === true) {
+            out.value = "This reveal matches its seal: the " +
+              "commitment line and the blinding re-hash to " +
+              "exactly the sealed digest.";
+            status.textContent = "Checked locally, from " +
+              "public lines alone once the reveal is out: " +
+              "this dealer dealt what they sealed, before " +
+              "they could see anyone else's dealing — the " +
+              "adaptive move the Pedersen caveat names was " +
+              "never available to them.";
+            return;
+          }
+          out.value = "This reveal does NOT match its seal: " +
+            "the commitment line and the blinding re-hash to " +
+            "a different digest than the one sealed.";
+          status.textContent = "Checked locally, from public " +
+            "lines alone: the dealing this dealer revealed " +
+            "is not the dealing they sealed — it changed " +
+            "after the seal, which is exactly the move this " +
+            "round exists to catch. Publish the whole round " +
+            "in the next form so the mismatch is on the " +
+            "record for everyone.";
+        });
+    });
+
+    document.getElementById("joint-seal-publish").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("joint-seal-publish-result");
+      var keyOut = document.getElementById("jts-publish-key-out");
+      var trusteesOut = document.getElementById("jts-publish-trustees-out");
+      verifySealedJointTallyRound(
+        document.getElementById("jts-publish-seals").value,
+        document.getElementById("jts-publish-commitments").value,
+        document.getElementById("jts-publish-reveals").value)
+        .then(function (published) {
+          if (published === null) {
+            keyOut.value = "";
+            trusteesOut.value = "";
+            status.textContent = "No verdict on the round: " +
+              "the sealed lines must be exactly one per " +
+              "dealer of the revealed round under its quorum, " +
+              "the commitment lines the whole round, and " +
+              "every reveal a whole line for a dealer of it, " +
+              "once — a verdict drawn from a partial record " +
+              "is worse than none.";
+            return;
+          }
+          if (published.stands) {
+            keyOut.value = published.publicKey;
+            trusteesOut.value = published.trustees;
+            status.textContent = "Published locally: every " +
+              "dealer sealed, revealed and matched, so the " +
+              "round stands — the counting key and trustees " +
+              "line above are tool 59's own derivations from " +
+              "the revealed commitments, and no dealing was " +
+              "ever up for revision after the seals were in.";
+            return;
+          }
+          keyOut.value = "";
+          trusteesOut.value = "";
+          var bits = [];
+          if (published.mismatched.length) {
+            bits.push("dealer(s) " + published.mismatched.join(", ") +
+              " revealed a dealing that does not match their " +
+              "seal — it changed after the seal");
+          }
+          if (published.missing.length) {
+            bits.push("dealer(s) " + published.missing.join(", ") +
+              " never revealed");
+          }
+          status.textContent = "Published locally: " +
+            bits.join("; ") + ". NO key is derived from this " +
+            "round — the revealed commitments are no longer " +
+            "the set the seals were made over. The group " +
+            "re-seals a fresh round, or excludes the named " +
+            "dealers and restarts without them, in tool 60's " +
+            "shape — governance, off this page.";
+        });
     });
 
     /* --- copy donation address --- */
