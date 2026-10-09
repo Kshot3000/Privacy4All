@@ -1109,7 +1109,44 @@ renewable resource that pays for shielded transactions.
   catalogue itself is public by design, and
   its size and longest row leak. Not a Compact
   circuit proof, and not a format any chain
-  or wallet checks.
+  or wallet checks. Tool 51 leaves lookups
+  behind and counts votes instead.
+- **Count every vote, read none — a
+  homomorphic tally** — each individual answer
+  hidden, the total still exact. A counting
+  authority holds a secret x and publishes
+  Y = x×G (a `p4a-tallykey-v1` line; the secret
+  stays in a `p4a-tallystate-v1` line). A ballot
+  for a vote of exactly 0 or 1 under fresh
+  randomness r is the point pair
+  (r×G, v×G + r×Y), spelled `p4a-ballot-v1`:
+  the vote rides masked by a point only the
+  holder of r or x can compute, so the line
+  names no vote. Exponential ElGamal is
+  additively homomorphic, so anyone — no key
+  involved — adds the ballots point by point
+  into a `p4a-tally-v1` line: a ballot for the
+  total under the summed randomness. Only the
+  authority opens it: B − x×A cancels every
+  mask at once, leaving (total)×G, counted
+  off in base-point multiples from the
+  identity up to the ballot count (sixteen
+  ballots at most — the search needs a small,
+  bounded answer). Honestly labelled: nothing
+  here proves a ballot encrypts 0 or 1 — a
+  ballot encrypting 2 counts double and only
+  a cheat that pushes the total past the
+  ballot count fails closed at the finish;
+  real systems attach a {0, 1} set-membership
+  proof (tool 45) to every ballot. The single
+  authority's state can also open any one
+  ballot, so real elections split it by
+  threshold (tools 37–38); eligibility,
+  double-voting by pasting a ballot twice,
+  coercion resistance and receipt-freeness
+  are out of scope. Not a Compact circuit
+  proof, and not a format any chain or wallet
+  checks.
 
 ## Guides
 

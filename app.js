@@ -9459,6 +9459,365 @@ function openPirAnswers(stateText, answerAText, answerBText) {
   return parsePsiPayload(text);
 }
 
+/* Count every vote, read none — a homomorphic
+   tally (tool 51).
+
+   Every tool above hides data, a message, a set
+   question or a lookup. This one hides each
+   individual answer while still counting them
+   all: a vote you can add up without ever
+   reading it. The shape is exponential ElGamal
+   over the hub's P-256 arithmetic. One counting
+   authority holds a secret scalar x; its public
+   key is Y = x×G. A ballot for a vote v in
+   {0, 1} under a fresh random r is the pair
+   (A, B) = (r×G, v×G + r×Y): the vote rides as
+   a multiple of the base point in the second
+   coordinate, masked by r×Y, a point only the
+   holder of r or of x can compute. ElGamal is
+   additively homomorphic in this spelling:
+   adding two ballots point-by-point gives a
+   ballot for the SUM of their votes under the
+   sum of their randomness — nobody decrypts
+   anything along the way, so the adding-up can
+   be done by anyone, in public, and the tally
+   line below is that sum with its ballot count.
+   The finish is the authority's alone: with the
+   summed points, B_sum − x×A_sum = (total)×G,
+   because the r×Y masks cancel against x times
+   the r×G parts exactly. The total itself is
+   then read by counting base-point multiples
+   0, 1, 2, … up to the ballot count — a search
+   that is only possible because the answer is
+   small and bounded by the number of ballots,
+   which is why this encoding is called
+   exponential and why the page caps a tally at
+   sixteen ballots. Zero yes-votes decrypt to
+   the identity point, which reads as 0 honestly,
+   not as a failure.
+
+   The honest limits, stated before the code.
+   First, the load-bearing one: NOTHING here
+   proves a ballot encrypts 0 or 1. A ballot
+   encrypting 2 counts double, and no step on
+   this page can tell — the sum still opens,
+   just to a number that includes the cheat. If
+   the cheat pushes the total past the ballot
+   count the finish fails closed (that much is
+   caught), but a 2 balanced by an honest
+   electorate is invisible. Real systems attach
+   a proof to every ballot that its value is one
+   of {0, 1} — the set-membership proof of tool
+   45 pointed at exactly that set — and this
+   page does not pretend to. Second, the
+   authority is ONE key holder, and the same x
+   that opens the total opens any single ballot
+   (B − x×A per ballot), so ballots are private
+   from everyone EXCEPT the authority; real
+   elections split x by threshold (tools 37
+   and 38) so no one party can do that. Third,
+   eligibility is out of scope entirely: the
+   tally step adds the lines it is handed, a
+   ballot pasted twice counts twice, and who
+   may vote, and whether they voted once, are
+   questions this arithmetic does not ask.
+   Coercion resistance and receipt-freeness are
+   likewise not offered. A fresh r per ballot
+   is required for the privacy that IS offered:
+   under one r, two ballots for the same vote
+   are the same pair of points, visibly equal.
+   The frame is the house one: a real tally
+   computed locally, but the lines are this
+   hub's own spellings — p4a-tallykey-v1,
+   p4a-tallystate-v1, p4a-ballot-v1 and
+   p4a-tally-v1 — not a format any chain or
+   wallet checks, not one of Midnight's Compact
+   circuit proofs. Never paste a real wallet
+   key or a production private key into any web
+   page, including this one. */
+var TALLY_KEY_FORMAT = "p4a-tallykey-v1";
+var TALLY_STATE_FORMAT = "p4a-tallystate-v1";
+var TALLY_BALLOT_FORMAT = "p4a-ballot-v1";
+var TALLY_TOTAL_FORMAT = "p4a-tally-v1";
+var TALLY_MIN_BALLOTS = 1;
+var TALLY_MAX_BALLOTS = 16;
+
+/* A vote, as typed: exactly "0" or exactly "1",
+   surrounding space allowed. Anything else —
+   "yes", "2", a fraction, an empty box — is
+   null: this count has two answers, and a vote
+   it cannot state exactly is a vote it will
+   not cast. */
+function parseTallyVote(text) {
+  if (typeof text !== "string") return null;
+  var trimmed = text.trim();
+  if (trimmed === "0") return 0;
+  if (trimmed === "1") return 1;
+  return null;
+}
+
+/* The authority's public key, from its secret:
+   Y = x×G, spelled as the hub's usual SPKI point
+   inside a tally key line. Deterministic, so a
+   state line's key can always be re-derived and
+   checked against the line voters were given. */
+function tallyKeyForSecret(secretHex) {
+  var secret = parseProofScalar(secretHex);
+  if (secret === null) return null;
+  var point = p256PointMultiply(BigInt("0x" + secret),
+    { x: P256_GX, y: P256_GY });
+  if (point === null) return null;
+  return TALLY_KEY_FORMAT + ":" + formatP256PublicKey(point);
+}
+
+/* The counting authority's kept state line: the
+   format tag and the secret scalar. It opens
+   the total — and, honestly noted in the
+   header, any single ballot — so it is kept
+   the way this page keeps state lines: like a
+   private key, and shared with no one. */
+function formatTallyState(secretHex) {
+  var secret = parseProofScalar(secretHex);
+  if (secret === null) return null;
+  return TALLY_STATE_FORMAT + ":" + secret;
+}
+
+function parseTallyState(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 2 || parts[0] !== TALLY_STATE_FORMAT) return null;
+  return parseProofScalar(parts[1]);
+}
+
+/* A tally key line, judged: the tag, and a
+   point that parseP256Point accepts — on the
+   curve, in the hub's SPKI spelling. Returns
+   the canonical point spelling, so a voter's
+   ballot is always built against the key as
+   this page would write it. */
+function parseTallyPublicKey(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 2 || parts[0] !== TALLY_KEY_FORMAT) return null;
+  var point = parseP256Point(parts[1]);
+  if (point === null) return null;
+  return formatP256PublicKey(point);
+}
+
+/* The authority's key, derived from its kept
+   state alone: the check that a state line and
+   a published key line belong together, without
+   the secret ever leaving the state line. */
+function tallyPublicKeyForState(stateText) {
+  var secret = parseTallyState(stateText);
+  if (secret === null) return null;
+  return tallyKeyForSecret(secret);
+}
+
+/* Setting up a count: draw a fresh authority
+   secret and hand back the key line voters cast
+   under and the state line the authority keeps.
+   A fresh secret per count — a secret reused
+   across counts ties those counts' ballots to
+   one opener, which is the authority's whole
+   power and should never be wider than one
+   count needs. */
+function makeTallyKey() {
+  var secret = randomProofScalar();
+  if (secret === null) return null;
+  var publicKey = tallyKeyForSecret(secret);
+  var state = formatTallyState(secret);
+  if (publicKey === null || state === null) return null;
+  return { publicKey: publicKey, state: state };
+}
+
+/* A ballot line: the tag and its two points —
+   A = r×G, the randomness made public as a
+   point, and B = v×G + r×Y, the masked vote.
+   Neither point names the vote: under a fresh
+   r, a ballot for 0 and a ballot for 1 are two
+   unrelated-looking pairs. */
+function formatTallyBallot(aHex, bHex) {
+  var a = parseP256Point(aHex);
+  var b = parseP256Point(bHex);
+  if (a === null || b === null) return null;
+  return TALLY_BALLOT_FORMAT + ":" + formatP256PublicKey(a) +
+    ":" + formatP256PublicKey(b);
+}
+
+function parseTallyBallot(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 3 || parts[0] !== TALLY_BALLOT_FORMAT) return null;
+  var a = parseP256Point(parts[1]);
+  var b = parseP256Point(parts[2]);
+  if (a === null || b === null) return null;
+  return { a: formatP256PublicKey(a), b: formatP256PublicKey(b) };
+}
+
+/* One ballot, made to order: the vote, the
+   authority's key line and a chosen randomness
+   in, the ballot line out — A = r×G and
+   B = v×G + r×Y by the page's own point
+   arithmetic, with a zero vote contributing no
+   G term to B at all. Synchronous and
+   deterministic, so tests can pin every point
+   against independent arithmetic. */
+function tallyBallotFor(vote, keyText, randomnessHex) {
+  if (vote !== 0 && vote !== 1) return null;
+  var keyHex = parseTallyPublicKey(keyText);
+  var randomness = parseProofScalar(randomnessHex);
+  if (keyHex === null || randomness === null) return null;
+  var yPoint = parseP256Point(keyHex);
+  if (yPoint === null) return null;
+  var r = BigInt("0x" + randomness);
+  var a = p256PointMultiply(r, { x: P256_GX, y: P256_GY });
+  var mask = p256PointMultiply(r, yPoint);
+  if (a === null || mask === null) return null;
+  var b = vote === 1 ? p256PointAdd({ x: P256_GX, y: P256_GY }, mask) : mask;
+  if (b === null) return null;
+  return formatTallyBallot(formatP256PublicKey(a), formatP256PublicKey(b));
+}
+
+/* A voter's move, whole: read the typed vote,
+   draw a fresh randomness — a new one every
+   ballot, because under a reused r two ballots
+   for the same vote are the same two points,
+   visibly equal, and the difference of two
+   ballots under one r exposes whether their
+   votes matched — and cast. */
+function makeTallyBallot(voteText, keyText) {
+  var vote = parseTallyVote(voteText);
+  if (vote === null) return null;
+  var randomness = randomProofScalar();
+  if (randomness === null) return null;
+  return tallyBallotFor(vote, keyText, randomness);
+}
+
+/* The ballots for a tally, as pasted: one
+   ballot line per line, trailing blank lines
+   ignored, any other blank line refused. One
+   to TALLY_MAX_BALLOTS lines: a tally of zero
+   ballots has no total to protect, and the cap
+   keeps the finish's counting search — and the
+   page's arithmetic — at teaching size. The
+   same line twice is two entries here, stated
+   plainly in the header: addition cannot tell
+   a copied ballot from a second voter, and
+   does not try. */
+function parseTallyBallots(text) {
+  if (typeof text !== "string") return null;
+  var lines = text.split("\n");
+  while (lines.length > 0 && lines[lines.length - 1].trim() === "") lines.pop();
+  if (lines.length < TALLY_MIN_BALLOTS || lines.length > TALLY_MAX_BALLOTS) return null;
+  var out = [];
+  for (var i = 0; i < lines.length; i++) {
+    var ballot = parseTallyBallot(lines[i]);
+    if (ballot === null) return null;
+    out.push(ballot);
+  }
+  return out;
+}
+
+/* A tally line: the tag, the ballot count in
+   canonical decimal, and the two summed points.
+   The count travels with the sums because the
+   finish's search is bounded by it — a total
+   larger than the number of ballots is not a
+   total this tally can have produced honestly,
+   and the finish refuses it rather than
+   reporting it. */
+function formatTally(count, aHex, bHex) {
+  if (typeof count !== "number" || !isFinite(count) ||
+      Math.floor(count) !== count ||
+      count < TALLY_MIN_BALLOTS || count > TALLY_MAX_BALLOTS) return null;
+  var a = parseP256Point(aHex);
+  var b = parseP256Point(bHex);
+  if (a === null || b === null) return null;
+  return TALLY_TOTAL_FORMAT + ":" + count + ":" +
+    formatP256PublicKey(a) + ":" + formatP256PublicKey(b);
+}
+
+function parseTally(text) {
+  if (typeof text !== "string") return null;
+  var parts = text.trim().split(":");
+  if (parts.length !== 4 || parts[0] !== TALLY_TOTAL_FORMAT) return null;
+  if (!/^(0|[1-9][0-9]*)$/.test(parts[1])) return null;
+  var count = Number(parts[1]);
+  if (count < TALLY_MIN_BALLOTS || count > TALLY_MAX_BALLOTS) return null;
+  var a = parseP256Point(parts[2]);
+  var b = parseP256Point(parts[3]);
+  if (a === null || b === null) return null;
+  return { count: count, a: formatP256PublicKey(a), b: formatP256PublicKey(b) };
+}
+
+/* The public step — anyone's move, no key of
+   any kind involved: add the ballots
+   point-by-point, A parts together and B parts
+   together, and spell the tally line. The sums
+   are a ballot for the total vote under the
+   total randomness, and nothing in this step
+   reads any vote: addition is all it does. A
+   sum landing on the identity — the ballots'
+   randomness cancelling exactly — cannot be
+   spelled as a point and is refused whole,
+   rather than written as a tally it is not. */
+function tallyBallotsFor(ballotsText) {
+  var ballots = parseTallyBallots(ballotsText);
+  if (ballots === null) return null;
+  var sumA = null;
+  var sumB = null;
+  for (var i = 0; i < ballots.length; i++) {
+    sumA = p256PointAdd(sumA, parseP256Point(ballots[i].a));
+    sumB = p256PointAdd(sumB, parseP256Point(ballots[i].b));
+  }
+  if (sumA === null || sumB === null) return null;
+  return formatTally(ballots.length, formatP256PublicKey(sumA),
+    formatP256PublicKey(sumB));
+}
+
+function tallyPointsEqual(p1, p2) {
+  if (p1 === null || p2 === null) return p1 === p2;
+  return p1.x === p2.x && p1.y === p2.y;
+}
+
+/* The authority's finish: the kept state and a
+   tally line in, the count of yes votes out.
+   B_sum − x×A_sum strips every mask at once —
+   each ballot's r×Y against x times its r×G —
+   leaving exactly (total)×G; the total is then
+   counted off in base-point multiples, from the
+   identity (zero yes votes, an honest answer)
+   up to the ballot count the tally line
+   carries. A point that is no multiple in that
+   range — a tally summed under a different
+   key, a ballot that encrypted something
+   outside {0, 1} and pushed the sum past the
+   count, a corrupted point — is null, never a
+   best guess: this finish reports a number it
+   can stand behind or nothing. */
+function openTally(stateText, tallyText) {
+  var secret = parseTallyState(stateText);
+  var tally = parseTally(tallyText);
+  if (secret === null || tally === null) return null;
+  var aPoint = parseP256Point(tally.a);
+  var bPoint = parseP256Point(tally.b);
+  if (aPoint === null || bPoint === null) return null;
+  var shared = p256PointMultiply(BigInt("0x" + secret), aPoint);
+  if (shared === null) return null;
+  var unmasked = p256PointAdd(bPoint,
+    { x: shared.x, y: p256Mod(P256_P - shared.y) });
+  var acc = null;
+  for (var t = 0; t <= tally.count; t++) {
+    if (tallyPointsEqual(acc, unmasked)) {
+      return { total: t, ballots: tally.count };
+    }
+    acc = p256PointAdd(acc, { x: P256_GX, y: P256_GY });
+    if (acc === null && t < tally.count) return null;
+  }
+  return null;
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -9653,7 +10012,18 @@ if (typeof module !== "undefined" && module.exports) {
                      pirQueriesFor, makePirQueries,
                      pirAnswerBlockLength, buildPirRowBlock,
                      formatPirAnswer, parsePirAnswer,
-                     pirAnswerFor, openPirAnswers };
+                     pirAnswerFor, openPirAnswers,
+                     TALLY_KEY_FORMAT, TALLY_STATE_FORMAT,
+                     TALLY_BALLOT_FORMAT, TALLY_TOTAL_FORMAT,
+                     TALLY_MIN_BALLOTS, TALLY_MAX_BALLOTS,
+                     parseTallyVote, tallyKeyForSecret,
+                     formatTallyState, parseTallyState,
+                     parseTallyPublicKey, tallyPublicKeyForState,
+                     makeTallyKey, formatTallyBallot,
+                     parseTallyBallot, tallyBallotFor,
+                     makeTallyBallot, parseTallyBallots,
+                     formatTally, parseTally,
+                     tallyBallotsFor, openTally };
 }
 
 if (typeof document !== "undefined") {
@@ -12761,6 +13131,103 @@ if (typeof document !== "undefined") {
         "this row, and together — only together — they would " +
         "have. That is the bargain this tool makes, stated in " +
         "its text above: privacy bought with non-collusion.";
+    });
+
+    /* --- count every vote, read none (homomorphic tally) --- */
+    document.getElementById("tally-setup").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("tally-setup-result");
+      var made = makeTallyKey();
+      if (made === null) {
+        status.textContent = "No key was made: this browser " +
+          "could not draw fresh randomness, and a counting key " +
+          "drawn predictably would open every ballot it counts.";
+        return;
+      }
+      document.getElementById("tally-key-out").value = made.publicKey;
+      document.getElementById("tally-state-out").value = made.state;
+      status.textContent = "A fresh counting key. Publish the " +
+        "key line — voters cast under it — and keep the state " +
+        "line where you keep private keys: whoever holds it " +
+        "opens the total, and any single ballot too, which is " +
+        "exactly the power the page text above says a real " +
+        "election would split by threshold.";
+    });
+
+    document.getElementById("tally-cast").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("tally-cast-result");
+      var out = document.getElementById("tally-ballot-out");
+      var ballot = makeTallyBallot(
+        document.getElementById("tally-cast-vote").value,
+        document.getElementById("tally-cast-key").value);
+      if (ballot === null) {
+        out.value = "";
+        status.textContent = "No ballot was cast: the vote must " +
+          "be exactly 0 or 1, and the key a whole " +
+          "p4a-tallykey-v1 line from the setup form.";
+        return;
+      }
+      out.value = ballot;
+      status.textContent = "Cast — and the ballot line does not " +
+        "name your vote: it is two points, the fresh randomness " +
+        "as a point and your vote masked under it. The same vote " +
+        "cast again would spell a completely different line. " +
+        "Hand the line to whoever is adding the count up.";
+    });
+
+    document.getElementById("tally-add").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("tally-add-result");
+      var out = document.getElementById("tally-total-out");
+      var tally = tallyBallotsFor(
+        document.getElementById("tally-add-ballots").value);
+      if (tally === null) {
+        out.value = "";
+        status.textContent = "No tally was made: paste one to " +
+          "sixteen whole p4a-ballot-v1 lines, one per line — a " +
+          "line that is not a ballot, or a pile past sixteen, " +
+          "stops the count rather than being silently dropped.";
+        return;
+      }
+      out.value = tally;
+      status.textContent = "Added up in public, and nothing was " +
+        "read: this step holds no key and decrypts nothing — " +
+        "the tally line is the ballots added point by point, a " +
+        "ballot for the total under the summed randomness. " +
+        "Anyone with the same ballot lines gets this same line. " +
+        "Only the counting authority's state can open it.";
+    });
+
+    document.getElementById("tally-open").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("tally-open-result");
+      var out = document.getElementById("tally-open-out");
+      var opened = openTally(
+        document.getElementById("tally-open-state").value,
+        document.getElementById("tally-open-total").value);
+      if (opened === null) {
+        out.value = "";
+        status.textContent = "Cannot open this: the state must " +
+          "be a whole p4a-tallystate-v1 line and the tally a " +
+          "whole p4a-tally-v1 line made under that state's key — " +
+          "a tally summed under another key, or one whose hidden " +
+          "total falls outside zero to the ballot count (a " +
+          "ballot that encrypted something other than 0 or 1 " +
+          "can do exactly that), fails here rather than " +
+          "reporting a number it cannot stand behind.";
+        return;
+      }
+      out.value = opened.total + " yes of " + opened.ballots +
+        (opened.ballots === 1 ? " ballot" : " ballots");
+      status.textContent = "The total — and only the total. " +
+        "Every mask cancelled at once against the summed " +
+        "randomness, leaving the count as a multiple of the " +
+        "base point, counted off against the ballot count the " +
+        "tally line carries. No single ballot was opened to " +
+        "get here — though the page text is honest that this " +
+        "state COULD open one, which is why real elections " +
+        "split it.";
     });
 
     /* --- copy donation address --- */
