@@ -1666,6 +1666,62 @@ renewable resource that pays for shielded transactions.
   and not a format any chain or wallet
   checks.
 
+- **Sealed, signed, and without them —
+  judge the sealed restarted round** —
+  the two judgements tools 61 and 64 run
+  separately, as one judgement over one
+  record. Tool 64 judges the restarted
+  round by its signatures and names its
+  remainder: the restarted dealing
+  re-opens the bias caveat, which tool
+  61's seal round answers run again on
+  the restart. Tool 61 run again derives
+  the key from the dealings that match
+  their seals — and a seal binds a dealer
+  by their number, not by their key, so
+  a restarted round can pass the seal
+  round carrying the disqualified
+  dealer's dealing under a renumbered
+  slot; a group that runs one judgement
+  and not the other has checked half the
+  restart. This tool takes tool 60's
+  qualified-set line, the whole
+  signing-key set from before the old
+  round, and the restarted round's seal,
+  commitment, reveal and signature sets,
+  and judges the sealed restarted round
+  against the qualified set under both
+  gates at once: a slot stands only when
+  its reveal re-hashes to the seal
+  published before any restarted dealing
+  was seen (tool 61's check, unchanged)
+  AND its signature verifies under the
+  key the renumbering assigns to that
+  slot (tool 64's check, unchanged). Only
+  then are the counting key and trustees
+  line derived — tool 59's own
+  derivations from the restarted
+  commitments, the same key each parent
+  judgement derives from this record
+  separately. Failures are named in five
+  lists, each slot once, for the first
+  gate it fails, in the round's own
+  order: unsealed, unrevealed,
+  mismatched, unsigned, invalid — the
+  disqualified dealer's key lands in
+  invalid even when its dealing was
+  honestly sealed and revealed.
+  Honestly labelled: the page holds no
+  clock, so that the seals were all in
+  before any reveal is the group's
+  discipline (tool 61); a signature
+  proves the key dealt it, not who holds
+  the key (tool 62's custody limit); and
+  a restart that skips the seal round is
+  tool 64's to judge, not this one's.
+  Not a Compact circuit proof, and not a
+  format any chain or wallet checks.
+
 ## Guides
 
 - [Getting started building on Midnight](guides/getting-started-midnight.md) —

@@ -14485,6 +14485,359 @@ function verifyQualifiedJointTallyRestart(qualifiedText, signKeysText,
   });
 }
 
+/* ---------- 65. Sealed, signed, and without them — judge
+   the sealed restarted round ----------
+
+   Tools 61 and 64 each judge the restarted round
+   of tool 60's fork with one gate, and each says
+   so on its own page. Tool 64's restart judgement
+   checks every restarted dealing's signature
+   under the key the renumbering assigns — and
+   names its own remainder plainly: the restarted
+   dealing re-opens the bias caveat, the dealer
+   who waits to see the others' dealings before
+   choosing their own, which tool 61's seal round
+   answers "run again on the restarted round".
+   Tool 61 run again seals and reveals the
+   restarted dealings and derives the key from
+   the matched ones — and a seal binds a dealer
+   by their NUMBER, its own named limit since it
+   shipped: it does not prove who typed it. So
+   the two judgements run separately leave a seam
+   exactly the shape of the restarted round's
+   danger: a restarted round can pass tool 61's
+   seal round with the DISQUALIFIED dealer's
+   dealing sealed and revealed under a renumbered
+   slot — the seal matches, because seals match
+   numbers — and it can pass nothing in tool 64
+   unless the signature is also checked, on a
+   different form, over a record nobody tied to
+   the sealed one. A group that runs one
+   judgement and not the other has checked half
+   the restart.
+
+   This tool is the two gates as ONE judgement
+   over ONE record: the qualified-set line that
+   ordered the restart, the whole signing-key set
+   published before the old round, and for the
+   restarted round its seal set, its commitment
+   set, its reveal set and its signature set. A
+   restarted slot stands only when its dealing
+   passes both gates — the reveal re-hashes to
+   the seal that was published before any
+   restarted dealing was seen (tool 61's check,
+   unchanged), and the signature verifies under
+   the key of the trustee the renumbering assigns
+   to that slot (tool 64's check, unchanged).
+   Only a round where every slot passes both
+   derives the counting key and the trustees
+   line, as tool 59's own derivations from the
+   restarted commitments — the same key tools 61
+   and 64 each derive from this record when it
+   passes them separately, now derived once,
+   from a record that passed both.
+
+   The failures are named in five lists, kept
+   apart because they are five different facts,
+   and each slot is named once, for the FIRST
+   gate it fails, in the order the round actually
+   runs — seal, reveal, signature — because a
+   dealing that was never sealed has no standing
+   to be reveal-judged, and a dealing that
+   changed after its seal has no standing to be
+   signature-judged: its signature belongs to
+   whichever dealing it does sign, which is some
+   other round's business. Unsealed: no seal line
+   for the slot — the dealing was never committed
+   to before the reveals. Unrevealed: a seal and
+   no reveal — silence at the reveal, tool 61's
+   missing kept apart from its mismatch as
+   always. Mismatched: the reveal does not
+   re-hash to the seal — the dealing changed
+   after it was sealed, the exact bias move the
+   seal exists to catch. Unsigned: the reveal
+   matched and no signature answers for the slot.
+   Invalid: the reveal matched and the signature
+   offered does not verify under the assigned key
+   — the disqualified dealer's key in a renumbered
+   slot lands here even when its dealing was
+   honestly sealed and revealed, which is the
+   load-bearing case this tool exists for.
+
+   The honest limits are plain, and inherited
+   whole. The page still cannot hold a clock or
+   police that the seals really were all in
+   before any reveal — order in time is the
+   group's discipline, exactly as in tool 61.
+   A signature proves the key dealt it, not who
+   holds the key — tool 62's custody limit stands
+   whole, as tool 64 already said of its half of
+   this judgement. And this tool judges the
+   restart it is shown: a group that re-deals
+   without a published qualified set has issued
+   no order, and a restart that skips the seal
+   round is tool 64's to judge, not this one's —
+   nothing here invents either. The frame is the
+   house one: a real double judgement computed
+   locally, spelled in this hub's own lines
+   around tools 33, 59, 60, 61, 62 and 64's
+   unchanged formats — not a format any chain or
+   wallet checks, not one of Midnight's Compact
+   circuit proofs. Never paste a real wallet key
+   or a production private key into any web page,
+   including this one; this tool needs no key at
+   all. */
+
+/* Checking one sealed restarted dealing,
+   publicly: the qualified-set line, the assigned
+   trustee's signing-key line, and the slot's
+   seal, commitment, reveal and signature lines.
+   The alignment is checked before either gate,
+   as in both parent tools: the qualified set
+   must name a disqualification and leave a
+   viable restart, the commitment must carry the
+   round's quorum and a slot of the restarted
+   round, the key line must name exactly the old
+   trustee that slot was assigned to, and the
+   seal must name the same slot and quorum — a
+   piece out of alignment is null, the wrong
+   question, as everywhere on this page. Then both
+   gates judge the same dealing: tool 61's reveal
+   check and tool 64's signature verdict. True is
+   both passing over this one dealing; false —
+   never null — is either gate honestly failing
+   it: a changed dealing, or another key's
+   signature. Null is a piece unparseable or out
+   of alignment, or a gate returning its own null
+   — evidence about a different dealing judges
+   nothing. */
+function checkSealedQualifiedRestartDealing(qualifiedText,
+    signKeyText, sealText, commitmentText, revealText,
+    signatureText) {
+  var qualified = parseJointTallyQualifiedLine(qualifiedText);
+  var parsed = parseDkgCommitmentLine(commitmentText);
+  var key = parseJointTallySignKey(signKeyText);
+  var seal = parseJointTallySeal(sealText);
+  if (qualified === null || parsed === null || key === null ||
+      seal === null) {
+    return Promise.resolve(null);
+  }
+  if (qualified.disqualified.length === 0 ||
+      qualified.qualified.length < qualified.threshold ||
+      parsed.threshold !== qualified.threshold ||
+      parsed.dealer < 1 ||
+      parsed.dealer > qualified.qualified.length ||
+      key.dealer !== qualified.qualified[parsed.dealer - 1] ||
+      key.threshold !== qualified.threshold ||
+      seal.dealer !== parsed.dealer ||
+      seal.threshold !== parsed.threshold) {
+    return Promise.resolve(null);
+  }
+  return checkJointTallyReveal(sealText, commitmentText,
+      revealText)
+    .then(function (revealed) {
+      if (revealed === null) return null;
+      return qualifiedRestartSignatureVerdict(signKeyText,
+          commitmentText, signatureText)
+        .then(function (signed) {
+          if (signed === null) return null;
+          return revealed && signed;
+        });
+    });
+}
+
+/* Judging the whole sealed restarted round: the
+   qualified-set line, the whole signing-key set
+   published before the OLD round, and the
+   restarted round's seal, commitment, reveal and
+   signature sets, matched to slots by the number
+   they name. The two honest early shapes of tool
+   64 come back without judging the rest of the
+   record — nobody disqualified (the old round
+   stands; there is no restart to seal), or a
+   quorum the disqualifications starved (no
+   restarted round exists at that quorum).
+   Otherwise the record must be whole before it
+   is judged, to the standard of BOTH parent
+   tools: the restarted commitment set exactly
+   the ordered round — the old quorum, the
+   qualified count, dealers 1..newCount each
+   once; the key set exactly one key per trustee
+   of the OLD round, the disqualified dealer's
+   included, as in tool 64; every seal, reveal
+   and signature a whole line for a slot of the
+   restarted round, none duplicated, as in tool
+   61; and a reveal answering for a slot that
+   published no seal refuses the publication as
+   null, tool 61's rule — it is evidence about a
+   seal this record does not hold. Absences the
+   gates exist to name are NOT refusals: a slot
+   with no seal is unsealed, a seal with no
+   reveal is unrevealed, a matched slot with no
+   signature is unsigned — each is a fact about
+   the round, named in the result, not a flaw in
+   the record. Each slot is then judged by the
+   same two gates as the check form, in the
+   round's own order, and named for the first
+   gate it fails. The fork is the honest one:
+   every slot sealed, revealed true and signed
+   by its assigned key, and the restarted round
+   stands — the key and trustees lines come back
+   as tool 59's own derivations from the
+   restarted commitments; any slot failing any
+   gate, and NO key and NO trustees line is
+   derived — what comes back is the five lists,
+   in NEW numbers, with the renumbering on the
+   same record to translate them. */
+function verifySealedQualifiedRestart(qualifiedText,
+                                      signKeysText, sealsText,
+                                      commitmentsText,
+                                      revealsText,
+                                      signaturesText) {
+  var qualified = parseJointTallyQualifiedLine(qualifiedText);
+  if (qualified === null || typeof signKeysText !== "string" ||
+      typeof sealsText !== "string" ||
+      typeof commitmentsText !== "string" ||
+      typeof revealsText !== "string" ||
+      typeof signaturesText !== "string") {
+    return Promise.resolve(null);
+  }
+  var base = { threshold: qualified.threshold,
+               oldCount: qualified.count,
+               qualified: qualified.qualified,
+               disqualified: qualified.disqualified,
+               newCount: qualified.qualified.length,
+               restartNeeded: qualified.disqualified.length > 0,
+               viable: qualified.qualified.length >=
+                 qualified.threshold,
+               renumbering: null, unsealed: [],
+               unrevealed: [], mismatched: [],
+               unsigned: [], invalid: [], stands: false,
+               publicKey: null, trustees: null };
+  if (!base.restartNeeded || !base.viable) {
+    return Promise.resolve(base);
+  }
+  base.renumbering = qualified.qualified.map(function (old, idx) {
+    return [old, idx + 1];
+  });
+  var set = parseDkgCommitmentSet(commitmentsText);
+  if (set === null || set.threshold !== qualified.threshold ||
+      set.count !== qualified.qualified.length) {
+    return Promise.resolve(null);
+  }
+  var keyLines = {};
+  var keyCount = 0;
+  var keyParts = signKeysText.split(/\r?\n/);
+  for (var i = 0; i < keyParts.length; i++) {
+    var keyLine = keyParts[i].trim();
+    if (keyLine === "") continue;
+    var key = parseJointTallySignKey(keyLine);
+    if (key === null || key.threshold !== qualified.threshold ||
+        key.dealer < 1 || key.dealer > qualified.count ||
+        keyLines[key.dealer]) {
+      return Promise.resolve(null);
+    }
+    keyLines[key.dealer] = keyLine;
+    keyCount++;
+  }
+  if (keyCount !== qualified.count) return Promise.resolve(null);
+  var sealLines = {};
+  var sealParts = sealsText.split(/\r?\n/);
+  for (var e = 0; e < sealParts.length; e++) {
+    var sealLine = sealParts[e].trim();
+    if (sealLine === "") continue;
+    var seal = parseJointTallySeal(sealLine);
+    if (seal === null || seal.threshold !== qualified.threshold ||
+        seal.dealer < 1 || seal.dealer > set.count ||
+        sealLines[seal.dealer]) {
+      return Promise.resolve(null);
+    }
+    sealLines[seal.dealer] = sealLine;
+  }
+  var revealLines = {};
+  var revealParts = revealsText.split(/\r?\n/);
+  for (var r = 0; r < revealParts.length; r++) {
+    var revealLine = revealParts[r].trim();
+    if (revealLine === "") continue;
+    var reveal = parseJointTallyReveal(revealLine);
+    if (reveal === null || reveal.dealer < 1 ||
+        reveal.dealer > set.count ||
+        revealLines[reveal.dealer] || !sealLines[reveal.dealer]) {
+      return Promise.resolve(null);
+    }
+    revealLines[reveal.dealer] = revealLine;
+  }
+  var sigLines = {};
+  var sigParts = signaturesText.split(/\r?\n/);
+  for (var s = 0; s < sigParts.length; s++) {
+    var sigLine = sigParts[s].trim();
+    if (sigLine === "") continue;
+    var sig = parseJointTallySignature(sigLine);
+    if (sig === null || sig.threshold !== qualified.threshold ||
+        sig.dealer < 1 || sig.dealer > set.count ||
+        sigLines[sig.dealer]) {
+      return Promise.resolve(null);
+    }
+    sigLines[sig.dealer] = sigLine;
+  }
+  var unsealed = [];
+  var unrevealed = [];
+  var mismatched = [];
+  var unsigned = [];
+  var invalid = [];
+  var failed = false;
+  var step = function (dealer) {
+    if (dealer > set.count) return Promise.resolve(true);
+    if (!sealLines[dealer]) {
+      unsealed.push(dealer);
+      return step(dealer + 1);
+    }
+    if (!revealLines[dealer]) {
+      unrevealed.push(dealer);
+      return step(dealer + 1);
+    }
+    var commitment = formatDkgCommitmentLine(set.threshold,
+      dealer, set.byDealer[dealer].commitments);
+    return checkJointTallyReveal(sealLines[dealer], commitment,
+        revealLines[dealer])
+      .then(function (revealed) {
+        if (revealed === null) { failed = true; return false; }
+        if (revealed === false) {
+          mismatched.push(dealer);
+          return step(dealer + 1);
+        }
+        if (!sigLines[dealer]) {
+          unsigned.push(dealer);
+          return step(dealer + 1);
+        }
+        var keyLine = keyLines[qualified.qualified[dealer - 1]];
+        return qualifiedRestartSignatureVerdict(keyLine,
+            commitment, sigLines[dealer])
+          .then(function (signed) {
+            if (signed === null) { failed = true; return false; }
+            if (signed === false) invalid.push(dealer);
+            return step(dealer + 1);
+          });
+      });
+  };
+  return step(1).then(function () {
+    if (failed) return null;
+    base.unsealed = unsealed;
+    base.unrevealed = unrevealed;
+    base.mismatched = mismatched;
+    base.unsigned = unsigned;
+    base.invalid = invalid;
+    base.stands = unsealed.length === 0 &&
+      unrevealed.length === 0 && mismatched.length === 0 &&
+      unsigned.length === 0 && invalid.length === 0;
+    if (base.stands) {
+      base.publicKey = jointTallyKeyForCommitments(commitmentsText);
+      base.trustees = jointTallyTrusteesForCommitments(commitmentsText);
+    }
+    return base;
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -14773,7 +15126,9 @@ if (typeof module !== "undefined" && module.exports) {
                      parseJointTallyRestartLine,
                      planQualifiedJointTallyRestart,
                      checkQualifiedJointTallyRestartDealing,
-                     verifyQualifiedJointTallyRestart };
+                     verifyQualifiedJointTallyRestart,
+                     checkSealedQualifiedRestartDealing,
+                     verifySealedQualifiedRestart };
 }
 
 if (typeof document !== "undefined") {
@@ -19380,6 +19735,178 @@ if (typeof document !== "undefined") {
             "the restart can sum. The named slots re-deal " +
             "and re-sign, or the group publishes a fresh " +
             "qualified set — governance, off this page.";
+        });
+    });
+
+    /* --- sealed, signed, and without them (sealed restart) --- */
+    document.getElementById("sealed-restart-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("sealed-restart-check-result");
+      var out = document.getElementById("jsr-check-out");
+      var qualifiedText = document.getElementById("jsr-check-qualified").value;
+      var commitmentText = document.getElementById("jsr-check-commitment").value;
+      checkSealedQualifiedRestartDealing(qualifiedText,
+        document.getElementById("jsr-check-signkey").value,
+        document.getElementById("jsr-check-seal").value,
+        commitmentText,
+        document.getElementById("jsr-check-reveal").value,
+        document.getElementById("jsr-check-signature").value)
+        .then(function (verdict) {
+          if (verdict === null) {
+            out.value = "";
+            status.textContent = "No verdict: the " +
+              "qualified-set line must name a " +
+              "disqualification with a viable restart, " +
+              "the signing-key line must be the one the " +
+              "renumbering assigns to this slot, and the " +
+              "seal, commitment, reveal and signature " +
+              "whole lines for that slot — evidence about " +
+              "a different restart judges nothing.";
+            return;
+          }
+          var q = parseJointTallyQualifiedLine(qualifiedText);
+          var c = parseDkgCommitmentLine(commitmentText);
+          var old = q.qualified[c.dealer - 1];
+          if (verdict === true) {
+            out.value = "This sealed restarted dealing is " +
+              "the ordered one: it re-hashes to the seal " +
+              "published for new number " + c.dealer +
+              " before the reveals, and the key that held " +
+              "trustee " + old + "'s place in the old " +
+              "round signed exactly this dealing for " +
+              "that slot.";
+            status.textContent = "Checked locally, from " +
+              "the six lines alone: both gates pass over " +
+              "one dealing — committed before it could " +
+              "be chosen against the others, and dealt " +
+              "by the key the qualified set assigned " +
+              "to this slot. Who holds that key is a " +
+              "custody question no page can answer.";
+            return;
+          }
+          out.value = "This sealed restarted dealing " +
+            "fails a gate: either the revealed dealing " +
+            "is not the one the seal was published over " +
+            "(it changed after sealing), or the " +
+            "signature does not verify under the key " +
+            "the renumbering assigns to slot " + c.dealer +
+            " (trustee " + old + " of the old round) — " +
+            "the disqualified dealer's dealing, honestly " +
+            "sealed and revealed under this slot, fails " +
+            "here on the signature.";
+          status.textContent = "Checked locally: this " +
+            "dealing is not one the restarted round can " +
+            "sum, whichever gate it failed.";
+        });
+    });
+
+    document.getElementById("sealed-restart-judge").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("sealed-restart-judge-result");
+      var keyOut = document.getElementById("jsr-judge-key-out");
+      var trusteesOut = document.getElementById("jsr-judge-trustees-out");
+      verifySealedQualifiedRestart(
+        document.getElementById("jsr-judge-qualified").value,
+        document.getElementById("jsr-judge-signkeys").value,
+        document.getElementById("jsr-judge-seals").value,
+        document.getElementById("jsr-judge-commitments").value,
+        document.getElementById("jsr-judge-reveals").value,
+        document.getElementById("jsr-judge-signatures").value)
+        .then(function (judged) {
+          if (judged === null) {
+            keyOut.value = "";
+            trusteesOut.value = "";
+            status.textContent = "No judgement: the " +
+              "restarted commitment set must be exactly " +
+              "the restarted round the qualified set " +
+              "ordered — its quorum, its size — the " +
+              "signing-key set the whole set published " +
+              "before the old round, one key per trustee, " +
+              "every seal, reveal and signature a whole " +
+              "line for a slot of the restarted round, " +
+              "once, and no reveal answering for a slot " +
+              "that published no seal — a verdict drawn " +
+              "from a partial record is worse than none.";
+            return;
+          }
+          if (!judged.restartNeeded) {
+            keyOut.value = "";
+            trusteesOut.value = "";
+            status.textContent = "No restart to judge: " +
+              "nobody stands disqualified in the old " +
+              "round, so it stands as tools 59, 60, 61 " +
+              "and 62 leave it — its counting key comes " +
+              "from those tools, not from a re-dealing.";
+            return;
+          }
+          if (!judged.viable) {
+            keyOut.value = "";
+            trusteesOut.value = "";
+            status.textContent = "No restart to judge: " +
+              "only " + judged.qualified.length +
+              " trustee(s) stand qualified, fewer than " +
+              "the quorum of " + judged.threshold + " — " +
+              "there is no restarted round at this quorum " +
+              "to seal or to judge. The group chooses a " +
+              "smaller quorum or recruits, off this page.";
+            return;
+          }
+          if (judged.stands) {
+            keyOut.value = judged.publicKey;
+            trusteesOut.value = judged.trustees;
+            status.textContent = "Judged locally: every " +
+              "restarted dealing was sealed before the " +
+              "reveals, revealed as sealed, and signed " +
+              "by the key the renumbering assigns to its " +
+              "slot — both gates, one record — so the " +
+              "restarted round stands. The counting key " +
+              "and trustees line above are tool 59's own " +
+              "derivations from the restarted " +
+              "commitments, and no disqualified key dealt " +
+              "into them, sealed or otherwise. Finalize " +
+              "in tool 59, and sign the new deliveries " +
+              "in tool 63.";
+            return;
+          }
+          keyOut.value = "";
+          trusteesOut.value = "";
+          var name = function (dealer) {
+            return "new dealer " + dealer + " (trustee " +
+              judged.qualified[dealer - 1] + " of the old round)";
+          };
+          var bits = [];
+          if (judged.unsealed.length) {
+            bits.push(judged.unsealed.map(name).join(", ") +
+              " never sealed");
+          }
+          if (judged.unrevealed.length) {
+            bits.push(judged.unrevealed.map(name).join(", ") +
+              " sealed but never revealed");
+          }
+          if (judged.mismatched.length) {
+            bits.push(judged.mismatched.map(name).join(", ") +
+              " revealed a dealing that is not the one " +
+              "their seal was published over");
+          }
+          if (judged.unsigned.length) {
+            bits.push(judged.unsigned.map(name).join(", ") +
+              " revealed as sealed but never signed");
+          }
+          if (judged.invalid.length) {
+            bits.push(judged.invalid.map(name).join(", ") +
+              " offered a signature that does not verify " +
+              "under the key the renumbering assigns");
+          }
+          status.textContent = "Judged locally: " +
+            bits.join("; ") + ". NO key is derived from " +
+            "this restarted round — a restarted dealing " +
+            "must be committed before the reveals AND " +
+            "attributable to the trustee the qualified " +
+            "set assigned to its slot before the restart " +
+            "can sum it. The named slots re-seal, " +
+            "re-deal and re-sign under the same order, " +
+            "or the group publishes a fresh qualified " +
+            "set — governance, off this page.";
         });
     });
 
