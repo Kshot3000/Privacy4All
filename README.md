@@ -1481,7 +1481,9 @@ renewable resource that pays for shielded transactions.
   proof, and not a format any chain or
   wallet checks. Tool 61 below
   runs the first of the added rounds that
-  caveat names.
+  caveat names. Tool 67 below composes
+  this verdict with the restarted round's
+  own, when the restart itself breaks.
 
 - **Commit before you look — a sealed
   commitment round before the jointly made
@@ -1666,7 +1668,10 @@ renewable resource that pays for shielded transactions.
   61's seals, tool 63's signed deliveries —
   rerun on it: the deliveries are signed
   unchanged, and tool 66 below judges them
-  under the renumbering; and a group that
+  under the renumbering; tool 67 below
+  composes this qualified set with the
+  restarted round's own verdict, for when
+  the restart itself breaks; and a group that
   re-deals without a published qualified
   set has issued no order for a restart to
   answer to. Not a Compact circuit proof,
@@ -1775,9 +1780,73 @@ renewable resource that pays for shielded transactions.
   round dealt without a published
   qualified set is an ordinary round,
   whose deliveries are tool 63's to
-  judge. Not a Compact circuit proof,
+  judge. Tool 67 below composes the two
+  verdicts for a second restart, and this
+  judgement takes its composed line
+  unchanged. Not a Compact circuit proof,
   and not a format any chain or wallet
   checks.
+
+- **Run it again, again — compose two
+  qualified sets into the order for a
+  second restart** — the composition no
+  form ran: tool 60's fork can fire
+  twice, and a restarted round's own
+  complaint round ends in a second
+  `p4a-jtqualified-v1` line — but that
+  line speaks the restarted round's
+  numbers (its count is the first round's
+  qualified count, its trustees positions
+  in the first renumbering), while the
+  first line speaks the original numbers
+  and assigns slots a renumbering behind.
+  Neither line can judge a second
+  restart: against the second, tool 64's
+  check refuses every dealing as the
+  wrong question, because the signing
+  keys name original trustees it never
+  heard of; against the first, the
+  trustee assigned to a slot may be
+  exactly the dealer the second verdict
+  disqualified. This tool reads the
+  second verdict through the first
+  verdict's qualified list — the list
+  that IS the restarted round's
+  numbering — and spells the composed
+  verdict as one `p4a-jtqualified-v1`
+  line in the original numbers: who
+  still stands qualified after both
+  rounds, who stands disqualified in
+  either. Tools 64, 65 and 66 take the
+  composed line unchanged, because their
+  discipline needs nothing but a
+  qualified list naming original
+  trustees in order. A clean second
+  verdict composes to the first line
+  unchanged — the restarted round
+  stands; a disqualification with the
+  quorum intact orders the second
+  restart, published as a
+  `p4a-jtrestart-v1` line over the
+  original count, and the second form
+  checks one second-restart dealing
+  under the composed order; a
+  disqualification that starves the
+  quorum leaves the composed line as
+  the truthful record and orders
+  nothing. Honestly labelled:
+  composition is bookkeeping over two
+  published verdicts — it judges
+  nothing itself, and which record a
+  verdict belongs to remains the
+  group's discipline; the two lines
+  must share a quorum and the second's
+  count must be the first's qualified
+  count, or the pair is refused; a
+  signature proves the key dealt it,
+  not who holds the key. Not a Compact
+  circuit proof, and not a format any
+  chain or wallet checks.
 
 ## Guides
 

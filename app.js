@@ -15056,6 +15056,203 @@ function judgeQualifiedRestartShareEvidence(qualifiedText,
     });
 }
 
+/* ---------- 67. Run it again, again — compose two qualified
+   sets into the order for a second restart ----------
+
+   Tool 60's fork can fire twice. A restarted round is a
+   round: its dealers deal shares, its shares can fail
+   their Feldman checks, and its own complaint round —
+   tool 60 rerun on the restarted commitments — ends in
+   a second p4a-jtqualified-v1 line. But that line speaks
+   the restarted round's numbers: its count is the first
+   round's qualified count, its trustees are positions in
+   the first renumbering, and its quorum is the quorum
+   both rounds share. The first line speaks the original
+   numbers. Neither line can judge a second restart.
+   Against the second line alone, the signing keys name
+   trustees it never heard of — they were published
+   before the original round, under the original
+   numbers — so tool 64's check refuses every
+   second-restart dealing as the wrong question, null.
+   Against the first line alone, the assignments are a
+   renumbering behind: the trustee it assigns to slot 2
+   is whoever held that slot in the FIRST restart, who
+   may be exactly the dealer the second verdict
+   disqualified, and its whole-round judgement refuses
+   a round dealt at the second restart's size outright.
+
+   This tool composes the two verdicts into one line in
+   the original numbers, by the one piece of arithmetic
+   the two rounds share: the first verdict's qualified
+   list IS the restarted round's numbering, position by
+   position. The restarted round's qualified trustees,
+   read through that list, are original trustees; its
+   disqualified, read through the same list, join the
+   first round's disqualified; and the two lists
+   partition the original round exactly, because each
+   verdict partitioned its own. The result is spelled
+   as tool 60's own p4a-jtqualified-v1 line — the
+   original quorum, the original count, who still
+   stands qualified after both rounds, who stands
+   disqualified in either — and it is a line tools 64,
+   65 and 66 already know how to read: their renumbering
+   discipline needs nothing but a qualified list naming
+   original trustees in order, and the composed list is
+   exactly that for the second restart. Three honest
+   shapes come back. The restarted round's verdict is
+   clean: nobody new stands disqualified, the restarted
+   round stands, the composed line is the first verdict
+   unchanged, and there is no second restart to order.
+   The restarted round disqualified a dealer and enough
+   trustees remain for the quorum: a second restart is
+   ordered, the renumbering runs through both verdicts
+   — the trustee at position one of the composed list
+   deals as dealer 1 of the second restart — and the
+   restart line publishes it, tool 64's own format over
+   the original count. The restarted round disqualified
+   a dealer and too few remain: the composed line is
+   still the truthful record of both rounds, but no
+   restart exists at this quorum, and no line orders
+   one — the group changes the quorum or recruits,
+   off-page, exactly as tool 60's starved fork says.
+   The second form checks one second-restart dealing
+   under the composed order: it is tool 64's own check
+   with the composed line standing where the qualified
+   set stands there, nothing else changed.
+
+   The honest limits are plain. Composition is
+   bookkeeping over two published verdicts; it judges
+   no dealing, no share and no signature itself, and it
+   cannot tell that the second line it is handed really
+   is the verdict of the restarted round the first one
+   ordered — a line from any round dealt at the same
+   quorum among the same qualified trustees composes
+   just as smoothly, so which record a verdict belongs
+   to remains the group's discipline, as it has been
+   since tool 60. The two lines must share a quorum and
+   the second's count must be the first's qualified
+   count, or the pair is refused as the wrong question:
+   a restart re-deals at the quorum that ordered it,
+   and a group that changes the quorum between rounds
+   has started a new round, not restarted one. A
+   signature still proves the key dealt it, not who
+   holds the key — tool 62's custody limit stands
+   whole, twice over. The frame is the house one: real
+   composition computed locally, spelled in this hub's
+   own lines around tools 59, 60 and 64's unchanged
+   formats — not a format any chain or wallet checks,
+   not one of Midnight's Compact circuit proofs. Never
+   paste a real wallet key or a production private key
+   into any web page, including this one; this tool
+   needs no key at all. */
+
+/* Composing two qualified sets: the original round's
+   verdict and the restarted round's own, into the one
+   line a second restart answers to. The alignment is
+   checked before any list is read across: the first
+   verdict must itself have ordered a viable restart
+   (a clean first round sent nobody anywhere, and a
+   starved one has no restarted round whose verdict
+   this could be — either way the second line is a
+   verdict about some other round, the wrong question,
+   null), the second verdict must carry the same
+   quorum (a restart re-deals at the quorum that
+   ordered it), and its count must be exactly the first
+   verdict's qualified count — the restarted round's
+   size — or its numbers name trustees the first
+   renumbering never assigned. The composition itself
+   is two readings through the first qualified list:
+   the second's qualified become original trustees in
+   their order, and the second's disqualified join the
+   first's. The composed partition spells through tool
+   60's own formatter, so a composition that does not
+   partition the original round refuses itself. The
+   fork is tool 60's, one round later: nobody new
+   disqualified, and the restarted round stands — the
+   composed line is the first line, character for
+   character; a dealer disqualified and the quorum
+   still met, and the second restart is ordered with
+   its renumbering and its restart line; a dealer
+   disqualified and the quorum starved, and the line
+   still comes back — it is the record — with no
+   renumbering and no restart line. */
+function composeQualifiedJointTallySets(firstText, secondText) {
+  var first = parseJointTallyQualifiedLine(firstText);
+  var second = parseJointTallyQualifiedLine(secondText);
+  if (first === null || second === null) return null;
+  if (first.disqualified.length === 0 ||
+      first.qualified.length < first.threshold ||
+      second.threshold !== first.threshold ||
+      second.count !== first.qualified.length) {
+    return null;
+  }
+  var qualified = second.qualified.map(function (slot) {
+    return first.qualified[slot - 1];
+  });
+  var disqualifiedSet = {};
+  first.disqualified.forEach(function (dealer) {
+    disqualifiedSet[dealer] = true;
+  });
+  second.disqualified.forEach(function (slot) {
+    disqualifiedSet[first.qualified[slot - 1]] = true;
+  });
+  var disqualified = Object.keys(disqualifiedSet)
+    .map(Number).sort(function (a, b) { return a - b; });
+  var line = formatJointTallyQualifiedLine(first.threshold,
+    first.count, qualified, disqualified);
+  if (line === null) return null;
+  var secondRestartNeeded = second.disqualified.length > 0;
+  var viable = qualified.length >= first.threshold;
+  var restart = secondRestartNeeded && viable;
+  return { threshold: first.threshold, count: first.count,
+           firstQualified: first.qualified,
+           firstDisqualified: first.disqualified,
+           restartedQualified: second.qualified,
+           restartedDisqualified: second.disqualified,
+           qualified: qualified, disqualified: disqualified,
+           line: line, secondRestartNeeded: secondRestartNeeded,
+           viable: viable, restart: restart,
+           newCount: qualified.length,
+           renumbering: restart ?
+             qualified.map(function (old, idx) {
+               return [old, idx + 1];
+             }) : null,
+           restartLine: restart ?
+             formatJointTallyRestartLine(first.threshold,
+               first.count, qualified) : null };
+}
+
+/* Checking one second-restart dealing, publicly: the
+   two qualified-set lines, the signing-key line of the
+   trustee the composed renumbering assigns to this
+   slot, the second-restart commitment line and its
+   tool 62 signature line. The composition runs first:
+   a pair of verdicts that does not compose, or that
+   composes to no ordered second restart — the
+   restarted round stood clean, or its disqualifications
+   starved the quorum — leaves no order for a dealing
+   to answer to, and the check is null, the wrong
+   question, exactly as tool 64's check treats a clean
+   round's line. What remains is tool 64's own check
+   unchanged, with the composed line standing where
+   that tool takes the qualified set: the key that held
+   the assigned trustee's place in the ORIGINAL round
+   must have signed the dealing that carries the
+   second restart's new number. True and false are the
+   equation's, as there; null is every misalignment,
+   as there. */
+function checkSecondQualifiedRestartDealing(firstText,
+    secondText, signKeyText, commitmentText,
+    signatureText) {
+  var composed = composeQualifiedJointTallySets(firstText,
+    secondText);
+  if (composed === null || !composed.restart) {
+    return Promise.resolve(null);
+  }
+  return checkQualifiedJointTallyRestartDealing(composed.line,
+    signKeyText, commitmentText, signatureText);
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -15348,7 +15545,9 @@ if (typeof module !== "undefined" && module.exports) {
                      checkSealedQualifiedRestartDealing,
                      verifySealedQualifiedRestart,
                      checkQualifiedRestartShareSignature,
-                     judgeQualifiedRestartShareEvidence };
+                     judgeQualifiedRestartShareEvidence,
+                     composeQualifiedJointTallySets,
+                     checkSecondQualifiedRestartDealing };
 }
 
 if (typeof document !== "undefined") {
@@ -20264,6 +20463,131 @@ if (typeof document !== "undefined") {
             "rerun on the restart, which is why a group " +
             "that wants this evidence requires signed " +
             "deliveries in the restarted round too.";
+        });
+    });
+
+    document.getElementById("second-restart-compose").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("second-restart-compose-result");
+      var out = document.getElementById("jsc-compose-out");
+      var restartOut = document.getElementById("jsc-compose-restart-out");
+      var composed = composeQualifiedJointTallySets(
+        document.getElementById("jsc-compose-first").value,
+        document.getElementById("jsc-compose-second").value);
+      if (composed === null) {
+        out.value = "";
+        restartOut.value = "";
+        status.textContent = "No composition: the first " +
+          "line must be a qualified set that ordered a " +
+          "viable restart, and the second the restarted " +
+          "round's own qualified set — the same quorum, " +
+          "and a trustee count equal to the first " +
+          "round's qualified count. A verdict about any " +
+          "other round composes nothing here.";
+        return;
+      }
+      out.value = composed.line;
+      if (!composed.secondRestartNeeded) {
+        restartOut.value = "";
+        status.textContent = "Composed locally: the " +
+          "restarted round's verdict is clean — nobody " +
+          "new stands disqualified, the restarted round " +
+          "stands, and the composed line is the first " +
+          "verdict unchanged. There is no second restart " +
+          "to order.";
+        return;
+      }
+      if (!composed.restart) {
+        restartOut.value = "";
+        status.textContent = "Composed locally: the " +
+          "restarted round disqualified " +
+          composed.restartedDisqualified.map(function (slot) {
+            return "restarted dealer " + slot + " (trustee " +
+              composed.firstQualified[slot - 1] +
+              " of the original round)";
+          }).join(", ") + ", and the trustees still " +
+          "qualified — " + composed.qualified.join(", ") +
+          " of the original round — no longer meet the " +
+          "quorum of " + composed.threshold + ". The " +
+          "composed line above is the truthful record of " +
+          "both rounds, but no second restart exists at " +
+          "this quorum: the group changes the quorum or " +
+          "recruits a trustee, off this page.";
+        return;
+      }
+      restartOut.value = composed.restartLine;
+      status.textContent = "Composed locally: the " +
+        "restarted round disqualified " +
+        composed.restartedDisqualified.map(function (slot) {
+          return "restarted dealer " + slot + " (trustee " +
+            composed.firstQualified[slot - 1] +
+            " of the original round)";
+        }).join(", ") + ". The second restart is " +
+        "ordered: " + composed.renumbering.map(function (pair) {
+          return "trustee " + pair[0] + " of the original " +
+            "round deals as dealer " + pair[1];
+        }).join("; ") + ". Publish the composed line " +
+        "and the restart line together — tools 64, 65 " +
+        "and 66 judge the second restart against the " +
+        "composed line unchanged.";
+    });
+
+    document.getElementById("second-restart-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("second-restart-check-result");
+      var out = document.getElementById("jsc-check-out");
+      var firstText = document.getElementById("jsc-check-first").value;
+      var secondText = document.getElementById("jsc-check-second").value;
+      var commitmentText = document.getElementById("jsc-check-commitment").value;
+      checkSecondQualifiedRestartDealing(firstText, secondText,
+        document.getElementById("jsc-check-signkey").value,
+        commitmentText,
+        document.getElementById("jsc-check-signature").value)
+        .then(function (verdict) {
+          if (verdict === null) {
+            out.value = "";
+            status.textContent = "No verdict: the two " +
+              "qualified-set lines must compose into an " +
+              "ordered second restart, the signing-key " +
+              "line must be the one the composed " +
+              "renumbering assigns to the dealing's " +
+              "slot, and the commitment and signature " +
+              "lines whole lines from the second restart " +
+              "— evidence about a different round judges " +
+              "nothing. A first restart's dealings are " +
+              "checked in tool 64.";
+            return;
+          }
+          var composed = composeQualifiedJointTallySets(firstText, secondText);
+          var parsed = parseDkgCommitmentLine(commitmentText);
+          var old = composed.qualified[parsed.dealer - 1];
+          if (verdict === true) {
+            out.value = "This second-restart dealing is " +
+              "attributable: the key that held trustee " +
+              old + "'s place in the original round " +
+              "signed exactly this commitment line, dealt " +
+              "as dealer " + parsed.dealer + " of the " +
+              "second restart.";
+            status.textContent = "Checked locally, from " +
+              "the five lines alone: the composed order " +
+              "assigns this slot to trustee " + old +
+              " of the original round, and their key " +
+              "dealt it. Who holds that key is a custody " +
+              "question no page can answer.";
+            return;
+          }
+          out.value = "This second-restart dealing is NOT " +
+            "attributable to dealer " + parsed.dealer +
+            ": the signature does not verify under the " +
+            "key the composed renumbering assigns to " +
+            "that slot — the key that held trustee " +
+            old + "'s place in the original round. " +
+            "Another key signed it, or it was made over " +
+            "another dealing.";
+          status.textContent = "Checked locally: this " +
+            "pair proves nothing about the second " +
+            "restart's dealer " + parsed.dealer +
+            ", whatever the dealing's own lines say.";
         });
     });
 
