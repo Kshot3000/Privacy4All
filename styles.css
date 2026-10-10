@@ -58,6 +58,7 @@ h3{margin:.2rem 0 .5rem}
 .card-links{font-size:.92rem}
 .tool-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem}
 .tool{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:1.1rem 1.2rem;display:grid;gap:.6rem;align-content:start}
+.tool[hidden]{display:none}
 .tool p{color:var(--muted);margin:0}
 .tool label{font-weight:600}
 .tool fieldset{border:1px solid var(--line);border-radius:10px;display:grid;gap:.35rem;margin:0}

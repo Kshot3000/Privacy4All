@@ -310,6 +310,21 @@ function searchSnippets(query) {
   });
 }
 
+/* Tool finder: a tool matches when EVERY word of the query appears in its
+   searchable text (its title plus its first descriptive line), in any
+   order, case-insensitively. An empty query matches every tool, so
+   clearing the search restores the full list. Non-string text never
+   matches a non-empty query — a malformed entry hides rather than
+   crashes the filter. */
+function toolQueryMatch(searchText, query) {
+  if (typeof searchText !== "string") return false;
+  var terms = (query == null ? "" : String(query)).trim().toLowerCase()
+    .split(/\s+/).filter(function (t) { return t.length > 0; });
+  if (!terms.length) return true;
+  var hay = searchText.toLowerCase();
+  return terms.every(function (t) { return hay.indexOf(t) !== -1; });
+}
+
 /* ---------- 7. How DUST works — lifecycle explainer ---------- */
 /* A teaching model built on the same 5x ceiling as tool 3: holding NIGHT
    generates DUST up to a capacity ceiling, shielded transactions spend
@@ -15258,6 +15273,7 @@ if (typeof module !== "undefined" && module.exports) {
                      assessDappPermissions, PERMISSION_CATALOG,
                      evaluateProof, CLAIM_CATALOG,
                      getSnippet, searchSnippets, SNIPPET_CATALOG,
+                     toolQueryMatch,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
@@ -15581,6 +15597,29 @@ if (typeof document !== "undefined") {
       });
     });
     applyFilter();
+
+    /* --- tool finder --- */
+    var toolQ = document.getElementById("tool-q");
+    var toolStatus = document.getElementById("tool-filter-status");
+    var toolNoResults = document.getElementById("tool-no-results");
+    var toolForms = Array.prototype.slice.call(document.querySelectorAll(".tool-grid .tool"));
+    var toolTexts = toolForms.map(function (form) {
+      var h = form.querySelector("h3");
+      var p = form.querySelector("p");
+      return ((h ? h.textContent : "") + " " + (p ? p.textContent : ""));
+    });
+    function applyToolFilter() {
+      var shown = 0;
+      toolForms.forEach(function (form, i) {
+        var show = toolQueryMatch(toolTexts[i], toolQ.value);
+        form.hidden = !show;
+        if (show) shown++;
+      });
+      toolNoResults.hidden = shown !== 0;
+      toolStatus.textContent = shown + (shown === 1 ? " tool shown" : " tools shown") + " of " + toolForms.length;
+    }
+    toolQ.addEventListener("input", applyToolFilter);
+    applyToolFilter();
 
     /* --- redactor --- */
     document.getElementById("redactor").addEventListener("submit", function (ev) {
