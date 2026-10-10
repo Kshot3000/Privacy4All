@@ -6,6 +6,7 @@ const root = path.join(__dirname, "..");
 const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
 const readme = fs.readFileSync(path.join(root, "README.md"), "utf8");
 const guide = fs.readFileSync(path.join(root, "guides", "getting-started-midnight.md"), "utf8");
+const compactGuide = fs.readFileSync(path.join(root, "guides", "compact-starter.md"), "utf8");
 const css = fs.readFileSync(path.join(root, "styles.css"), "utf8");
 const app = require(path.join(root, "app.js"));
 
@@ -17,7 +18,7 @@ function check(name, cond) {
 }
 
 /* attribution on every user-facing surface */
-for (const [label, doc] of [["index.html", html], ["README", readme], ["guide", guide]]) {
+for (const [label, doc] of [["index.html", html], ["README", readme], ["guide", guide], ["compact guide", compactGuide]]) {
   check("ADA donation address in " + label, doc.includes(ADA));
   check("@kshot9000 in " + label, doc.includes("@kshot9000"));
   check("Midnight team GitHub tag in " + label, doc.includes("@midnightntwrk"));
@@ -55,6 +56,16 @@ check("observer tool honestly scoped to ledger visibility", html.includes("simpl
 check("viewing-key tool present", html.includes('id="viewing-key"') && html.includes('id="viewing-result"'));
 check("viewing-key tool honestly labelled a teaching model of scoped disclosure", html.includes("simplified teaching model of scoped disclosure in principle") && html.includes("depend on your wallet and the contract involved"));
 check("viewing-key tool warns never to paste a real key", html.includes("never paste a real viewing key into a web page"));
+
+/* Compact starter guide (guides/compact-starter.md) */
+check("compact starter guide linked from the hub guides list and the README", html.includes('href="guides/compact-starter.md"') && readme.includes("(guides/compact-starter.md)"));
+check("compact guide teaches the official install: CLI installer, compact update, version check", compactGuide.includes("https://github.com/midnightntwrk/compact/releases/latest/download/compact-installer.sh") && compactGuide.includes("compact update") && compactGuide.includes("compact --version"));
+check("compact guide teaches the ledger / witness / circuit privacy split", compactGuide.includes("export ledger") && compactGuide.includes("witness") && compactGuide.includes("export circuit") && compactGuide.includes("private by default"));
+check("compact guide pins the Hello World contract's disclose() as the publish gate", compactGuide.includes('pragma language_version 0.23;') && compactGuide.includes("message = disclose(newMessage);"));
+check("compact guide teaches compact compile and warns a --skip-zk build proves nothing", compactGuide.includes("compact compile hello-world.compact managed/") && compactGuide.includes("--skip-zk") && compactGuide.includes("proves nothing"));
+check("compact guide teaches the Counter standard-library example", compactGuide.includes("import CompactStandardLibrary;") && compactGuide.includes("round.increment(1);"));
+check("compact guide warns tNIGHT must be registered for DUST generation before deploying", compactGuide.includes("register it for DUST generation") && compactGuide.includes("Holding tNIGHT alone generates"));
+check("compact guide is honest about scope: complements the docs, testnet only, never pay for testnet tokens", compactGuide.includes("doesn't replace it") && compactGuide.includes("Never pay for testnet") && compactGuide.includes("https://docs.midnight.network/"));
 
 /* flagship links */
 for (const url of ["https://kshot3000.github.io/Night-Messenger-/", "https://kshot3000.github.io/PlutusShield/",

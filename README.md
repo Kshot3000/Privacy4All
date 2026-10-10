@@ -1867,6 +1867,11 @@ or first line, and clearing the search restores all 67.
 
 - [Getting started building on Midnight](guides/getting-started-midnight.md) —
   official docs, Compact, Lace, testnets and proof basics, in learning order.
+- [Your first Compact contract](guides/compact-starter.md) — a starter
+  walkthrough: install the toolchain, the ledger / witness / circuit split,
+  the official Hello World and Counter contracts read line by line,
+  `compact compile` (and why `--skip-zk` builds prove nothing), and the
+  tNIGHT-for-DUST registration step that blocks most first deploys.
 
 ## How the hourly builder loop works
 
