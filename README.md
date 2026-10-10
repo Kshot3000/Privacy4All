@@ -1614,7 +1614,12 @@ renewable resource that pays for shielded transactions.
   not who holds the key; and a dealer who
   never signs cannot be convicted here —
   that absence is tool 60's missing-share
-  ground. Not a Compact circuit proof, and
+  ground. Tool 66 below runs these same
+  two judgements on the restarted round's
+  deliveries, under the renumbering —
+  this check holds the key line's number
+  against the share's, and the restart
+  renumbers both. Not a Compact circuit proof, and
   not a format any chain or wallet checks.
 
 - **Run it again, without them — judge the
@@ -1659,7 +1664,9 @@ renewable resource that pays for shielded transactions.
   (tool 62's custody limit stands whole);
   the restarted round's own rounds — tool
   61's seals, tool 63's signed deliveries —
-  rerun on it unchanged; and a group that
+  rerun on it: the deliveries are signed
+  unchanged, and tool 66 below judges them
+  under the renumbering; and a group that
   re-deals without a published qualified
   set has issued no order for a restart to
   answer to. Not a Compact circuit proof,
@@ -1721,6 +1728,56 @@ renewable resource that pays for shielded transactions.
   tool 64's to judge, not this one's.
   Not a Compact circuit proof, and not a
   format any chain or wallet checks.
+
+- **Prove you sent that share, in the
+  restarted round — judge a signed
+  delivery under the renumbering** — the
+  judgement tool 63's forms cannot reach:
+  tool 64's page says the restarted
+  round's deliveries are tool 63's to
+  sign unchanged, and signing them is
+  unchanged — but tool 63's check holds
+  the signing-key line's dealer number
+  against the share line's, and in the
+  restarted round those numbers differ
+  by the round's whole design, the keys
+  having been published before the old
+  round under the old numbers. Every
+  restarted delivery came back null from
+  tool 63's check and evidence judge
+  alike — not false, not evidence:
+  unjudged — so a complaint round rerun
+  on the restart left the accused dealer
+  answering with the share they *claim*
+  to have dealt, while the signature the
+  recipient holds could be checked by no
+  form. This tool is tool 63's two
+  judgements under tool 60's renumbering,
+  with tool 64's discipline: the delivery
+  is checked against the key of the
+  trustee the qualified set assigns to
+  the share's slot, the transcript and
+  signature line tool 63's own, unchanged.
+  The evidence judgement meets tool 38's
+  Feldman check against the restarted
+  commitments and spells the same three
+  verdicts — attributable-good-share,
+  attributable-bad-share, unattributed —
+  with the numbers in both spellings,
+  new as dealt and old as the trustees
+  are named. Honestly labelled: the
+  evidence is the share itself, exactly
+  as in tool 63; a signature proves the
+  key sent the share, not who holds the
+  key; a dealer who never signs a
+  restarted delivery is tool 60's
+  missing-share ground, rerun; and a
+  round dealt without a published
+  qualified set is an ordinary round,
+  whose deliveries are tool 63's to
+  judge. Not a Compact circuit proof,
+  and not a format any chain or wallet
+  checks.
 
 ## Guides
 

@@ -14838,6 +14838,224 @@ function verifySealedQualifiedRestart(qualifiedText,
   });
 }
 
+/* ---------- 66. Prove you sent that share, in the restarted
+   round — judge a signed delivery under the renumbering ----------
+
+   Tool 64 judges the restarted round's dealings under the
+   renumbering, and its page says tool 63's signed deliveries
+   "are the restarted round's deliveries to sign, unchanged".
+   Signing them is unchanged — the dealer signs the new share
+   line in tool 63's form, with the same key as before.
+   Judging them is not. Tool 63's check holds the signing-key
+   line's dealer number against the share line's, and in the
+   restarted round those numbers differ by the round's whole
+   design: the key was published before the OLD round, under
+   the OLD number, and the share is dealt under the NEW one.
+   Every restarted delivery, honest or not, comes back null
+   from tool 63's check and its evidence judge alike — not
+   false, not evidence: unjudged. So the hole tool 63 closed
+   re-opens exactly where the restart needs it closed. A
+   complaint round rerun on the restarted round (tool 60,
+   rerun) leaves the accused dealer answering by broadcasting
+   the share they CLAIM to have dealt, while the signature the
+   recipient actually holds cannot be checked by any form on
+   this page: it names the new numbers, and the only key line
+   that could judge it names the old one.
+
+   This tool is tool 63's two judgements under the
+   renumbering, composed with tool 64's discipline. The
+   signing is tool 63's, unchanged; the signed transcript is
+   tool 63's, unchanged; the signature line is tool 63's,
+   unchanged. What changes is whose key a delivery is checked
+   against: not a key line naming the share's number — in
+   the restarted round there is none — but the key of the
+   trustee the qualified set assigns to the share's slot,
+   exactly as tools 64 and 65 assign keys to dealings. The
+   single check takes the qualified-set line, the assigned
+   trustee's signing-key line, the restarted share line and
+   the signature line that arrived with it. The evidence
+   judgement adds the restarted round's broadcast commitment
+   set, meets tool 38's Feldman check as tool 63's does, and
+   spells the same three verdicts: attributable-good-share,
+   attributable-bad-share, unattributed. The numbers come
+   back in both spellings — the new numbers the restarted
+   round deals under, and the old numbers the keys and the
+   qualified set name — because a complaint names trustees,
+   and the trustees are the old round's people.
+
+   The honest limits are plain, and inherited whole. A
+   signature proves the key sent that share; it does not
+   prove who holds the key — tool 62's custody limit stands.
+   The evidence is the share itself, exactly as in tool 63:
+   publishing the pair shows that one dealt share to
+   everyone, one summand of one trustee's restarted share,
+   which alone opens nothing. A dealer who never signs a
+   restarted delivery cannot be convicted here; that absence
+   is tool 60's missing-share ground, rerun on the restarted
+   round. And this tool judges the restart it is shown: no
+   published qualified set, no renumbering, no judgement —
+   a round dealt without the order is an ordinary round,
+   and its deliveries are tool 63's to judge, not this
+   one's. The frame is the house one: a real signed-delivery
+   judgement computed locally, spelled in this hub's own
+   lines around tools 33, 38, 59, 60, 62, 63 and 64's
+   unchanged formats — not a format any chain or wallet
+   checks, not one of Midnight's Compact circuit proofs.
+   Never paste a real wallet key or a production private key
+   into any web page, including this one; this tool needs
+   no key at all. */
+
+/* The one share-signature verdict this tool is built
+   on, over parsed pieces the caller has already
+   aligned: the signing key names the OLD number, the
+   share and signature lines name the NEW ones, and
+   the caller has established that the key is exactly
+   the one the renumbering assigns to the share's
+   slot. What is checked here is tool 63's own
+   equation — tool 33's Schnorr verification under the
+   published key over tool 63's labelled transcript of
+   the share line in its canonical spelling. True is
+   the assigned key sent this share to this recipient;
+   false — never null — is every piece well-formed and
+   aligned and the signature simply not balancing:
+   another key signed it, or it was made over another
+   share. Null is a piece unparseable, or the
+   signature naming a different dealer, recipient or
+   quorum than its share — evidence about a different
+   delivery judges nothing. The key line's own dealer
+   number is deliberately NOT compared to the share's
+   here: in the restarted round they differ by design,
+   and holding them equal is the exact comparison that
+   made tool 63's forms refuse every restarted
+   delivery. */
+function qualifiedRestartShareSignatureVerdict(signKeyText,
+                                               shareText,
+                                               signatureText) {
+  var key = parseJointTallySignKey(signKeyText);
+  var parsed = parseDkgShareLine(shareText);
+  var signature = parseJointTallyShareSignature(signatureText);
+  var message = jointTallySignedShareMessage(shareText);
+  if (key === null || parsed === null || signature === null ||
+      message === null) {
+    return Promise.resolve(null);
+  }
+  if (signature.dealer !== parsed.dealer ||
+      signature.recipient !== parsed.recipient ||
+      signature.threshold !== parsed.threshold ||
+      key.threshold !== parsed.threshold) {
+    return Promise.resolve(null);
+  }
+  return verifySchnorrSignature(key.publicKey, message,
+    signature.signature);
+}
+
+/* Checking one signed restarted delivery, publicly:
+   the qualified-set line, the signing-key line of the
+   trustee the renumbering assigns to the share's
+   dealer, the restarted share line and the signature
+   line that arrived with it. The alignment is the
+   verdict's spine and is checked before the equation:
+   the qualified set must name a disqualification and
+   leave a viable restart (a clean round ordered no
+   restart, and a starved one has none to deliver in),
+   the share must carry the round's quorum and name a
+   dealer and a recipient inside the restarted round,
+   and the key line must name exactly the old trustee
+   that slot was assigned to — a key line for any
+   other trustee, the disqualified dealer included, is
+   null, not false: it is the wrong question. Only
+   then does the equation speak, true or false. */
+function checkQualifiedRestartShareSignature(qualifiedText,
+    signKeyText, shareText, signatureText) {
+  var qualified = parseJointTallyQualifiedLine(qualifiedText);
+  var parsed = parseDkgShareLine(shareText);
+  var key = parseJointTallySignKey(signKeyText);
+  if (qualified === null || parsed === null || key === null) {
+    return Promise.resolve(null);
+  }
+  if (qualified.disqualified.length === 0 ||
+      qualified.qualified.length < qualified.threshold ||
+      parsed.threshold !== qualified.threshold ||
+      parsed.dealer < 1 ||
+      parsed.dealer > qualified.qualified.length ||
+      parsed.recipient < 1 ||
+      parsed.recipient > qualified.qualified.length ||
+      key.dealer !== qualified.qualified[parsed.dealer - 1] ||
+      key.threshold !== qualified.threshold) {
+    return Promise.resolve(null);
+  }
+  return qualifiedRestartShareSignatureVerdict(signKeyText,
+    shareText, signatureText);
+}
+
+/* Judging the evidence from the restarted round,
+   whole: the qualified-set line, the restarted
+   round's broadcast commitment set, the dealer's
+   assigned signing-key line, the share line the
+   recipient says they were dealt, and the signature
+   line that arrived with it. The commitment set must
+   be exactly the round the qualified set ordered —
+   the old quorum, the qualified count — or the record
+   is not this restart's and judges nothing. Two
+   independent recomputations then meet, as in tool
+   63: the signature check above, under the assigned
+   key, and tool 38's Feldman check of the share
+   against the dealer's restarted commitments. The
+   verdict is their combination, spelled as tool 63
+   spells it — signed and shareValid is an honest
+   restarted delivery, and a complaint over it is
+   false on its face; signed and NOT shareValid is
+   the attributable bad share, the assigned key
+   provably sent a share the restarted commitments
+   condemn, and no honest share broadcast later in
+   tool 60's rerun answers it, because the held
+   signature does not balance over it; NOT signed is
+   unattributed — the pair proves nothing about the
+   dealer, whatever the share's Feldman verdict, and
+   the recipient is back to tool 60's round, rerun on
+   the restart. Null when the record cannot be judged
+   at all: a malformed line, a set that is not the
+   ordered restarted round, a dealer or recipient
+   outside it, a signing key the renumbering does not
+   assign to that slot. The numbers come back in both
+   spellings — new, as dealt, and old, as the keys
+   and the qualified set name the trustees. */
+function judgeQualifiedRestartShareEvidence(qualifiedText,
+    commitmentsText, signKeyText, shareText,
+    signatureText) {
+  var qualified = parseJointTallyQualifiedLine(qualifiedText);
+  var set = parseDkgCommitmentSet(commitmentsText);
+  var share = parseDkgShareLine(shareText);
+  if (qualified === null || set === null || share === null ||
+      qualified.disqualified.length === 0 ||
+      qualified.qualified.length < qualified.threshold ||
+      set.threshold !== qualified.threshold ||
+      set.count !== qualified.qualified.length ||
+      share.threshold !== set.threshold ||
+      !set.byDealer[share.dealer] ||
+      share.recipient < 1 || share.recipient > set.count) {
+    return Promise.resolve(null);
+  }
+  return checkQualifiedRestartShareSignature(qualifiedText,
+      signKeyText, shareText, signatureText)
+    .then(function (signed) {
+      if (signed === null) return null;
+      var shareValid = verifyDkgShareParsed(
+        set.byDealer[share.dealer], share);
+      if (shareValid === null) return null;
+      return { threshold: set.threshold,
+               dealer: share.dealer,
+               dealerOld: qualified.qualified[share.dealer - 1],
+               recipient: share.recipient,
+               recipientOld:
+                 qualified.qualified[share.recipient - 1],
+               signed: signed, shareValid: shareValid,
+               verdict: signed ?
+                 (shareValid ? "attributable-good-share" :
+                   "attributable-bad-share") : "unattributed" };
+    });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { redactText, planDisclosure, dustCapacity, FIELD_CATALOG, DUST_PER_NIGHT_MAX,
                      assessDappPermissions, PERMISSION_CATALOG,
@@ -15128,7 +15346,9 @@ if (typeof module !== "undefined" && module.exports) {
                      checkQualifiedJointTallyRestartDealing,
                      verifyQualifiedJointTallyRestart,
                      checkSealedQualifiedRestartDealing,
-                     verifySealedQualifiedRestart };
+                     verifySealedQualifiedRestart,
+                     checkQualifiedRestartShareSignature,
+                     judgeQualifiedRestartShareEvidence };
 }
 
 if (typeof document !== "undefined") {
@@ -19907,6 +20127,143 @@ if (typeof document !== "undefined") {
             "re-deal and re-sign under the same order, " +
             "or the group publishes a fresh qualified " +
             "set — governance, off this page.";
+        });
+    });
+
+    document.getElementById("restart-share-sign-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("restart-share-sign-check-result");
+      var out = document.getElementById("jrs-check-out");
+      var qualifiedText = document.getElementById("jrs-check-qualified").value;
+      var shareText = document.getElementById("jrs-check-share").value;
+      checkQualifiedRestartShareSignature(qualifiedText,
+        document.getElementById("jrs-check-signkey").value,
+        shareText,
+        document.getElementById("jrs-check-signature").value)
+        .then(function (verdict) {
+          if (verdict === null) {
+            out.value = "";
+            status.textContent = "No verdict: the " +
+              "qualified-set line must name a " +
+              "disqualification with a viable restart, " +
+              "the signing-key line must be the one the " +
+              "renumbering assigns to the share's " +
+              "dealer, and the share and signature lines " +
+              "whole lines from the restarted round — " +
+              "evidence about a different round judges " +
+              "nothing. An ordinary round's deliveries " +
+              "are checked in tool 63.";
+            return;
+          }
+          var q = parseJointTallyQualifiedLine(qualifiedText);
+          var s = parseDkgShareLine(shareText);
+          var old = q.qualified[s.dealer - 1];
+          var oldRecipient = q.qualified[s.recipient - 1];
+          if (verdict === true) {
+            out.value = "This restarted delivery is " +
+              "attributable: the key that held trustee " +
+              old + "'s place in the old round signed " +
+              "exactly this share line, dealt in the " +
+              "restarted round by new dealer " + s.dealer +
+              " to new recipient " + s.recipient +
+              " (trustee " + oldRecipient + " of the " +
+              "old round).";
+            status.textContent = "Checked locally, from " +
+              "the four lines alone: the assigned key " +
+              "sent this share in the restarted round. " +
+              "Who holds that key is a custody question " +
+              "no page can answer.";
+            return;
+          }
+          out.value = "This restarted delivery is NOT " +
+            "attributable to new dealer " + s.dealer +
+            ": the signature does not verify under the " +
+            "key the renumbering assigns to that slot — " +
+            "the key that held trustee " + old + "'s " +
+            "place in the old round. Another key signed " +
+            "it, or it was made over another share.";
+          status.textContent = "Checked locally: this " +
+            "pair proves nothing about the restarted " +
+            "dealer, whatever the share's own check " +
+            "says — the recipient is back to tool 60's " +
+            "round, rerun on the restart.";
+        });
+    });
+
+    document.getElementById("restart-share-sign-evidence").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var status = document.getElementById("restart-share-sign-evidence-result");
+      var out = document.getElementById("jrs-evidence-out");
+      judgeQualifiedRestartShareEvidence(
+        document.getElementById("jrs-evidence-qualified").value,
+        document.getElementById("jrs-evidence-commitments").value,
+        document.getElementById("jrs-evidence-signkey").value,
+        document.getElementById("jrs-evidence-share").value,
+        document.getElementById("jrs-evidence-signature").value)
+        .then(function (judged) {
+          if (judged === null) {
+            out.value = "";
+            status.textContent = "No judgement: the " +
+              "commitment set must be exactly the " +
+              "restarted round the qualified set " +
+              "ordered — its quorum, its size — the " +
+              "signing-key line the one the renumbering " +
+              "assigns to the share's dealer, and the " +
+              "share and signature lines whole lines " +
+              "from that round — a verdict drawn from " +
+              "the wrong record is worse than none.";
+            return;
+          }
+          if (judged.verdict === "attributable-bad-share") {
+            out.value = "Attributable bad share: new " +
+              "dealer " + judged.dealer + " (trustee " +
+              judged.dealerOld + " of the old round) " +
+              "provably sent new recipient " +
+              judged.recipient + " (trustee " +
+              judged.recipientOld + " of the old round) " +
+              "a share their own restarted commitments " +
+              "condemn — the signature over exactly this " +
+              "line verifies under the assigned key, and " +
+              "the share fails its Feldman check.";
+            status.textContent = "Judged locally: this " +
+              "evidence needs no answer from the " +
+              "dealer. An honest share broadcast later " +
+              "in tool 60's rerun proves nothing about " +
+              "what was sent, because the held signature " +
+              "does not balance over it.";
+            return;
+          }
+          if (judged.verdict === "attributable-good-share") {
+            out.value = "Attributable good share: new " +
+              "dealer " + judged.dealer + " (trustee " +
+              judged.dealerOld + " of the old round) " +
+              "provably sent new recipient " +
+              judged.recipient + " (trustee " +
+              judged.recipientOld + " of the old round) " +
+              "a share that passes its Feldman check " +
+              "against the restarted commitments.";
+            status.textContent = "Judged locally: the " +
+              "delivery was honest — a complaint over " +
+              "it in tool 60's rerun is false on its " +
+              "face.";
+            return;
+          }
+          out.value = "Unattributed: the signature " +
+            "does not verify under the key the " +
+            "renumbering assigns to new dealer " +
+            judged.dealer + " (trustee " +
+            judged.dealerOld + " of the old round), so " +
+            "this pair proves nothing about them — " +
+            "whatever the share's own Feldman verdict (" +
+            (judged.shareValid ? "it passes" : "it fails") +
+            ").";
+          status.textContent = "Judged locally: an " +
+            "unsigned or badly signed restarted " +
+            "delivery attributes nothing — the " +
+            "recipient is back to tool 60's round, " +
+            "rerun on the restart, which is why a group " +
+            "that wants this evidence requires signed " +
+            "deliveries in the restarted round too.";
         });
     });
 
