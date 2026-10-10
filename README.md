@@ -5,6 +5,9 @@ and guides, built and maintained by Kyle Cox (@kshot9000).
 
 **Live hub:** https://kshot3000.github.io/Privacy4All/
 
+The hub carries an Open Graph / Twitter social card (`og-image.png`, 1200×630)
+so shared links preview with the hub's name and tagline instead of a blank box.
+
 > Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) —
 > this is an independent community builder hub for the Midnight ecosystem
 > (16 catalogued projects, 4 live flagship sites). Team feedback and
