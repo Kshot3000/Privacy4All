@@ -7,6 +7,10 @@ and guides, built and maintained by Kyle Cox (@kshot9000).
 
 The hub carries an Open Graph / Twitter social card (`og-image.png`, 1200×630)
 so shared links preview with the hub's name and tagline instead of a blank box.
+The layout is small-screen safe (the project and tool grids never force a
+column wider than the viewport, down to 320px phones) and honours
+`prefers-reduced-motion` by turning off smooth scrolling for visitors who
+ask for reduced motion.
 
 > Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) —
 > this is an independent community builder hub for the Midnight ecosystem
