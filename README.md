@@ -10,7 +10,11 @@ so shared links preview with the hub's name and tagline instead of a blank box.
 The layout is small-screen safe (the project and tool grids never force a
 column wider than the viewport, down to 320px phones) and honours
 `prefers-reduced-motion` by turning off smooth scrolling for visitors who
-ask for reduced motion.
+ask for reduced motion. The page declares its canonical URL (the live hub
+above), a `theme-color` matching the page background so mobile browser
+chrome tints to the hub's dark theme, and a dark `color-scheme` (in both
+the head meta and the stylesheet) so form controls and scrollbars render
+dark instead of being auto-darkened or left light.
 
 > Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) —
 > this is an independent community builder hub for the Midnight ecosystem

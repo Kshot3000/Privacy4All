@@ -1,4 +1,5 @@
 :root{
+  color-scheme:dark;
   --bg:#07040f; --panel:#110a22; --panel2:#170e30; --line:#2d1d55;
   --ink:#f2edff; --muted:#b6a8dd; --accent:#7c4dff; --accent2:#a78bfa;
   --moon:#e9d5ff; --good:#34d399; --radius:14px;
