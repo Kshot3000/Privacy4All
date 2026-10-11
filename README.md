@@ -14,7 +14,12 @@ ask for reduced motion. The page declares its canonical URL (the live hub
 above), a `theme-color` matching the page background so mobile browser
 chrome tints to the hub's dark theme, and a dark `color-scheme` (in both
 the head meta and the stylesheet) so form controls and scrollbars render
-dark instead of being auto-darkened or left light.
+dark instead of being auto-darkened or left light. The head also carries
+JSON-LD structured data — a `WebSite` node for the hub, authored by a
+`Person` node for Kyle Cox whose `sameAs` links are his X and GitHub
+profiles — so search engines can attribute the hub to its builder, and
+`sitemap.xml` lists the hub plus both guides so crawlers are pointed at
+every public page the site serves, not just the front door.
 
 > Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) —
 > this is an independent community builder hub for the Midnight ecosystem
