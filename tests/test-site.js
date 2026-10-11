@@ -7,6 +7,7 @@ const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
 const readme = fs.readFileSync(path.join(root, "README.md"), "utf8");
 const guide = fs.readFileSync(path.join(root, "guides", "getting-started-midnight.md"), "utf8");
 const compactGuide = fs.readFileSync(path.join(root, "guides", "compact-starter.md"), "utf8");
+const feeGuide = fs.readFileSync(path.join(root, "guides", "fee-design-midnight.md"), "utf8");
 const sitemap = fs.readFileSync(path.join(root, "sitemap.xml"), "utf8");
 const css = fs.readFileSync(path.join(root, "styles.css"), "utf8");
 const app = require(path.join(root, "app.js"));
@@ -19,7 +20,7 @@ function check(name, cond) {
 }
 
 /* attribution on every user-facing surface */
-for (const [label, doc] of [["index.html", html], ["README", readme], ["guide", guide], ["compact guide", compactGuide]]) {
+for (const [label, doc] of [["index.html", html], ["README", readme], ["guide", guide], ["compact guide", compactGuide], ["fee guide", feeGuide]]) {
   check("ADA donation address in " + label, doc.includes(ADA));
   check("@kshot9000 in " + label, doc.includes("@kshot9000"));
   check("Midnight team GitHub tag in " + label, doc.includes("@midnightntwrk"));
@@ -39,8 +40,8 @@ check("social card meta present: og:image with real dimensions and a large-image
 check("og-image.png in the repo is a real PNG at exactly the declared 1200x630", (() => { const png = fs.readFileSync(path.join(root, "og-image.png")); return png.length > 8 && png.readUInt32BE(0) === 0x89504e47 && png.readUInt32BE(16) === 1200 && png.readUInt32BE(20) === 630; })());
 check("canonical URL declared and identical to the og:url", html.includes('<link rel="canonical" href="https://kshot3000.github.io/Privacy4All/">') && html.includes('<meta property="og:url" content="https://kshot3000.github.io/Privacy4All/">'));
 check("structured data: the JSON-LD block parses and names the site, its canonical URL and its author", (() => { const m = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/); if (!m) return false; let data; try { data = JSON.parse(m[1]); } catch (e) { return false; } if (!data || data["@context"] !== "https://schema.org" || !Array.isArray(data["@graph"])) return false; const site = data["@graph"].find(n => n["@type"] === "WebSite"); const person = data["@graph"].find(n => n["@type"] === "Person"); return !!site && site.url === "https://kshot3000.github.io/Privacy4All/" && site.name === "Privacy4All" && !!person && person.name === "Kyle Cox" && Array.isArray(person.sameAs) && person.sameAs.includes("https://x.com/kshot9000") && person.sameAs.includes("https://github.com/Kshot3000"); })());
-check("sitemap lists the hub and both guides, in that order, and nothing else", (() => { const locs = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map(x => x[1]); return JSON.stringify(locs) === JSON.stringify(["https://kshot3000.github.io/Privacy4All/", "https://kshot3000.github.io/Privacy4All/guides/getting-started-midnight.md", "https://kshot3000.github.io/Privacy4All/guides/compact-starter.md"]); })());
-check("README documents the structured data and the complete sitemap", readme.includes("JSON-LD structured data") && readme.includes("lists the hub plus both guides"));
+check("sitemap lists the hub and all three guides, in that order, and nothing else", (() => { const locs = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map(x => x[1]); return JSON.stringify(locs) === JSON.stringify(["https://kshot3000.github.io/Privacy4All/", "https://kshot3000.github.io/Privacy4All/guides/getting-started-midnight.md", "https://kshot3000.github.io/Privacy4All/guides/compact-starter.md", "https://kshot3000.github.io/Privacy4All/guides/fee-design-midnight.md"]); })());
+check("README documents the structured data and the complete sitemap", readme.includes("JSON-LD structured data") && readme.includes("lists the hub plus all three guides"));
 check("mobile browser chrome tints to the page background: theme-color matches the --bg token exactly", html.includes('<meta name="theme-color" content="#07040f">') && css.includes("--bg:#07040f"));
 check("dark color-scheme declared in both the head meta and the stylesheet, so controls render dark", html.includes('<meta name="color-scheme" content="dark">') && css.includes("color-scheme:dark"));
 check("README documents the canonical, theme-color and color-scheme declarations", readme.includes("canonical URL") && readme.includes("theme-color") && readme.includes("color-scheme"));
@@ -70,6 +71,14 @@ check("compact guide teaches compact compile and warns a --skip-zk build proves 
 check("compact guide teaches the Counter standard-library example", compactGuide.includes("import CompactStandardLibrary;") && compactGuide.includes("round.increment(1);"));
 check("compact guide warns tNIGHT must be registered for DUST generation before deploying", compactGuide.includes("register it for DUST generation") && compactGuide.includes("Holding tNIGHT alone generates"));
 check("compact guide is honest about scope: complements the docs, testnet only, never pay for testnet tokens", compactGuide.includes("doesn't replace it") && compactGuide.includes("Never pay for testnet") && compactGuide.includes("https://docs.midnight.network/"));
+
+/* Fee design guide (guides/fee-design-midnight.md) */
+check("fee guide linked from the hub guides list and the README", html.includes('href="guides/fee-design-midnight.md"') && readme.includes("(guides/fee-design-midnight.md)"));
+check("fee guide states the honesty rule: quoted before committed, exact, named recipient, one fee once", feeGuide.includes("Quoted before committed") && feeGuide.includes("Named recipient") && feeGuide.includes("One fee, once"));
+check("fee guide pins the exact integer formula and the fee + net = amount invariant", feeGuide.includes("fee = floor(amount × bps ÷ 10,000)") && feeGuide.includes("fee + net = amount") && feeGuide.includes("always holds"));
+check("fee guide worked examples are arithmetically correct at 25 bps", (() => { const fee = (a) => Math.floor(a * 25 / 10000); return fee(1000000) === 2500 && fee(50000) === 125 && fee(10000) === 25 && fee(399) === 0 && feeGuide.includes("| 1,000,000 | 2,500 | 997,500 |") && feeGuide.includes("| 399 | 0 | 399 |"); })());
+check("fee guide separates DUST network cost from the service fee and states no fee is charged on this hub", feeGuide.includes("DUST is not your fee") && feeGuide.includes("no tool on the hub charges a") && feeGuide.includes("never merged or blamed"));
+check("fee guide is honest about scope: design guide, testnet first, mainnet deployment a separate approved step", feeGuide.includes("not a contract and not financial advice") && feeGuide.includes("Testnet first") && feeGuide.includes("never an automated step"));
 
 /* flagship links */
 for (const url of ["https://kshot3000.github.io/Night-Messenger-/", "https://kshot3000.github.io/PlutusShield/",

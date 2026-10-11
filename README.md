@@ -18,7 +18,7 @@ dark instead of being auto-darkened or left light. The head also carries
 JSON-LD structured data — a `WebSite` node for the hub, authored by a
 `Person` node for Kyle Cox whose `sameAs` links are his X and GitHub
 profiles — so search engines can attribute the hub to its builder, and
-`sitemap.xml` lists the hub plus both guides so crawlers are pointed at
+`sitemap.xml` lists the hub plus all three guides so crawlers are pointed at
 every public page the site serves, not just the front door.
 
 > Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) —
@@ -1883,6 +1883,14 @@ or first line, and clearing the search restores all 67.
   the official Hello World and Counter contracts read line by line,
   `compact compile` (and why `--skip-zk` builds prove nothing), and the
   tNIGHT-for-DUST registration step that blocks most first deploys.
+- [Charging honestly on Midnight](guides/fee-design-midnight.md) — a design
+  guide for a disclosed service fee: quoted before committed, exact integer
+  maths in basis points with floor rounding (`fee + net = amount`, always),
+  the zero-fee threshold small amounts hit, where the fee sits in payment,
+  swap and escrow flows, and why DUST — the network's renewable transaction
+  resource — is never the app's fee. Design guidance only: no fee is charged
+  anywhere on this hub, and any mainnet deployment stays a separate,
+  explicitly approved step.
 
 ## How the hourly builder loop works
 
