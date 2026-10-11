@@ -18,7 +18,7 @@ dark instead of being auto-darkened or left light.
 
 > Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) —
 > this is an independent community builder hub for the Midnight ecosystem
-> (16 catalogued projects, 4 live flagship sites). Team feedback and
+> (22 catalogued projects, 4 live flagship sites). Team feedback and
 > corrections welcome.
 
 ## What is Midnight?
@@ -60,6 +60,12 @@ renewable resource that pays for shielded transactions.
 | [midnight-seabattle](https://github.com/Kshot3000/midnight-seabattle) | ZK Sea Battle game on Midnight, Brick Towers example (fork) |
 | [midnight-faucet-api](https://github.com/Kshot3000/midnight-faucet-api) | API behind the Midnight testnet faucet, open-sourced from midnight-faucet (fork) |
 | [midnight-docs](https://github.com/Kshot3000/midnight-docs) | Source for the official Midnight developer docs site, Docusaurus (fork) |
+| [compact](https://github.com/Kshot3000/compact) | The Compact programming language Midnight contracts are written in (fork) |
+| [compact-testbed](https://github.com/Kshot3000/compact-testbed) | Compact contract testbed for Midnight Network (fork) |
+| [midnight-node](https://github.com/Kshot3000/midnight-node) | The Midnight node software — rational privacy on chain (fork) |
+| [midnight-sdk](https://github.com/Kshot3000/midnight-sdk) | Midnight SDK for building dApps against the network (fork) |
+| [example-zkloan](https://github.com/Kshot3000/example-zkloan) | Example dApp for zero-knowledge loans on Midnight (fork) |
+| [vaxzk](https://github.com/Kshot3000/vaxzk) | Vaccine certificates with ZK status proofs — no personal data exposed (fork) |
 | [Cardano4all](https://github.com/Kshot3000/Cardano4all) | Sister hub: building for the Cardano blockchain ([live](https://kshot3000.github.io/Cardano4all/)) |
 
 ## Tools on the hub (local only, no wallet needed)
