@@ -226,7 +226,7 @@
 
   <section id="tools" aria-labelledby="tools-h">
     <h2 id="tools-h">Privacy tools — right here, nothing leaves your browser</h2>
-    <p>Sixty-nine tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
+    <p>Seventy tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
     <div class="filter-row" role="group" aria-label="Find a tool">
       <label for="tool-q">Find a tool</label>
       <input id="tool-q" type="search" placeholder="e.g. vote, sign, DUST, share a secret…" autocomplete="off">
@@ -2390,7 +2390,18 @@
         <button type="submit" class="btn primary">Plan the split, locally</button>
         <p id="split-result" role="status" aria-live="polite"></p>
       </form>
-      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 69 tools.</p>
+      <form class="tool" id="escrow-plan">
+        <h3>70 · Escrow, both endings priced — a release-and-refund planner</h3>
+        <p>An escrow has two endings, and an honest one prices both before anything is deposited. Enter the amount that would be held and the disclosed service-fee rate, and this planner shows both endings in exact integers, using tool 68's arithmetic so the release fee can never disagree with the fee quoted there. Nothing here charges anything: this hub takes no fee, holds no funds and connects no wallet. It plans; it does not hold.</p>
+        <p>The fee is taken once, on release only — never on deposit, because the money is not yet earned, and never on a refund, because a deal that did not happen charges nothing: on release, fee + what the seller receives = the held amount, exactly; on refund, the fee is exactly 0 and the buyer receives the full held amount back. There is no third ending and no other numbers. And DUST is not in this arithmetic at all — DUST pays the Midnight network for shielded transactions; a service fee is a separate line, in the asset that is actually moving, to a published address. My own published fee address for Midnight work is the ADA address in the support section below — an escrow that routes a fee anywhere else while carrying my name is not mine.</p>
+        <label for="escrow-amount">Amount to be held in escrow, in the asset's smallest unit (a whole number — e.g. 1000000)</label>
+        <input id="escrow-amount" inputmode="numeric" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="escrow-bps">Service fee rate, in basis points (25 = 0.25%, 100 = 1%) — charged on release only, never on deposit or refund</label>
+        <input id="escrow-bps" inputmode="numeric" placeholder="e.g. 25" autocomplete="off">
+        <button type="submit" class="btn primary">Price both endings, locally</button>
+        <p id="escrow-result" role="status" aria-live="polite"></p>
+      </form>
+      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 70 tools.</p>
     </div>
   </section>
 
@@ -2423,6 +2434,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=68"></script>
+<script src="app.js?v=69"></script>
 </body>
 </html>

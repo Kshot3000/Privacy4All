@@ -75,9 +75,9 @@ renewable resource that pays for shielded transactions.
 
 ## Tools on the hub (local only, no wallet needed)
 
-The hub carries 69 tools; a **find-a-tool search** at the top of the tools
+The hub carries 70 tools; a **find-a-tool search** at the top of the tools
 section narrows the list as you type — every word must match a tool's title
-or first line, and clearing the search restores all 69.
+or first line, and clearing the search restores all 70.
 
 - **Paste-and-protect redactor** — finds and masks email addresses, Cardano
   addresses and US phone numbers in text you paste. Runs entirely in your
@@ -1916,6 +1916,25 @@ or first line, and clearing the search restores all 69.
   not pay out. No fee is charged
   anywhere on this hub, no funds move
   and no wallet connects.
+
+- **Escrow, both endings priced — a
+  release-and-refund planner** — an
+  escrow has two endings, and this
+  planner prices both before anything
+  is deposited, using the honest fee
+  quote itself so the release fee can
+  never disagree with tool 68. The
+  disclosed fee is taken once, on
+  release only: never on deposit, and
+  never on a refund — on release,
+  fee + seller = the held amount
+  exactly; on refund, the fee is
+  exactly 0 and the buyer receives the
+  full held amount back. Honestly
+  labelled: it plans; it does not
+  hold. No fee is charged anywhere on
+  this hub, no funds move and no
+  wallet connects.
 
 ## Guides
 

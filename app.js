@@ -202,6 +202,34 @@ function splitPayment(amountStr, bpsStr, weightsStr) {
   };
 }
 
+/* ---------- 70. Escrow, both endings priced ---------- */
+/* An escrow has two endings, and an honest one prices both before
+   anything is deposited. escrowPlan reuses tool 68's honestFeeQuote,
+   so the release fee here can never disagree with the fee quoted
+   there. The disclosed service fee is taken ONCE, on release only:
+   never on deposit (the money is not yet earned) and never on refund
+   (a deal that did not happen charges nothing — the buyer gets the
+   full held amount back). The invariants are the honesty: on
+   release, fee + seller net = held amount exactly; on refund,
+   fee = 0 and buyer back = held amount exactly. No third ending and
+   no other numbers exist. This function only plans — it holds
+   nothing, charges nothing, moves nothing and names no recipient;
+   the names belong in the app's own quote, next to the amounts. */
+function escrowPlan(amountStr, bpsStr) {
+  var quote = honestFeeQuote(amountStr, bpsStr);
+  if (quote === null) return null;
+  return {
+    amount: quote.amount,
+    bps: quote.bps,
+    percent: quote.percent,
+    zeroBelow: quote.zeroBelow,
+    releaseFee: quote.fee,
+    releaseNet: quote.net,
+    refundFee: "0",
+    refundAmount: quote.amount
+  };
+}
+
 /* ---------- 4. What does this dApp see? ---------- */
 /* level: "low" = usually needed to connect, "caution" = ask why and limit
    it before granting, "high" = do not grant blindly for a routine visit. */
@@ -15383,6 +15411,7 @@ if (typeof module !== "undefined" && module.exports) {
                      toolQueryMatch,
                      honestFeeQuote, MAX_FEE_BPS,
                      splitPayment, SPLIT_MIN_RECIPIENTS, SPLIT_MAX_RECIPIENTS, SPLIT_MAX_WEIGHT,
+                     escrowPlan,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
@@ -15822,6 +15851,22 @@ if (typeof document !== "undefined") {
       host.textContent = "Split — amount: " + s.amount + " units · service fee first at " + s.bps + " bps (" + s.percent + "%): " +
         s.fee + " units · net split " + s.parts.length + " ways: " + s.net + " units. " + lines.join(" · ") +
         ". The parts add up to the net exactly, and fee + net = amount, exactly. Leftover units from flooring go one each to the largest fractional remainders, earliest recipient winning a tie. This is a plan only: nothing was charged, moved or signed, and DUST — the network's transaction resource — is a separate line that is never part of a service fee.";
+    });
+
+    /* --- escrow, both endings priced --- */
+    document.getElementById("escrow-plan").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var p = escrowPlan(document.getElementById("escrow-amount").value,
+                         document.getElementById("escrow-bps").value);
+      var host = document.getElementById("escrow-result");
+      if (p === null) {
+        host.textContent = "Enter the held amount as a whole number of smallest units and the rate as a whole number of basis points, at or under 10,000 (100%). A rate above that is refused, not planned.";
+        return;
+      }
+      host.textContent = "Escrow plan — held: " + p.amount + " units · disclosed service fee at " + p.bps + " bps (" + p.percent + "%), taken once, on release only. " +
+        "If the deal completes and the escrow releases: fee " + p.releaseFee + " units · the seller receives " + p.releaseNet + " units — fee + seller = held, exactly. " +
+        "If the deal falls through and the escrow refunds: fee " + p.refundFee + " units · the buyer receives the full " + p.refundAmount + " units back — a refund is never charged. " +
+        "Nothing is charged on deposit either. This is a plan only: nothing was held, charged, moved or signed, and DUST — the network's transaction resource — is a separate line that is never part of a service fee.";
     });
 
     /* --- what does this dApp see? --- */
