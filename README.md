@@ -75,9 +75,9 @@ renewable resource that pays for shielded transactions.
 
 ## Tools on the hub (local only, no wallet needed)
 
-The hub carries 72 tools; a **find-a-tool search** at the top of the tools
+The hub carries 73 tools; a **find-a-tool search** at the top of the tools
 section narrows the list as you type — every word must match a tool's title
-or first line, and clearing the search restores all 71.
+or first line, and clearing the search restores all 73.
 
 - **Paste-and-protect redactor** — finds and masks email addresses, Cardano
   addresses and US phone numbers in text you paste. Runs entirely in your
@@ -1978,6 +1978,28 @@ or first line, and clearing the search restores all 71.
   itself). Honestly labelled: it
   checks; it does not apply. It names
   no programme, deadline or amount,
+  submits nothing, no funds move and
+  no wallet connects.
+
+- **Report the milestones like they
+  will be checked — a milestone
+  payout tracker** — the
+  funding-readiness guide's reporting
+  rule as a tool: enter the milestone
+  amounts as allocated and the amount
+  paid against each so far, and every
+  milestone gets one honest status in
+  exact integers — paid in full
+  (exactly its amount, exactly once),
+  partial or unpaid (the exact
+  remainder still outstanding), or
+  overpaid (more paid than allocated:
+  money claimed that was never
+  allocated, a milestone paid twice
+  lands there). Grant reporting stays
+  separate from any service fee.
+  Honestly labelled: it tracks; it
+  does not pay. It names no programme,
   submits nothing, no funds move and
   no wallet connects.
 

@@ -226,7 +226,7 @@
 
   <section id="tools" aria-labelledby="tools-h">
     <h2 id="tools-h">Privacy tools — right here, nothing leaves your browser</h2>
-    <p>Seventy-two tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
+    <p>Seventy-three tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
     <div class="filter-row" role="group" aria-label="Find a tool">
       <label for="tool-q">Find a tool</label>
       <input id="tool-q" type="search" placeholder="e.g. vote, sign, DUST, share a secret…" autocomplete="off">
@@ -2430,7 +2430,18 @@
         <button type="submit" class="btn primary">Check the budget, locally</button>
         <p id="budget-result" role="status" aria-live="polite"></p>
       </form>
-      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 72 tools.</p>
+      <form class="tool" id="payout-check">
+        <h3>73 · Report the milestones like they will be checked — a milestone payout tracker</h3>
+        <p>Tool 72 checks a budget before the application; this tracker is for after the funding, when each milestone has to be reported like it will be checked. Enter the milestone amounts as allocated and, in the same order, the amount paid against each so far, and this tracker gives every milestone one honest status in exact integers — paid in full, partial, unpaid, or overpaid. It is the reporting section of my funding-readiness guide below, as a tool. Nothing here pays anything: it moves no funds, submits no report and connects no wallet. It tracks; it does not pay.</p>
+        <p>A milestone is paid when the amount paid against it equals its amount exactly, exactly once. More paid than allocated is the one unforgivable line: money claimed that was never allocated — a milestone reported paid in full twice lands there, which is the point, because a report that double-counts contradicts the budget it reports against. Partial and unpaid lines name the exact remainder still outstanding, so a delay is reported with its number attached, on the schedule promised. And grant reporting stays separate from any service fee the work later charges, exactly as the guide states: a grant funds the build, a fee is a separate line, and neither is a reason to double-count the other. This tracker names no programme: report in the funder's own format, and any signing, identity, tax or legal step in that process stays your own.</p>
+        <label for="payout-amounts">Milestone amounts as allocated, comma-separated, in whole units (2 to 12 milestones — e.g. 4000, 3500, 2500)</label>
+        <input id="payout-amounts" inputmode="numeric" placeholder="e.g. 4000, 3500, 2500" autocomplete="off">
+        <label for="payout-paid">Amount paid against each milestone so far, comma-separated, in the same order and the same whole units (e.g. 4000, 1750, 0)</label>
+        <input id="payout-paid" inputmode="numeric" placeholder="e.g. 4000, 1750, 0" autocomplete="off">
+        <button type="submit" class="btn primary">Track the payouts, locally</button>
+        <p id="payout-result" role="status" aria-live="polite"></p>
+      </form>
+      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 73 tools.</p>
     </div>
   </section>
 
@@ -2464,6 +2475,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=71"></script>
+<script src="app.js?v=72"></script>
 </body>
 </html>

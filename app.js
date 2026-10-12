@@ -314,6 +314,72 @@ function milestoneBudgetCheck(totalStr, amountsStr) {
   };
 }
 
+/* ---------- 73. Milestone payouts, reported like they will be checked ---------- */
+/* The funding-readiness guide's §5 rule: after the funding, report
+   each milestone like it will be checked. milestonePayoutCheck
+   tracks payments against the budget tool 72 checked: the
+   milestone amounts as allocated and, in the same order, the
+   amount paid against each so far — exact BigInt integers, whole
+   units, 2 to 12 milestones, the two lists the same length.
+   Every milestone gets one honest status: paid (paid exactly its
+   amount, exactly once), partial (some paid, the rest still
+   outstanding), unpaid (nothing paid yet), or overpaid (more
+   paid than its amount — money claimed that was never allocated,
+   the report contradicting the budget it reports against; a
+   milestone paid twice lands here, which is the point). The
+   verdict follows the worst line: any overpaid line makes the
+   report overpaid, every line paid makes it complete, anything
+   else is in progress with the exact remainder named. Anything
+   that is not whole numbers in matching lists is refused (null),
+   never guessed at. This function only tracks — it pays nothing,
+   moves nothing, submits nothing and names no programme; a grant
+   funds the build, and this report is how the build accounts for
+   it, separately from any fee the work later charges. */
+var PAYOUT_MIN_MILESTONES = 2;
+var PAYOUT_MAX_MILESTONES = 12;
+
+function milestonePayoutCheck(amountsStr, paidStr) {
+  var rawAmounts = (amountsStr == null ? "" : String(amountsStr)).split(",");
+  var rawPaid = (paidStr == null ? "" : String(paidStr)).split(",");
+  if (rawAmounts.length < PAYOUT_MIN_MILESTONES || rawAmounts.length > PAYOUT_MAX_MILESTONES) return null;
+  if (rawPaid.length !== rawAmounts.length) return null;
+  var amounts = [];
+  var paid = [];
+  for (var i = 0; i < rawAmounts.length; i++) {
+    var a = rawAmounts[i].trim();
+    var p = rawPaid[i].trim();
+    if (!/^\d+$/.test(a) || !/^\d+$/.test(p)) return null;
+    amounts.push(BigInt(a));
+    paid.push(BigInt(p));
+  }
+  var allocated = 0n;
+  var paidTotal = 0n;
+  var overpaidCount = 0;
+  var milestones = amounts.map(function (amount, idx) {
+    allocated += amount;
+    paidTotal += paid[idx];
+    var status = paid[idx] === amount ? "paid"
+      : paid[idx] === 0n ? "unpaid"
+      : paid[idx] < amount ? "partial" : "overpaid";
+    if (status === "overpaid") overpaidCount++;
+    return {
+      allocated: amount.toString(),
+      paid: paid[idx].toString(),
+      remaining: (amount - paid[idx]).toString(),
+      status: status
+    };
+  });
+  return {
+    count: amounts.length,
+    allocated: allocated.toString(),
+    paidTotal: paidTotal.toString(),
+    remaining: (allocated - paidTotal).toString(),
+    overpaidCount: overpaidCount,
+    status: overpaidCount > 0 ? "overpaid" : (paidTotal === allocated ? "complete" : "in-progress"),
+    milestones: milestones
+  };
+}
+
 /* ---------- 4. What does this dApp see? ---------- */
 /* level: "low" = usually needed to connect, "caution" = ask why and limit
    it before granting, "high" = do not grant blindly for a routine visit. */
@@ -15498,6 +15564,7 @@ if (typeof module !== "undefined" && module.exports) {
                      escrowPlan,
                      swapFeePlan,
                      milestoneBudgetCheck, BUDGET_MIN_MILESTONES, BUDGET_MAX_MILESTONES,
+                     milestonePayoutCheck, PAYOUT_MIN_MILESTONES, PAYOUT_MAX_MILESTONES,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
@@ -16001,6 +16068,36 @@ if (typeof document !== "undefined") {
         text += "Over: the milestones ask for " + p.gap.slice(1) + " units more than the total requested. The application contradicts itself — fix the parts or the total before a reviewer finds it. ";
       }
       text += "This is a check only: nothing was applied for, submitted, held or signed, and no programme's deadline or amount is stated here — verify the current call on the funder's official page.";
+      host.textContent = text;
+    });
+
+    /* --- milestone payouts, reported like they will be checked --- */
+    document.getElementById("payout-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var p = milestonePayoutCheck(document.getElementById("payout-amounts").value,
+                                   document.getElementById("payout-paid").value);
+      var host = document.getElementById("payout-result");
+      if (p === null) {
+        host.textContent = "Enter 2 to 12 milestone amounts as whole numbers separated by commas, and the amount paid against each so far, in the same order and the same whole units — the two lists must be the same length. Anything else is refused, not guessed at.";
+        return;
+      }
+      var lines = p.milestones.map(function (m, idx) {
+        var line = "Milestone " + (idx + 1) + ": " + m.paid + " of " + m.allocated + " paid — ";
+        if (m.status === "paid") line += "paid in full, exactly once.";
+        else if (m.status === "unpaid") line += "nothing paid yet, " + m.remaining + " outstanding.";
+        else if (m.status === "partial") line += "partial, " + m.remaining + " still outstanding.";
+        else line += "overpaid by " + m.remaining.slice(1) + " — more than its amount, money claimed that was never allocated.";
+        return line;
+      });
+      var text = "Payout report — " + p.count + " milestones · allocated " + p.allocated + " units · paid so far " + p.paidTotal + " units. " + lines.join(" ") + " ";
+      if (p.status === "complete") {
+        text += "Complete: every milestone is paid in full, exactly once — the paid total equals the allocated total, a report a funder can check line by line against the budget. ";
+      } else if (p.status === "overpaid") {
+        text += "Overpaid: " + p.overpaidCount + (p.overpaidCount === 1 ? " milestone reports" : " milestones report") + " more paid than allocated. A milestone paid twice, or paid more than its amount, contradicts the budget it reports against — fix the report before a funder finds it. ";
+      } else {
+        text += "In progress: " + p.remaining + " units remain across the unpaid and partial milestones. Report on the schedule promised, including when the news is a delay. ";
+      }
+      text += "This is a tracker only: nothing was paid, moved, submitted or signed, and no programme is named here — a grant funds the build, and grant reporting stays separate from any fee the work later charges.";
       host.textContent = text;
     });
 
