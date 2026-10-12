@@ -75,7 +75,7 @@ renewable resource that pays for shielded transactions.
 
 ## Tools on the hub (local only, no wallet needed)
 
-The hub carries 71 tools; a **find-a-tool search** at the top of the tools
+The hub carries 72 tools; a **find-a-tool search** at the top of the tools
 section narrows the list as you type — every word must match a tool's title
 or first line, and clearing the search restores all 71.
 
@@ -1959,6 +1959,27 @@ or first line, and clearing the search restores all 71.
   it does not swap. No fee is charged
   anywhere on this hub, no funds move
   and no wallet connects.
+
+- **Make the milestones sum to the
+  total — a funding-budget checker** —
+  the funding-readiness guide's budget
+  invariant as a tool: enter the total
+  requested and 2 to 12 milestone
+  amounts, and it adds them in exact
+  integers and returns one of three
+  honest verdicts — balanced (the
+  parts sum to the total exactly),
+  under-allocated (the gap is
+  unallocated money: name a milestone
+  for it or lower the total, never a
+  hidden contingency), or over (the
+  parts ask for more than the total
+  and the application contradicts
+  itself). Honestly labelled: it
+  checks; it does not apply. It names
+  no programme, deadline or amount,
+  submits nothing, no funds move and
+  no wallet connects.
 
 ## Guides
 

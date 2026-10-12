@@ -226,7 +226,7 @@
 
   <section id="tools" aria-labelledby="tools-h">
     <h2 id="tools-h">Privacy tools — right here, nothing leaves your browser</h2>
-    <p>Seventy-one tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
+    <p>Seventy-two tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
     <div class="filter-row" role="group" aria-label="Find a tool">
       <label for="tool-q">Find a tool</label>
       <input id="tool-q" type="search" placeholder="e.g. vote, sign, DUST, share a secret…" autocomplete="off">
@@ -2419,7 +2419,18 @@
         <button type="submit" class="btn primary">Price the swap fee, locally</button>
         <p id="swap-result" role="status" aria-live="polite"></p>
       </form>
-      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 71 tools.</p>
+      <form class="tool" id="budget-check">
+        <h3>72 · Make the milestones sum to the total — a funding-budget checker</h3>
+        <p>A funding application's budget has one invariant, and a reviewer checks it before anything else: the milestone amounts sum exactly to the total requested. Enter the total and the milestone amounts, and this checker adds them in exact integers and says plainly whether the budget balances, is under-allocated, or asks for more than its parts. It is the budget section of my funding-readiness guide below, as a tool. Nothing here applies for anything: it submits nothing, holds no funds and connects no wallet. It checks; it does not apply.</p>
+        <p>There are only three honest outcomes. Balanced: the parts sum to the total, exactly. Under: the parts sum to less — the difference is unallocated, and an honest budget either adds a named milestone for it or lowers the total; a total that quietly exceeds the sum of its parts is a hidden contingency, a hidden fee wearing a budget's clothes. Over: the parts sum to more than the total — the application contradicts itself, and no rounding fixes it. A buffer you genuinely need is its own milestone line with its own amount, never padding inside another line. And a paid step a milestone needs — a deployment that costs real money — is either inside that milestone's amount or named as not covered, and stays a separate, explicitly approved step. This checker names no programme, deadline or amount: verify the current call on the funder's official page, and any signing, identity, tax or legal step stays your own.</p>
+        <label for="budget-total">Total requested, in whole units of the currency the programme pays (a whole number — e.g. 10000)</label>
+        <input id="budget-total" inputmode="numeric" placeholder="e.g. 10000" autocomplete="off">
+        <label for="budget-amounts">Milestone amounts, comma-separated, in the same whole units (2 to 12 milestones — e.g. 4000, 3500, 2500)</label>
+        <input id="budget-amounts" inputmode="numeric" placeholder="e.g. 4000, 3500, 2500" autocomplete="off">
+        <button type="submit" class="btn primary">Check the budget, locally</button>
+        <p id="budget-result" role="status" aria-live="polite"></p>
+      </form>
+      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 72 tools.</p>
     </div>
   </section>
 
@@ -2453,6 +2464,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=70"></script>
+<script src="app.js?v=71"></script>
 </body>
 </html>

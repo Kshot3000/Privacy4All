@@ -268,6 +268,52 @@ function swapFeePlan(inStr, outStr, bpsStr, legStr) {
   };
 }
 
+/* ---------- 72. Milestone budget, sums to the total ---------- */
+/* A funding application's budget has one invariant, stated in the
+   funding-readiness guide: sum of milestone amounts = total
+   requested. milestoneBudgetCheck adds the parts in exact BigInt
+   integers, in the currency's whole units, and returns one of
+   three honest verdicts. Balanced: the parts sum to the total
+   exactly. Under: the parts sum to less, and the gap is
+   unallocated money — an honest budget either names a milestone
+   for it or lowers the total, because a total that quietly
+   exceeds the sum of its parts is a hidden contingency. Over: the
+   parts sum to more than the total, and the application
+   contradicts itself. There is no fourth verdict and no rounding
+   anywhere: every amount is a whole number, 2 to 12 milestones,
+   and anything else is refused (null), never guessed at. This
+   function only checks — it applies for nothing, submits nothing,
+   holds nothing and names no programme, deadline or amount; the
+   current call is verified on the funder's official page, and any
+   signing, identity, tax or legal step stays the applicant's own. */
+var BUDGET_MIN_MILESTONES = 2;
+var BUDGET_MAX_MILESTONES = 12;
+
+function milestoneBudgetCheck(totalStr, amountsStr) {
+  var t = (totalStr == null ? "" : String(totalStr)).trim();
+  if (!/^\d+$/.test(t)) return null;
+  var raw = (amountsStr == null ? "" : String(amountsStr)).split(",");
+  if (raw.length < BUDGET_MIN_MILESTONES || raw.length > BUDGET_MAX_MILESTONES) return null;
+  var amounts = [];
+  for (var i = 0; i < raw.length; i++) {
+    var p = raw[i].trim();
+    if (!/^\d+$/.test(p)) return null;
+    amounts.push(BigInt(p));
+  }
+  var total = BigInt(t);
+  var sum = 0n;
+  amounts.forEach(function (x) { sum += x; });
+  var gap = total - sum;
+  return {
+    total: total.toString(),
+    amounts: amounts.map(function (x) { return x.toString(); }),
+    count: amounts.length,
+    sum: sum.toString(),
+    gap: gap.toString(),
+    status: gap === 0n ? "balanced" : (gap > 0n ? "under" : "over")
+  };
+}
+
 /* ---------- 4. What does this dApp see? ---------- */
 /* level: "low" = usually needed to connect, "caution" = ask why and limit
    it before granting, "high" = do not grant blindly for a routine visit. */
@@ -15451,6 +15497,7 @@ if (typeof module !== "undefined" && module.exports) {
                      splitPayment, SPLIT_MIN_RECIPIENTS, SPLIT_MAX_RECIPIENTS, SPLIT_MAX_WEIGHT,
                      escrowPlan,
                      swapFeePlan,
+                     milestoneBudgetCheck, BUDGET_MIN_MILESTONES, BUDGET_MAX_MILESTONES,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
@@ -15932,6 +15979,28 @@ if (typeof document !== "undefined") {
         text += "A " + legName + " leg under " + p.zeroBelow + " units would pay no fee at this rate. ";
       }
       text += "This is a plan only: nothing was swapped, charged, moved or signed, and DUST — the network's transaction resource — is a separate line that is never part of a service fee.";
+      host.textContent = text;
+    });
+
+    /* --- milestone budget, sums to the total --- */
+    document.getElementById("budget-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var p = milestoneBudgetCheck(document.getElementById("budget-total").value,
+                                   document.getElementById("budget-amounts").value);
+      var host = document.getElementById("budget-result");
+      if (p === null) {
+        host.textContent = "Enter the total requested as a whole number and 2 to 12 milestone amounts as whole numbers separated by commas, all in the same whole units. Anything else is refused, not guessed at.";
+        return;
+      }
+      var text = "Budget check — total requested: " + p.total + " units · " + p.count + " milestones sum to " + p.sum + " units. ";
+      if (p.status === "balanced") {
+        text += "Balanced: the parts sum to the total exactly — sum of milestones = total, the invariant a reviewer checks first. ";
+      } else if (p.status === "under") {
+        text += "Under-allocated: " + p.gap + " units of the total are claimed by no milestone. That gap is unallocated — add a named milestone for it or lower the total; a total that quietly exceeds the sum of its parts is a hidden contingency. ";
+      } else {
+        text += "Over: the milestones ask for " + p.gap.slice(1) + " units more than the total requested. The application contradicts itself — fix the parts or the total before a reviewer finds it. ";
+      }
+      text += "This is a check only: nothing was applied for, submitted, held or signed, and no programme's deadline or amount is stated here — verify the current call on the funder's official page.";
       host.textContent = text;
     });
 
