@@ -75,9 +75,9 @@ renewable resource that pays for shielded transactions.
 
 ## Tools on the hub (local only, no wallet needed)
 
-The hub carries 67 tools; a **find-a-tool search** at the top of the tools
+The hub carries 68 tools; a **find-a-tool search** at the top of the tools
 section narrows the list as you type — every word must match a tool's title
-or first line, and clearing the search restores all 67.
+or first line, and clearing the search restores all 68.
 
 - **Paste-and-protect redactor** — finds and masks email addresses, Cardano
   addresses and US phone numbers in text you paste. Runs entirely in your
@@ -1873,6 +1873,27 @@ or first line, and clearing the search restores all 67.
   not who holds the key. Not a Compact
   circuit proof, and not a format any
   chain or wallet checks.
+
+- **Quote the fee before anyone signs —
+  the honest fee calculator** — the
+  worked arithmetic of the fee-design
+  guide, as a tool: an amount in
+  smallest units and a rate in basis
+  points in, the exact fee and the
+  exact net out — BigInt integers,
+  floor rounding, so `fee + net =
+  amount` always, and the quote is the
+  settlement's own numbers. It states
+  the zero-fee threshold out loud (at
+  25 bps, amounts under 400 units pay
+  exactly 0), refuses a rate above
+  10,000 bps rather than quoting it,
+  and keeps DUST — the network's cost —
+  out of the service fee entirely.
+  Honestly labelled: it quotes; it
+  does not collect. No fee is charged
+  anywhere on this hub, no funds move
+  and no wallet connects.
 
 ## Guides
 

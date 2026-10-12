@@ -6,8 +6,8 @@
    a SHA-256 hash commitment maker/checker, a public-vs-shielded
    ledger observer explainer, a viewing-key scope simulator, a
    commitment secret-strength checker with a random salt generator,
-   a password-sealed (AES-GCM) message tool, and an ECDSA (P-256)
-   message-signing tool.
+   a password-sealed (AES-GCM) message tool, an ECDSA (P-256)
+   message-signing tool, and an honest fee quote calculator.
    Everything runs locally. Pure functions are exported for tests. */
 
 /* ---------- 1. Redactor ---------- */
@@ -93,6 +93,45 @@ function dustCapacity(nightStr) {
   var whole = capMicro / 1000000n;
   var frac = (capMicro % 1000000n).toString().padStart(6, "0").replace(/0+$/, "");
   return frac ? whole.toString() + "." + frac : whole.toString();
+}
+
+/* ---------- 68. Honest fee quote ---------- */
+/* The arithmetic of guides/fee-design-midnight.md, as a function:
+   fee = floor(amount x bps / 10,000), net = amount - fee, computed in
+   BigInt in the asset's smallest unit — the same integers a settlement
+   would use, so a quote made here and a settlement made later cannot
+   disagree. Floor rounding favours the user: below a threshold amount
+   the fee is exactly 0, and the quote says so (zeroBelow) instead of
+   rounding up in the house's favour. MAX_FEE_BPS is the guide's cap
+   rule in code: a rate above 10,000 bps is more than the whole amount,
+   so it is refused (null), never quoted. This function only quotes —
+   it charges nothing, moves nothing and names no recipient; the
+   recipient belongs in the app's own quote, next to the amount. */
+var MAX_FEE_BPS = 10000;
+
+function honestFeeQuote(amountStr, bpsStr) {
+  var a = (amountStr == null ? "" : String(amountStr)).trim();
+  var b = (bpsStr == null ? "" : String(bpsStr)).trim();
+  if (!/^\d+$/.test(a) || !/^\d+$/.test(b)) return null;
+  var amount = BigInt(a);
+  var bps = BigInt(b);
+  if (bps > BigInt(MAX_FEE_BPS)) return null;
+  var fee = (amount * bps) / 10000n;
+  var net = amount - fee;
+  var wholePct = bps / 100n;
+  var fracPct = bps % 100n;
+  var percent = fracPct === 0n
+    ? wholePct.toString()
+    : wholePct.toString() + "." + fracPct.toString().padStart(2, "0").replace(/0$/, "");
+  var zeroBelow = bps === 0n ? null : ((10000n + bps - 1n) / bps).toString();
+  return {
+    amount: amount.toString(),
+    bps: bps.toString(),
+    percent: percent,
+    fee: fee.toString(),
+    net: net.toString(),
+    zeroBelow: zeroBelow
+  };
 }
 
 /* ---------- 4. What does this dApp see? ---------- */
@@ -15274,6 +15313,7 @@ if (typeof module !== "undefined" && module.exports) {
                      evaluateProof, CLAIM_CATALOG,
                      getSnippet, searchSnippets, SNIPPET_CATALOG,
                      toolQueryMatch,
+                     honestFeeQuote, MAX_FEE_BPS,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
@@ -15671,6 +15711,29 @@ if (typeof document !== "undefined") {
       document.getElementById("dust-result").textContent = cap === null
         ? "Enter a NIGHT amount (a whole number, or up to 6 decimal places)."
         : input.trim() + " NIGHT can sustain up to ~" + cap + " DUST capacity (5 × NIGHT model). Actual generation depends on holdings and Midnight network parameters — this is a ceiling, not a promise.";
+    });
+
+    /* --- honest fee quote --- */
+    document.getElementById("fee-quote").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var q = honestFeeQuote(document.getElementById("fee-amount").value,
+                             document.getElementById("fee-bps").value);
+      var host = document.getElementById("fee-result");
+      if (q === null) {
+        host.textContent = "Enter the amount as a whole number of smallest units and the rate as a whole number of basis points, at or under 10,000 (100%). A rate above that is refused, not quoted.";
+        return;
+      }
+      var text = "Quote — amount: " + q.amount + " units · service fee at " + q.bps + " bps (" + q.percent + "%): " +
+        q.fee + " units · net to the recipient: " + q.net + " units. Fee + net = amount, exactly.";
+      if (q.zeroBelow === null) {
+        text += " The rate is 0 bps, so every amount pays no fee.";
+      } else if (q.fee === "0") {
+        text += " At this rate the fee rounds down to 0 — amounts under " + q.zeroBelow + " units pay no fee at " + q.bps + " bps, and floor rounding never rounds it up in the house's favour.";
+      } else {
+        text += " Amounts under " + q.zeroBelow + " units would pay no fee at this rate.";
+      }
+      text += " This is a quote only: nothing was charged, moved or signed, and DUST — the network's transaction resource — is a separate line that is never part of a service fee.";
+      host.textContent = text;
     });
 
     /* --- what does this dApp see? --- */

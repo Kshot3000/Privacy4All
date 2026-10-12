@@ -226,7 +226,7 @@
 
   <section id="tools" aria-labelledby="tools-h">
     <h2 id="tools-h">Privacy tools — right here, nothing leaves your browser</h2>
-    <p>Sixty-seven tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
+    <p>Sixty-eight tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
     <div class="filter-row" role="group" aria-label="Find a tool">
       <label for="tool-q">Find a tool</label>
       <input id="tool-q" type="search" placeholder="e.g. vote, sign, DUST, share a secret…" autocomplete="off">
@@ -2366,7 +2366,18 @@
           <p id="second-restart-check-result" role="status" aria-live="polite"></p>
         </form>
       </div>
-      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 67 tools.</p>
+      <form class="tool" id="fee-quote">
+        <h3>68 · Quote the fee before anyone signs — the honest fee calculator</h3>
+        <p>The arithmetic of my fee-design guide, as a calculator: enter an amount in the asset's smallest unit and a rate in basis points, and get the exact fee and the exact net — BigInt integers, floor rounding, the same numbers a settlement would use. Nothing here charges anything: this hub takes no fee, moves no funds and connects no wallet. It quotes; it does not collect.</p>
+        <p>A quote is honest only when it is exact, shown before the committing step, and names its recipient — the four-part rule in my guide, <a href="guides/fee-design-midnight.md">Charging honestly on Midnight</a>. Floor rounding favours the user: at 25 bps, any amount under 400 units pays a fee of exactly 0, and this calculator says so out loud instead of rounding up in the house's favour. The fee can never exceed the amount: a rate above 10,000 bps (100%) is refused, not quoted. And DUST is not in this arithmetic at all — DUST pays the Midnight network for shielded transactions; a service fee is a separate line, in the asset that is actually moving, to a published address. My own published fee address for Midnight work is the ADA address in the support section below — a quote that routes a fee anywhere else while carrying my name is not mine.</p>
+        <label for="fee-amount">Amount, in the asset's smallest unit (a whole number — e.g. 1000000)</label>
+        <input id="fee-amount" inputmode="numeric" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="fee-bps">Service fee rate, in basis points (25 = 0.25%, 100 = 1%)</label>
+        <input id="fee-bps" inputmode="numeric" placeholder="e.g. 25" autocomplete="off">
+        <button type="submit" class="btn primary">Quote the fee, locally</button>
+        <p id="fee-result" role="status" aria-live="polite"></p>
+      </form>
+      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 68 tools.</p>
     </div>
   </section>
 
@@ -2399,6 +2410,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=66"></script>
+<script src="app.js?v=67"></script>
 </body>
 </html>
