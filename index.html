@@ -226,7 +226,7 @@
 
   <section id="tools" aria-labelledby="tools-h">
     <h2 id="tools-h">Privacy tools — right here, nothing leaves your browser</h2>
-    <p>Seventy-four tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
+    <p>Seventy-five tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
     <div class="filter-row" role="group" aria-label="Find a tool">
       <label for="tool-q">Find a tool</label>
       <input id="tool-q" type="search" placeholder="e.g. vote, sign, DUST, share a secret…" autocomplete="off">
@@ -2454,7 +2454,18 @@
         <button type="submit" class="btn primary">Count the sales, locally</button>
         <p id="breakeven-result" role="status" aria-live="polite"></p>
       </form>
-      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 74 tools.</p>
+      <form class="tool" id="netprice-plan">
+        <h3>75 · Price it so the net is the price — a net-target pricing planner</h3>
+        <p>Tool 68 quotes the fee on a price you have already chosen; most sellers start from the other end — the amount they must actually receive — and need the price that nets it after the disclosed fee. Enter the amount you must receive and the fee rate you disclose, and this planner finds the exact price: the smallest whole-unit price whose net reaches your target, with the fee quoted by tool 68 itself, so the fee here can never disagree with the fee quoted there. It prices; it does not sell: nothing is charged, listed, sold or signed, and no wallet connects.</p>
+        <p>Dividing by one-minus-the-rate is not enough, because the fee rounds down: the naive gross-up can land a unit short or a unit over. This planner searches the exact integer arithmetic instead, and the answer nets your target exactly — one unit less falls short, and no extra unit is quietly kept. The gross-up is honest only while it is disclosed: the buyer sees the price, the fee and your net side by side, exactly as my fee-design guide below requires — a fee hidden inside a price is a hidden fee. One edge case gets its own verdict instead of a fake number: at a 100% rate the net is zero at any price, so a target above zero is never reachable. DUST is a network transaction cost, never part of this fee.</p>
+        <label for="netprice-target">Amount you must receive after the fee, in whole units (a whole number — e.g. 1000)</label>
+        <input id="netprice-target" inputmode="numeric" placeholder="e.g. 1000" autocomplete="off">
+        <label for="netprice-bps">Disclosed fee rate, in basis points (a whole number, at most 10000 — e.g. 250 = 2.5%)</label>
+        <input id="netprice-bps" inputmode="numeric" placeholder="e.g. 250" autocomplete="off">
+        <button type="submit" class="btn primary">Find the price, locally</button>
+        <p id="netprice-result" role="status" aria-live="polite"></p>
+      </form>
+      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 75 tools.</p>
     </div>
   </section>
 
@@ -2488,6 +2499,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=73"></script>
+<script src="app.js?v=74"></script>
 </body>
 </html>

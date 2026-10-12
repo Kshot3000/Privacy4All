@@ -435,6 +435,57 @@ function breakEvenPlan(costStr, amountStr, bpsStr) {
     volume: (sales * amount).toString() });
 }
 
+/* ---------- 75. Price it so the net is the price ---------- */
+/* Tool 68 quotes the fee on a price already chosen; sellers
+   usually start from the other end — the amount they must
+   actually receive — and need the price that nets it after the
+   disclosed fee. netTargetPrice solves that inverse problem
+   exactly: the SMALLEST whole-unit price whose net, under tool
+   68's own honestFeeQuote, reaches the target. Dividing the
+   target by (1 - rate) is not enough, because the fee floors:
+   the naive gross-up can land a unit short or a unit over, so
+   the answer is found by exact BigInt search over the net
+   function itself and then quoted back through honestFeeQuote,
+   so the fee here can never disagree with the fee quoted there.
+   Because the net rises by 0 or 1 per unit of price at any rate
+   below 100%, the smallest reaching price nets the target
+   EXACTLY — never a unit more quietly kept. One honest edge
+   verdict: at a 100% rate the net is always zero, so any target
+   above zero is never reachable and the planner says so instead
+   of printing an infinite price; a target of zero is priced at
+   zero at any rate. Anything that is not whole numbers, and any
+   rate above tool 68's cap, is refused (null), never guessed
+   at. This function only prices — it charges nothing, lists
+   nothing, sells nothing and connects no wallet; DUST is a
+   transaction cost of the network, never part of this fee. */
+function netTargetPrice(targetStr, bpsStr) {
+  var t = (targetStr == null ? "" : String(targetStr)).trim();
+  var b = (bpsStr == null ? "" : String(bpsStr)).trim();
+  if (!/^\d+$/.test(t) || !/^\d+$/.test(b)) return null;
+  var probe = honestFeeQuote("0", b);
+  if (probe === null) return null;
+  var target = BigInt(t);
+  var bps = BigInt(b);
+  var base = { target: target.toString(), bps: probe.bps, percent: probe.percent };
+  if (target === 0n) {
+    return Object.assign(base, { status: "priced", amount: "0", fee: "0", net: "0" });
+  }
+  if (bps === 10000n) {
+    return Object.assign(base, { status: "never", amount: null, fee: null, net: null });
+  }
+  function netOf(x) { return BigInt(honestFeeQuote(x.toString(), b).net); }
+  var lo = target;
+  var hi = target + (target * bps) / (10000n - bps) + 1n;
+  while (netOf(hi) < target) hi *= 2n;
+  while (lo < hi) {
+    var mid = (lo + hi) / 2n;
+    if (netOf(mid) >= target) hi = mid; else lo = mid + 1n;
+  }
+  var quote = honestFeeQuote(lo.toString(), b);
+  return Object.assign(base, { status: "priced",
+    amount: quote.amount, fee: quote.fee, net: quote.net });
+}
+
 /* ---------- 4. What does this dApp see? ---------- */
 /* level: "low" = usually needed to connect, "caution" = ask why and limit
    it before granting, "high" = do not grant blindly for a routine visit. */
@@ -15621,6 +15672,7 @@ if (typeof module !== "undefined" && module.exports) {
                      milestoneBudgetCheck, BUDGET_MIN_MILESTONES, BUDGET_MAX_MILESTONES,
                      milestonePayoutCheck, PAYOUT_MIN_MILESTONES, PAYOUT_MAX_MILESTONES,
                      breakEvenPlan,
+                     netTargetPrice,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
@@ -16180,6 +16232,28 @@ if (typeof document !== "undefined") {
         text += "Break-even at " + p.sales + " sales: those sales collect " + p.feesCollected + " units of fees against the " + p.cost + "-unit cost (surplus " + p.surplus + " units from the final sale), on " + p.volume + " units of sales volume. One sale fewer collects " + (BigInt(p.feesCollected) - BigInt(p.feePerSale)).toString() + " units and falls short — the count is the smallest whole number that covers the cost, not a rounded guess. ";
       }
       text += "This is a plan only: nothing was charged, collected, sold or signed, and no wallet connected — DUST is a network transaction cost, never part of this fee.";
+      host.textContent = text;
+    });
+
+    /* --- price it so the net is the price --- */
+    document.getElementById("netprice-plan").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var p = netTargetPrice(document.getElementById("netprice-target").value,
+                             document.getElementById("netprice-bps").value);
+      var host = document.getElementById("netprice-result");
+      if (p === null) {
+        host.textContent = "Enter the amount you must receive and a fee rate in basis points (250 = 2.5%), both as whole numbers, with the rate at most 10000. Anything else is refused, not guessed at.";
+        return;
+      }
+      var text = "Net-target price — you must receive " + p.target + " units · disclosed fee " + p.percent + "% (" + p.bps + " bps). ";
+      if (p.status === "never") {
+        text += "Never at this rate: a 100% fee takes the whole of every price, so the net is zero at any price and no price reaches a target above zero. Lower the disclosed rate — a pricing decision to make out loud, not a rounding trick. ";
+      } else if (p.amount === "0") {
+        text += "Price 0 units: a target of zero needs no price at any rate. State the amount you actually must receive and the price becomes meaningful. ";
+      } else {
+        text += "Price it at " + p.amount + " units: the disclosed fee takes " + p.fee + " units and you receive exactly " + p.net + " units. One unit less — " + (BigInt(p.amount) - 1n).toString() + " — nets " + honestFeeQuote((BigInt(p.amount) - 1n).toString(), p.bps).net + " and falls short, so this is the smallest price that reaches the target, not a rounded-up guess; and because the buyer sees the price, the fee and the net side by side, the gross-up is disclosed, never hidden in the price. ";
+      }
+      text += "This is a price plan only: nothing was charged, listed, sold or signed, and no wallet connected — DUST is a network transaction cost, never part of this fee.";
       host.textContent = text;
     });
 

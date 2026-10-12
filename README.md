@@ -75,9 +75,9 @@ renewable resource that pays for shielded transactions.
 
 ## Tools on the hub (local only, no wallet needed)
 
-The hub carries 74 tools; a **find-a-tool search** at the top of the tools
+The hub carries 75 tools; a **find-a-tool search** at the top of the tools
 section narrows the list as you type — every word must match a tool's title
-or first line, and clearing the search restores all 74.
+or first line, and clearing the search restores all 75.
 
 - **Paste-and-protect redactor** — finds and masks email addresses, Cardano
   addresses and US phone numbers in text you paste. Runs entirely in your
@@ -2021,6 +2021,25 @@ or first line, and clearing the search restores all 74.
   Honestly labelled: it plans; it does
   not earn. Nothing is charged,
   collected or sold, no funds move and
+  no wallet connects. DUST is never
+  part of the fee.
+
+- **Price it so the net is the
+  price — a net-target pricing
+  planner** — enter the amount you
+  must actually receive and the
+  disclosed fee rate, and it finds
+  the smallest whole-unit price whose
+  net reaches that target exactly:
+  the fee is the honest fee
+  calculator's own quote, one unit
+  less falls short, and no extra
+  unit is quietly kept. At a 100%
+  rate the answer is never — the
+  net is zero at any price.
+  Honestly labelled: it prices; it
+  does not sell. Nothing is charged,
+  listed or sold, no funds move and
   no wallet connects. DUST is never
   part of the fee.
 
