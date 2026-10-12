@@ -8,6 +8,7 @@ const readme = fs.readFileSync(path.join(root, "README.md"), "utf8");
 const guide = fs.readFileSync(path.join(root, "guides", "getting-started-midnight.md"), "utf8");
 const compactGuide = fs.readFileSync(path.join(root, "guides", "compact-starter.md"), "utf8");
 const feeGuide = fs.readFileSync(path.join(root, "guides", "fee-design-midnight.md"), "utf8");
+const fundingGuide = fs.readFileSync(path.join(root, "guides", "funding-readiness-midnight.md"), "utf8");
 const sitemap = fs.readFileSync(path.join(root, "sitemap.xml"), "utf8");
 const css = fs.readFileSync(path.join(root, "styles.css"), "utf8");
 const app = require(path.join(root, "app.js"));
@@ -20,7 +21,7 @@ function check(name, cond) {
 }
 
 /* attribution on every user-facing surface */
-for (const [label, doc] of [["index.html", html], ["README", readme], ["guide", guide], ["compact guide", compactGuide], ["fee guide", feeGuide]]) {
+for (const [label, doc] of [["index.html", html], ["README", readme], ["guide", guide], ["compact guide", compactGuide], ["fee guide", feeGuide], ["funding guide", fundingGuide]]) {
   check("ADA donation address in " + label, doc.includes(ADA));
   check("@kshot9000 in " + label, doc.includes("@kshot9000"));
   check("Midnight team GitHub tag in " + label, doc.includes("@midnightntwrk"));
@@ -40,8 +41,8 @@ check("social card meta present: og:image with real dimensions and a large-image
 check("og-image.png in the repo is a real PNG at exactly the declared 1200x630", (() => { const png = fs.readFileSync(path.join(root, "og-image.png")); return png.length > 8 && png.readUInt32BE(0) === 0x89504e47 && png.readUInt32BE(16) === 1200 && png.readUInt32BE(20) === 630; })());
 check("canonical URL declared and identical to the og:url", html.includes('<link rel="canonical" href="https://kshot3000.github.io/Privacy4All/">') && html.includes('<meta property="og:url" content="https://kshot3000.github.io/Privacy4All/">'));
 check("structured data: the JSON-LD block parses and names the site, its canonical URL and its author", (() => { const m = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/); if (!m) return false; let data; try { data = JSON.parse(m[1]); } catch (e) { return false; } if (!data || data["@context"] !== "https://schema.org" || !Array.isArray(data["@graph"])) return false; const site = data["@graph"].find(n => n["@type"] === "WebSite"); const person = data["@graph"].find(n => n["@type"] === "Person"); return !!site && site.url === "https://kshot3000.github.io/Privacy4All/" && site.name === "Privacy4All" && !!person && person.name === "Kyle Cox" && Array.isArray(person.sameAs) && person.sameAs.includes("https://x.com/kshot9000") && person.sameAs.includes("https://github.com/Kshot3000"); })());
-check("sitemap lists the hub and all three guides, in that order, and nothing else", (() => { const locs = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map(x => x[1]); return JSON.stringify(locs) === JSON.stringify(["https://kshot3000.github.io/Privacy4All/", "https://kshot3000.github.io/Privacy4All/guides/getting-started-midnight.md", "https://kshot3000.github.io/Privacy4All/guides/compact-starter.md", "https://kshot3000.github.io/Privacy4All/guides/fee-design-midnight.md"]); })());
-check("README documents the structured data and the complete sitemap", readme.includes("JSON-LD structured data") && readme.includes("lists the hub plus all three guides"));
+check("sitemap lists the hub and all four guides, in that order, and nothing else", (() => { const locs = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map(x => x[1]); return JSON.stringify(locs) === JSON.stringify(["https://kshot3000.github.io/Privacy4All/", "https://kshot3000.github.io/Privacy4All/guides/getting-started-midnight.md", "https://kshot3000.github.io/Privacy4All/guides/compact-starter.md", "https://kshot3000.github.io/Privacy4All/guides/fee-design-midnight.md", "https://kshot3000.github.io/Privacy4All/guides/funding-readiness-midnight.md"]); })());
+check("README documents the structured data and the complete sitemap", readme.includes("JSON-LD structured data") && readme.includes("lists the hub plus all four guides"));
 check("mobile browser chrome tints to the page background: theme-color matches the --bg token exactly", html.includes('<meta name="theme-color" content="#07040f">') && css.includes("--bg:#07040f"));
 check("dark color-scheme declared in both the head meta and the stylesheet, so controls render dark", html.includes('<meta name="color-scheme" content="dark">') && css.includes("color-scheme:dark"));
 check("README documents the canonical, theme-color and color-scheme declarations", readme.includes("canonical URL") && readme.includes("theme-color") && readme.includes("color-scheme"));
@@ -79,6 +80,17 @@ check("fee guide pins the exact integer formula and the fee + net = amount invar
 check("fee guide worked examples are arithmetically correct at 25 bps", (() => { const fee = (a) => Math.floor(a * 25 / 10000); return fee(1000000) === 2500 && fee(50000) === 125 && fee(10000) === 25 && fee(399) === 0 && feeGuide.includes("| 1,000,000 | 2,500 | 997,500 |") && feeGuide.includes("| 399 | 0 | 399 |"); })());
 check("fee guide separates DUST network cost from the service fee and states no fee is charged on this hub", feeGuide.includes("DUST is not your fee") && feeGuide.includes("no tool on the hub charges a") && feeGuide.includes("never merged or blamed"));
 check("fee guide is honest about scope: design guide, testnet first, mainnet deployment a separate approved step", feeGuide.includes("not a contract and not financial advice") && feeGuide.includes("Testnet first") && feeGuide.includes("never an automated step"));
+
+/* Funding readiness guide (guides/funding-readiness-midnight.md) */
+check("funding guide linked from the hub guides list and the README", html.includes('href="guides/funding-readiness-midnight.md"') && readme.includes("(guides/funding-readiness-midnight.md)"));
+check("funding guide frames funding as payment for deliverables, not a donation", fundingGuide.includes("Funding is payment for deliverables, not a donation") && fundingGuide.includes("A named deliverable set") && fundingGuide.includes("Evidence of done"));
+check("funding guide pins the exact budget invariant: milestone amounts sum to the total requested", fundingGuide.includes("sum of milestone amounts = total requested") && fundingGuide.includes("sum of milestones = total"));
+check("funding guide worked budget is arithmetically correct: 4000 + 3500 + 2500 = 10000", (() => { return 4000 + 3500 + 2500 === 10000 && fundingGuide.includes("| 1 | Working testnet build, live demo, tests passing | 4,000 |") && fundingGuide.includes("|  | **Total requested** | **10,000** |"); })());
+check("funding guide bans hidden contingency and silent costs", fundingGuide.includes("No hidden contingency") && fundingGuide.includes("never") && fundingGuide.includes("an automated one"));
+check("funding guide requires verifiable claims and no borrowed credibility", fundingGuide.includes("What a reviewer can verify in five minutes") && fundingGuide.includes("No borrowed credibility") && fundingGuide.includes("not affiliated with the"));
+check("funding guide is honest about scope: no programme deadline or amount named, verify current terms officially, submits nothing", fundingGuide.includes("I name no deadline or amount here on purpose") && fundingGuide.includes("verify the current call") && fundingGuide.includes("this") && fundingGuide.includes("guide submits nothing"));
+check("funding guide flags signing, identity, tax and legal steps as the applicant's own", fundingGuide.includes("signing an") && fundingGuide.includes("identity and tax checks") && fundingGuide.includes("stay") && fundingGuide.includes("The signing, identity, tax, and legal steps are flagged as the"));
+check("funding guide covers the routes without inventing a programme: hackathons, grants, accelerators, community rounds", fundingGuide.includes("Hackathons") && fundingGuide.includes("Grants and builder funds") && fundingGuide.includes("Accelerators and fellowships") && fundingGuide.includes("Community funding rounds"));
 
 /* flagship links */
 for (const url of ["https://kshot3000.github.io/Night-Messenger-/", "https://kshot3000.github.io/PlutusShield/",

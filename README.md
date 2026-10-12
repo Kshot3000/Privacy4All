@@ -18,7 +18,7 @@ dark instead of being auto-darkened or left light. The head also carries
 JSON-LD structured data — a `WebSite` node for the hub, authored by a
 `Person` node for Kyle Cox whose `sameAs` links are his X and GitHub
 profiles — so search engines can attribute the hub to its builder, and
-`sitemap.xml` lists the hub plus all three guides so crawlers are pointed at
+`sitemap.xml` lists the hub plus all four guides so crawlers are pointed at
 every public page the site serves, not just the front door.
 
 > Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) —
@@ -1977,6 +1977,15 @@ or first line, and clearing the search restores all 71.
   resource — is never the app's fee. Design guidance only: no fee is charged
   anywhere on this hub, and any mainnet deployment stays a separate,
   explicitly approved step.
+- [Getting funded to build on Midnight](guides/funding-readiness-midnight.md) —
+  a readiness guide for developer funding (grants, accelerators,
+  fellowships, hackathons, community rounds): funding as payment for
+  named deliverables, claims a reviewer can verify in five minutes, a
+  budget whose milestone amounts sum exactly to the total requested
+  (`sum of milestones = total`), no hidden contingency, and a
+  pre-submission checklist. Preparation only: it names no deadline or
+  amount for any programme, submits nothing, and flags signing,
+  identity, tax and legal steps as the applicant's own.
 
 ## How the hourly builder loop works
 
