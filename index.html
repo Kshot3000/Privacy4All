@@ -226,7 +226,7 @@
 
   <section id="tools" aria-labelledby="tools-h">
     <h2 id="tools-h">Privacy tools — right here, nothing leaves your browser</h2>
-    <p>Sixty-eight tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
+    <p>Sixty-nine tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
     <div class="filter-row" role="group" aria-label="Find a tool">
       <label for="tool-q">Find a tool</label>
       <input id="tool-q" type="search" placeholder="e.g. vote, sign, DUST, share a secret…" autocomplete="off">
@@ -2377,7 +2377,20 @@
         <button type="submit" class="btn primary">Quote the fee, locally</button>
         <p id="fee-result" role="status" aria-live="polite"></p>
       </form>
-      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 68 tools.</p>
+      <form class="tool" id="split-pay">
+        <h3>69 · Split it fairly, fee first — a payment-split planner</h3>
+        <p>Tool 68 quotes one fee for one recipient; real payments split — a sale shared between collaborators, a marketplace payout, an escrow release. This planner takes the disclosed service fee first, using tool 68's exact arithmetic so the two can never disagree, then splits what is left across 2 to 8 recipients by whole-number weights. Nothing here charges anything: this hub takes no fee, moves no funds and connects no wallet. It plans; it does not pay out.</p>
+        <p>The split is exact, and anyone can recompute it: each recipient's share is floored, and the handful of units flooring leaves over go one each to the largest fractional remainders, earliest recipient winning a tie — so the parts add up to the net exactly, with no unit created, lost, or quietly kept as an extra rounding fee on top of the disclosed one. The fee is taken once, first, and named — never skimmed again from each part. And DUST is not in this arithmetic at all — DUST pays the Midnight network for shielded transactions; a service fee is a separate line, in the asset that is actually moving, to a published address. My own published fee address for Midnight work is the ADA address in the support section below — a split that routes a fee anywhere else while carrying my name is not mine.</p>
+        <label for="split-amount">Amount, in the asset's smallest unit (a whole number — e.g. 1000000)</label>
+        <input id="split-amount" inputmode="numeric" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="split-bps">Service fee rate, in basis points (25 = 0.25%, 100 = 1%) — taken once, first</label>
+        <input id="split-bps" inputmode="numeric" placeholder="e.g. 25" autocomplete="off">
+        <label for="split-weights">Recipient weights, comma-separated whole numbers (2 to 8 recipients, each 1 to 10,000 — e.g. 50, 30, 20)</label>
+        <input id="split-weights" inputmode="numeric" placeholder="e.g. 50, 30, 20" autocomplete="off">
+        <button type="submit" class="btn primary">Plan the split, locally</button>
+        <p id="split-result" role="status" aria-live="polite"></p>
+      </form>
+      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 69 tools.</p>
     </div>
   </section>
 
@@ -2410,6 +2423,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=67"></script>
+<script src="app.js?v=68"></script>
 </body>
 </html>

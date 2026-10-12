@@ -134,6 +134,74 @@ function honestFeeQuote(amountStr, bpsStr) {
   };
 }
 
+/* ---------- 69. Payment split, fee first ---------- */
+/* Tool 68 quotes one fee for one recipient; real payments split.
+   splitPayment takes the disclosed service fee FIRST, using tool 68's
+   own honestFeeQuote so the fee here can never disagree with the fee
+   quoted there, then splits what is left (the net) across 2-8
+   recipients by whole-number weights. The split is exact integer
+   maths in BigInt: each recipient's floor share is
+   floor(net x weight / total weight), and the units that flooring
+   leaves over (always fewer than the number of recipients) go one
+   each to the largest fractional remainders, earliest recipient
+   winning a tie — the largest-remainder method, stated in the UI so
+   a split can be recomputed and checked by anyone. The invariants
+   are the honesty: fee + net = amount, and the parts sum to the net
+   exactly — no unit is created, lost, or quietly kept as an extra
+   rounding fee. This function only plans a split — it charges
+   nothing, moves nothing and names no recipient; the names belong
+   in the app's own quote, next to the amounts. */
+var SPLIT_MIN_RECIPIENTS = 2;
+var SPLIT_MAX_RECIPIENTS = 8;
+var SPLIT_MAX_WEIGHT = 10000;
+
+function splitPayment(amountStr, bpsStr, weightsStr) {
+  var quote = honestFeeQuote(amountStr, bpsStr);
+  if (quote === null) return null;
+  var w = (weightsStr == null ? "" : String(weightsStr)).trim();
+  if (!w) return null;
+  var raw = w.split(",");
+  if (raw.length < SPLIT_MIN_RECIPIENTS || raw.length > SPLIT_MAX_RECIPIENTS) return null;
+  var weights = [];
+  var totalWeight = 0n;
+  for (var i = 0; i < raw.length; i++) {
+    var t = raw[i].trim();
+    if (!/^\d+$/.test(t)) return null;
+    var wi = BigInt(t);
+    if (wi < 1n || wi > BigInt(SPLIT_MAX_WEIGHT)) return null;
+    weights.push(wi);
+    totalWeight += wi;
+  }
+  var net = BigInt(quote.net);
+  var floors = [];
+  var remainders = [];
+  var floorSum = 0n;
+  for (var j = 0; j < weights.length; j++) {
+    var exact = net * weights[j];
+    floors.push(exact / totalWeight);
+    remainders.push(exact % totalWeight);
+    floorSum += floors[j];
+  }
+  var leftover = net - floorSum;
+  var order = weights.map(function (_, idx) { return idx; });
+  order.sort(function (x, y) {
+    if (remainders[x] !== remainders[y]) return remainders[x] > remainders[y] ? -1 : 1;
+    return x - y;
+  });
+  var parts = floors.slice();
+  for (var k = 0; k < Number(leftover); k++) parts[order[k]] += 1n;
+  return {
+    amount: quote.amount,
+    bps: quote.bps,
+    percent: quote.percent,
+    fee: quote.fee,
+    net: quote.net,
+    totalWeight: totalWeight.toString(),
+    weights: weights.map(function (x) { return x.toString(); }),
+    parts: parts.map(function (x) { return x.toString(); })
+  };
+}
+
 /* ---------- 4. What does this dApp see? ---------- */
 /* level: "low" = usually needed to connect, "caution" = ask why and limit
    it before granting, "high" = do not grant blindly for a routine visit. */
@@ -15314,6 +15382,7 @@ if (typeof module !== "undefined" && module.exports) {
                      getSnippet, searchSnippets, SNIPPET_CATALOG,
                      toolQueryMatch,
                      honestFeeQuote, MAX_FEE_BPS,
+                     splitPayment, SPLIT_MIN_RECIPIENTS, SPLIT_MAX_RECIPIENTS, SPLIT_MAX_WEIGHT,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
@@ -15734,6 +15803,25 @@ if (typeof document !== "undefined") {
       }
       text += " This is a quote only: nothing was charged, moved or signed, and DUST — the network's transaction resource — is a separate line that is never part of a service fee.";
       host.textContent = text;
+    });
+
+    /* --- payment split, fee first --- */
+    document.getElementById("split-pay").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var s = splitPayment(document.getElementById("split-amount").value,
+                           document.getElementById("split-bps").value,
+                           document.getElementById("split-weights").value);
+      var host = document.getElementById("split-result");
+      if (s === null) {
+        host.textContent = "Enter the amount as a whole number of smallest units, the rate as a whole number of basis points at or under 10,000 (100%), and 2 to 8 whole-number weights separated by commas (each 1 to 10,000). Anything else is refused, not split.";
+        return;
+      }
+      var lines = s.parts.map(function (p, i) {
+        return "Recipient " + (i + 1) + " (weight " + s.weights[i] + " of " + s.totalWeight + "): " + p + " units";
+      });
+      host.textContent = "Split — amount: " + s.amount + " units · service fee first at " + s.bps + " bps (" + s.percent + "%): " +
+        s.fee + " units · net split " + s.parts.length + " ways: " + s.net + " units. " + lines.join(" · ") +
+        ". The parts add up to the net exactly, and fee + net = amount, exactly. Leftover units from flooring go one each to the largest fractional remainders, earliest recipient winning a tie. This is a plan only: nothing was charged, moved or signed, and DUST — the network's transaction resource — is a separate line that is never part of a service fee.";
     });
 
     /* --- what does this dApp see? --- */

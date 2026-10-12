@@ -75,9 +75,9 @@ renewable resource that pays for shielded transactions.
 
 ## Tools on the hub (local only, no wallet needed)
 
-The hub carries 68 tools; a **find-a-tool search** at the top of the tools
+The hub carries 69 tools; a **find-a-tool search** at the top of the tools
 section narrows the list as you type — every word must match a tool's title
-or first line, and clearing the search restores all 68.
+or first line, and clearing the search restores all 69.
 
 - **Paste-and-protect redactor** — finds and masks email addresses, Cardano
   addresses and US phone numbers in text you paste. Runs entirely in your
@@ -1892,6 +1892,28 @@ or first line, and clearing the search restores all 68.
   out of the service fee entirely.
   Honestly labelled: it quotes; it
   does not collect. No fee is charged
+  anywhere on this hub, no funds move
+  and no wallet connects.
+
+- **Split it fairly, fee first — a
+  payment-split planner** — tool 68's
+  arithmetic, extended to a split: the
+  disclosed service fee is taken once,
+  first, using the honest fee quote
+  itself so the two can never disagree,
+  then the net is split across 2 to 8
+  recipients by whole-number weights.
+  Each share is floored and the units
+  flooring leaves over go one each to
+  the largest fractional remainders,
+  earliest recipient winning a tie —
+  the largest-remainder method, stated
+  in the UI so anyone can recompute
+  the split. The parts sum to the net
+  exactly; no unit is created, lost,
+  or kept as a hidden rounding fee.
+  Honestly labelled: it plans; it does
+  not pay out. No fee is charged
   anywhere on this hub, no funds move
   and no wallet connects.
 
