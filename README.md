@@ -75,9 +75,9 @@ renewable resource that pays for shielded transactions.
 
 ## Tools on the hub (local only, no wallet needed)
 
-The hub carries 73 tools; a **find-a-tool search** at the top of the tools
+The hub carries 74 tools; a **find-a-tool search** at the top of the tools
 section narrows the list as you type — every word must match a tool's title
-or first line, and clearing the search restores all 73.
+or first line, and clearing the search restores all 74.
 
 - **Paste-and-protect redactor** — finds and masks email addresses, Cardano
   addresses and US phone numbers in text you paste. Runs entirely in your
@@ -2002,6 +2002,27 @@ or first line, and clearing the search restores all 73.
   does not pay. It names no programme,
   submits nothing, no funds move and
   no wallet connects.
+
+- **Break-even, counted in sales — a
+  fee break-even planner** — enter a
+  stated cost for a period, a typical
+  sale amount and the disclosed fee
+  rate, and it counts the exact number
+  of sales whose fees cover the cost:
+  the fee per sale is the honest fee
+  calculator's own quote, and the count
+  is the smallest whole number of sales
+  whose collected fees reach the cost,
+  with the final sale's surplus named.
+  A zero cost is already covered, and
+  when the fee per sale rounds to zero
+  the answer is never — no number of
+  zero-fee sales covers any cost.
+  Honestly labelled: it plans; it does
+  not earn. Nothing is charged,
+  collected or sold, no funds move and
+  no wallet connects. DUST is never
+  part of the fee.
 
 ## Guides
 

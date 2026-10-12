@@ -380,6 +380,61 @@ function milestonePayoutCheck(amountsStr, paidStr) {
   };
 }
 
+/* ---------- 74. Break-even, counted in sales ---------- */
+/* The fee-design guide says a disclosed fee is how an app keeps
+   earning after a grant ends; the funding guide's §3 says costs are
+   stated, not absorbed silently. breakEvenPlan puts the two
+   together: given a stated cost for a period (hosting, a domain,
+   your own time priced honestly — whole units), a typical sale
+   amount and the disclosed fee rate, how many sales until the fees
+   alone cover the cost? The fee per sale is tool 68's own
+   honestFeeQuote, so the fee here can never disagree with the fee
+   quoted there. The count is exact BigInt ceiling division: the
+   smallest whole number of sales whose collected fees reach the
+   cost — one sale fewer always falls short, and the surplus the
+   final sale overshoots by is named, never hidden. Two honest
+   edge verdicts: a cost of zero is already covered at zero sales;
+   and when the fee per sale floors to zero (the sale amount is
+   below the rate's zero-fee threshold, or the rate itself is
+   zero) the answer is never — no number of zero-fee sales covers
+   any cost, and the planner says so instead of printing a huge
+   or infinite count. Anything that is not whole numbers, and any
+   rate above tool 68's cap, is refused (null), never guessed at.
+   This function only plans — it charges nothing, collects
+   nothing, sells nothing and connects no wallet; DUST is a
+   transaction cost of the network, never part of this fee. */
+function breakEvenPlan(costStr, amountStr, bpsStr) {
+  var c = (costStr == null ? "" : String(costStr)).trim();
+  if (!/^\d+$/.test(c)) return null;
+  var quote = honestFeeQuote(amountStr, bpsStr);
+  if (quote === null) return null;
+  var cost = BigInt(c);
+  var amount = BigInt(quote.amount);
+  var feePerSale = BigInt(quote.fee);
+  var base = {
+    cost: cost.toString(),
+    amount: quote.amount,
+    bps: quote.bps,
+    percent: quote.percent,
+    feePerSale: quote.fee,
+    zeroBelow: quote.zeroBelow
+  };
+  if (cost === 0n) {
+    return Object.assign(base, { status: "covered", sales: "0",
+      feesCollected: "0", surplus: "0", volume: "0" });
+  }
+  if (feePerSale === 0n) {
+    return Object.assign(base, { status: "never", sales: null,
+      feesCollected: null, surplus: null, volume: null });
+  }
+  var sales = (cost + feePerSale - 1n) / feePerSale;
+  var feesCollected = sales * feePerSale;
+  return Object.assign(base, { status: "reachable", sales: sales.toString(),
+    feesCollected: feesCollected.toString(),
+    surplus: (feesCollected - cost).toString(),
+    volume: (sales * amount).toString() });
+}
+
 /* ---------- 4. What does this dApp see? ---------- */
 /* level: "low" = usually needed to connect, "caution" = ask why and limit
    it before granting, "high" = do not grant blindly for a routine visit. */
@@ -15565,6 +15620,7 @@ if (typeof module !== "undefined" && module.exports) {
                      swapFeePlan,
                      milestoneBudgetCheck, BUDGET_MIN_MILESTONES, BUDGET_MAX_MILESTONES,
                      milestonePayoutCheck, PAYOUT_MIN_MILESTONES, PAYOUT_MAX_MILESTONES,
+                     breakEvenPlan,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
@@ -16098,6 +16154,32 @@ if (typeof document !== "undefined") {
         text += "In progress: " + p.remaining + " units remain across the unpaid and partial milestones. Report on the schedule promised, including when the news is a delay. ";
       }
       text += "This is a tracker only: nothing was paid, moved, submitted or signed, and no programme is named here — a grant funds the build, and grant reporting stays separate from any fee the work later charges.";
+      host.textContent = text;
+    });
+
+    /* --- break-even, counted in sales --- */
+    document.getElementById("breakeven-plan").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var p = breakEvenPlan(document.getElementById("breakeven-cost").value,
+                            document.getElementById("breakeven-amount").value,
+                            document.getElementById("breakeven-bps").value);
+      var host = document.getElementById("breakeven-result");
+      if (p === null) {
+        host.textContent = "Enter a cost for the period, a typical sale amount and a fee rate in basis points (250 = 2.5%), all as whole numbers, with the rate at most 10000. Anything else is refused, not guessed at.";
+        return;
+      }
+      var text = "Break-even plan — cost " + p.cost + " units · typical sale " + p.amount + " units · disclosed fee " + p.percent + "% (" + p.bps + " bps) = " + p.feePerSale + " units per sale. ";
+      if (p.status === "covered") {
+        text += "Already covered: a cost of zero needs zero sales. State a real cost — hosting, a domain, your own time priced honestly — and the count becomes meaningful. ";
+      } else if (p.status === "never") {
+        text += "Never at these numbers: the fee per sale is zero, so no number of sales covers any cost. " +
+          (p.zeroBelow !== null
+            ? "At " + p.bps + " bps a sale must be at least " + p.zeroBelow + " units before the fee is even 1 unit — raise the typical sale amount or the disclosed rate, and say which you changed out loud. "
+            : "A rate of zero charges no fee at all — set a disclosed rate above zero first. ");
+      } else {
+        text += "Break-even at " + p.sales + " sales: those sales collect " + p.feesCollected + " units of fees against the " + p.cost + "-unit cost (surplus " + p.surplus + " units from the final sale), on " + p.volume + " units of sales volume. One sale fewer collects " + (BigInt(p.feesCollected) - BigInt(p.feePerSale)).toString() + " units and falls short — the count is the smallest whole number that covers the cost, not a rounded guess. ";
+      }
+      text += "This is a plan only: nothing was charged, collected, sold or signed, and no wallet connected — DUST is a network transaction cost, never part of this fee.";
       host.textContent = text;
     });
 

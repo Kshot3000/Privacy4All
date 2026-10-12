@@ -226,7 +226,7 @@
 
   <section id="tools" aria-labelledby="tools-h">
     <h2 id="tools-h">Privacy tools — right here, nothing leaves your browser</h2>
-    <p>Seventy-three tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
+    <p>Seventy-four tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
     <div class="filter-row" role="group" aria-label="Find a tool">
       <label for="tool-q">Find a tool</label>
       <input id="tool-q" type="search" placeholder="e.g. vote, sign, DUST, share a secret…" autocomplete="off">
@@ -2441,7 +2441,20 @@
         <button type="submit" class="btn primary">Track the payouts, locally</button>
         <p id="payout-result" role="status" aria-live="polite"></p>
       </form>
-      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 73 tools.</p>
+      <form class="tool" id="breakeven-plan">
+        <h3>74 · Break-even, counted in sales — a fee break-even planner</h3>
+        <p>A disclosed fee only keeps an app alive if the fees actually cover the app's costs. Enter a stated cost for a period, a typical sale amount and the fee rate you disclose, and this planner counts the exact number of sales whose fees cover the cost — in whole sales, because there is no such thing as 0.4 of a sale. The fee per sale is tool 68's own quote, so the fee here can never disagree with the fee quoted there. It plans; it does not earn: nothing is charged, collected, sold or signed, and no wallet connects.</p>
+        <p>The count is a ceiling, stated honestly: the smallest whole number of sales whose collected fees reach the cost, with the surplus the final sale overshoots by named out loud, and one sale fewer always falling short. Two edge cases get their own verdicts instead of a fake number. A cost of zero is already covered at zero sales — state a real cost and the count means something. And when the fee per sale rounds down to zero, the answer is never: no number of zero-fee sales covers any cost, and raising the sale amount or the rate to escape that is a pricing decision to make out loud, not a rounding trick. Costs are stated, not absorbed silently — hosting, a domain, a paid deployment step and your own time priced honestly all belong in the cost figure, and a deployment that costs real money stays a separate, explicitly approved step. DUST is a network transaction cost, never part of this fee.</p>
+        <label for="breakeven-cost">Cost for the period, in whole units (a whole number — e.g. 10000)</label>
+        <input id="breakeven-cost" inputmode="numeric" placeholder="e.g. 10000" autocomplete="off">
+        <label for="breakeven-amount">Typical sale amount, in the same whole units (a whole number — e.g. 1000)</label>
+        <input id="breakeven-amount" inputmode="numeric" placeholder="e.g. 1000" autocomplete="off">
+        <label for="breakeven-bps">Disclosed fee rate, in basis points (a whole number, at most 10000 — e.g. 250 = 2.5%)</label>
+        <input id="breakeven-bps" inputmode="numeric" placeholder="e.g. 250" autocomplete="off">
+        <button type="submit" class="btn primary">Count the sales, locally</button>
+        <p id="breakeven-result" role="status" aria-live="polite"></p>
+      </form>
+      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 74 tools.</p>
     </div>
   </section>
 
@@ -2475,6 +2488,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=72"></script>
+<script src="app.js?v=73"></script>
 </body>
 </html>
