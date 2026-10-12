@@ -230,6 +230,44 @@ function escrowPlan(amountStr, bpsStr) {
   };
 }
 
+/* ---------- 71. Swap fee, one named leg ---------- */
+/* A swap has two legs, and the fee-design guide's rule for a swap
+   interface is that the disclosed service fee is taken from ONE
+   named leg, quoted against the amount that leg will actually
+   settle at — never against a mid-price the user was never going
+   to get, and never from both legs. swapFeePlan prices either
+   choice with tool 68's own honestFeeQuote run on the named
+   leg's settlement amount, so the fee here can never disagree
+   with the fee quoted there. On the output leg, fee + what the
+   user receives = the output settlement amount exactly, and the
+   full input reaches the pool; on the input leg, fee + what
+   reaches the pool = the amount paid in exactly, and the output
+   is untouched. The planner invents no exchange rate: both leg
+   amounts are entered as they will settle, and it prices only
+   the fee. This function only plans — it swaps nothing, charges
+   nothing, moves nothing and names no recipient; the names
+   belong in the app's own quote, next to the amounts. */
+function swapFeePlan(inStr, outStr, bpsStr, legStr) {
+  var li = (inStr == null ? "" : String(inStr)).trim();
+  var lo = (outStr == null ? "" : String(outStr)).trim();
+  var leg = (legStr == null ? "" : String(legStr)).trim();
+  if (leg !== "in" && leg !== "out") return null;
+  if (!/^\d+$/.test(li) || !/^\d+$/.test(lo)) return null;
+  var quote = honestFeeQuote(leg === "in" ? li : lo, bpsStr);
+  if (quote === null) return null;
+  return {
+    amountIn: li,
+    amountOut: lo,
+    bps: quote.bps,
+    percent: quote.percent,
+    zeroBelow: quote.zeroBelow,
+    leg: leg,
+    fee: quote.fee,
+    poolIn: leg === "in" ? quote.net : li,
+    userOut: leg === "out" ? quote.net : lo
+  };
+}
+
 /* ---------- 4. What does this dApp see? ---------- */
 /* level: "low" = usually needed to connect, "caution" = ask why and limit
    it before granting, "high" = do not grant blindly for a routine visit. */
@@ -15412,6 +15450,7 @@ if (typeof module !== "undefined" && module.exports) {
                      honestFeeQuote, MAX_FEE_BPS,
                      splitPayment, SPLIT_MIN_RECIPIENTS, SPLIT_MAX_RECIPIENTS, SPLIT_MAX_WEIGHT,
                      escrowPlan,
+                     swapFeePlan,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
@@ -15867,6 +15906,33 @@ if (typeof document !== "undefined") {
         "If the deal completes and the escrow releases: fee " + p.releaseFee + " units · the seller receives " + p.releaseNet + " units — fee + seller = held, exactly. " +
         "If the deal falls through and the escrow refunds: fee " + p.refundFee + " units · the buyer receives the full " + p.refundAmount + " units back — a refund is never charged. " +
         "Nothing is charged on deposit either. This is a plan only: nothing was held, charged, moved or signed, and DUST — the network's transaction resource — is a separate line that is never part of a service fee.";
+    });
+
+    /* --- swap fee, one named leg --- */
+    document.getElementById("swap-fee").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var p = swapFeePlan(document.getElementById("swap-in").value,
+                          document.getElementById("swap-out").value,
+                          document.getElementById("swap-bps").value,
+                          document.getElementById("swap-leg").value);
+      var host = document.getElementById("swap-result");
+      if (p === null) {
+        host.textContent = "Enter both leg amounts as whole numbers of smallest units, the rate as a whole number of basis points at or under 10,000 (100%), and name the one leg the fee comes out of. Anything else is refused, not priced.";
+        return;
+      }
+      var legName = p.leg === "out" ? "output" : "input";
+      var text = "Swap plan — you pay in " + p.amountIn + " units · the swap settles at " + p.amountOut + " units out before the service fee · disclosed service fee at " + p.bps + " bps (" + p.percent + "%), taken once, from the " + legName + " leg only: " + p.fee + " units. " +
+        "The pool receives " + p.poolIn + " units in · you receive " + p.userOut + " units out. " +
+        "On the " + legName + " leg, fee + net = that leg's amount, exactly; the other leg is untouched — no second cut, and no fee is ever quoted against a mid-price. ";
+      if (p.zeroBelow === null) {
+        text += "The rate is 0 bps, so every swap pays no fee. ";
+      } else if (p.fee === "0") {
+        text += "At this rate the fee rounds down to 0 — a " + legName + " leg under " + p.zeroBelow + " units pays no fee at " + p.bps + " bps, and floor rounding never rounds it up in the house's favour. ";
+      } else {
+        text += "A " + legName + " leg under " + p.zeroBelow + " units would pay no fee at this rate. ";
+      }
+      text += "This is a plan only: nothing was swapped, charged, moved or signed, and DUST — the network's transaction resource — is a separate line that is never part of a service fee.";
+      host.textContent = text;
     });
 
     /* --- what does this dApp see? --- */

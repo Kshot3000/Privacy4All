@@ -226,7 +226,7 @@
 
   <section id="tools" aria-labelledby="tools-h">
     <h2 id="tools-h">Privacy tools — right here, nothing leaves your browser</h2>
-    <p>Seventy tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
+    <p>Seventy-one tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
     <div class="filter-row" role="group" aria-label="Find a tool">
       <label for="tool-q">Find a tool</label>
       <input id="tool-q" type="search" placeholder="e.g. vote, sign, DUST, share a secret…" autocomplete="off">
@@ -2401,7 +2401,25 @@
         <button type="submit" class="btn primary">Price both endings, locally</button>
         <p id="escrow-result" role="status" aria-live="polite"></p>
       </form>
-      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 70 tools.</p>
+      <form class="tool" id="swap-fee">
+        <h3>71 · Name the leg the fee comes out of — a swap-fee planner</h3>
+        <p>A swap has two legs, and an honest interface takes its disclosed service fee from one named leg — stated in the quote before anyone signs, never both legs, and never against a mid-price the user was never going to get. Enter the amount you pay in and the amount the swap will actually settle at coming out, name the leg, and this planner prices the fee in exact integers, using tool 68's arithmetic so the fee here can never disagree with the fee quoted there. Nothing here charges anything: this hub takes no fee, swaps nothing and connects no wallet. It plans; it does not swap.</p>
+        <p>The fee is taken once, from the named leg only: on the output leg, fee + what you receive = the settlement amount, exactly, and the full input reaches the pool; on the input leg, fee + what reaches the pool = the amount you pay in, exactly, and the output is untouched. The other leg is never cut — there is no second spread hiding in it. This planner invents no exchange rate: both amounts are entered as they will settle, and it prices only the fee. And DUST is not in this arithmetic at all — DUST pays the Midnight network for shielded transactions; a service fee is a separate line, in the asset that is actually moving, to a published address. My own published fee address for Midnight work is the ADA address in the support section below — a swap that routes a fee anywhere else while carrying my name is not mine.</p>
+        <label for="swap-in">Amount you pay in, in the input asset's smallest unit (a whole number — e.g. 1000000)</label>
+        <input id="swap-in" inputmode="numeric" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="swap-out">Amount the swap settles at coming out, before the service fee, in the output asset's smallest unit (a whole number — e.g. 2000000)</label>
+        <input id="swap-out" inputmode="numeric" placeholder="e.g. 2000000" autocomplete="off">
+        <label for="swap-bps">Service fee rate, in basis points (25 = 0.25%, 100 = 1%) — taken once, from the named leg only</label>
+        <input id="swap-bps" inputmode="numeric" placeholder="e.g. 25" autocomplete="off">
+        <label for="swap-leg">The one leg the fee comes out of</label>
+        <select id="swap-leg">
+          <option value="out">Output leg — the fee comes out of what you receive</option>
+          <option value="in">Input leg — the fee comes out of what you pay in</option>
+        </select>
+        <button type="submit" class="btn primary">Price the swap fee, locally</button>
+        <p id="swap-result" role="status" aria-live="polite"></p>
+      </form>
+      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 71 tools.</p>
     </div>
   </section>
 
@@ -2434,6 +2452,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=69"></script>
+<script src="app.js?v=70"></script>
 </body>
 </html>

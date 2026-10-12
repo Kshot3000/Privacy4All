@@ -75,9 +75,9 @@ renewable resource that pays for shielded transactions.
 
 ## Tools on the hub (local only, no wallet needed)
 
-The hub carries 70 tools; a **find-a-tool search** at the top of the tools
+The hub carries 71 tools; a **find-a-tool search** at the top of the tools
 section narrows the list as you type — every word must match a tool's title
-or first line, and clearing the search restores all 70.
+or first line, and clearing the search restores all 71.
 
 - **Paste-and-protect redactor** — finds and masks email addresses, Cardano
   addresses and US phone numbers in text you paste. Runs entirely in your
@@ -1935,6 +1935,30 @@ or first line, and clearing the search restores all 70.
   hold. No fee is charged anywhere on
   this hub, no funds move and no
   wallet connects.
+
+- **Name the leg the fee comes out
+  of — a swap-fee planner** — a swap
+  has two legs, and this planner takes
+  the disclosed service fee from one
+  named leg only, using the honest fee
+  quote itself so the fee can never
+  disagree with tool 68, quoted
+  against the amount that leg will
+  actually settle at — never against
+  a mid-price. On the output leg,
+  fee + what you receive = the
+  settlement amount exactly and the
+  full input reaches the pool; on the
+  input leg, fee + what reaches the
+  pool = the amount paid in exactly
+  and the output is untouched. The
+  other leg is never cut, and no
+  exchange rate is invented: both
+  amounts are entered as they will
+  settle. Honestly labelled: it plans;
+  it does not swap. No fee is charged
+  anywhere on this hub, no funds move
+  and no wallet connects.
 
 ## Guides
 
