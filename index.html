@@ -226,7 +226,7 @@
 
   <section id="tools" aria-labelledby="tools-h">
     <h2 id="tools-h">Privacy tools — right here, nothing leaves your browser</h2>
-    <p>Eighty-four tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
+    <p>Eighty-five tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
     <div class="filter-row" role="group" aria-label="Find a tool">
       <label for="tool-q">Find a tool</label>
       <input id="tool-q" type="search" placeholder="e.g. vote, sign, DUST, share a secret…" autocomplete="off">
@@ -2600,7 +2600,24 @@
         <button type="submit" class="btn primary">Check the bounded refund, locally</button>
         <p id="feecaprefund-result" role="status" aria-live="polite"></p>
       </form>
-      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 84 tools.</p>
+      <form class="tool" id="feecapbatch-check">
+        <h3>85 · Reconcile a batch of bounded fees, line by line — a floor-and-ceiling batch checker</h3>
+        <p>Tools 82–84 price and check bounded fees one at a time, and tool 79 reconciles a batch — but only at a pure rate, so on a bounded statement it misjudges every line a bound set: a correct floor charge reads as an overcharge and a correct ceiling charge as an undercharge, on every line, all statement long. Enter the amounts, the rate, both bounds as they were disclosed and the fee charged on each amount, and this checker runs every line through tool 83 itself — so no line's expectation can disagree with the bounded charge checker — and names each line exact, or over or under by the exact difference, with the bound that set its expected fee. It checks; it does not charge: nothing is charged, refunded, disputed or signed, and no wallet connects.</p>
+        <p>The verdict follows the lines, never the totals alone: an overcharge on one line and an undercharge on another cancel in the total while both lines are wrong, so a batch whose totals net to zero can still be mixed. The floor's sharpest case is in a batch too: below the rate's zero-fee threshold the bounded fee is the whole minimum, so a line charged zero there is under by the whole minimum, not exact. The verdict is computed locally from the numbers you type, in exact integer arithmetic that holds past 2<sup>53</sup>: this checker reads no statement and looks nothing up, so check the numbers against the statement itself first — the verdict is the evidence you take back to the app, stated in the app's own disclosed numbers, bounds included. DUST is a network transaction cost, never part of this fee.</p>
+        <label for="feecapbatch-amounts">Amounts the fees were charged on, in whole units, comma-separated (2 to 12 whole numbers — e.g. 1000, 1000000)</label>
+        <input id="feecapbatch-amounts" inputmode="numeric" placeholder="e.g. 1000, 1000000" autocomplete="off">
+        <label for="feecapbatch-bps">Fee rate that was disclosed, in basis points (a whole number, at most 10000 — e.g. 250 = 2.5%)</label>
+        <input id="feecapbatch-bps" inputmode="numeric" placeholder="e.g. 250" autocomplete="off">
+        <label for="feecapbatch-min">Minimum fee that was disclosed, in whole units (a whole number — e.g. 100)</label>
+        <input id="feecapbatch-min" inputmode="numeric" placeholder="e.g. 100" autocomplete="off">
+        <label for="feecapbatch-max">Maximum fee that was disclosed, in whole units (a whole number, at least the minimum — e.g. 10000)</label>
+        <input id="feecapbatch-max" inputmode="numeric" placeholder="e.g. 10000" autocomplete="off">
+        <label for="feecapbatch-charges">Fee charged on each amount, in whole units, comma-separated, in the same order (e.g. 100, 10000)</label>
+        <input id="feecapbatch-charges" inputmode="numeric" placeholder="e.g. 100, 10000" autocomplete="off">
+        <button type="submit" class="btn primary">Reconcile the bounded batch, locally</button>
+        <p id="feecapbatch-result" role="status" aria-live="polite"></p>
+      </form>
+      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 85 tools.</p>
     </div>
   </section>
 
@@ -2634,6 +2651,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=84"></script>
+<script src="app.js?v=85"></script>
 </body>
 </html>

@@ -75,9 +75,9 @@ renewable resource that pays for shielded transactions.
 
 ## Tools on the hub (local only, no wallet needed)
 
-The hub carries 84 tools; a **find-a-tool search** at the top of the tools
+The hub carries 85 tools; a **find-a-tool search** at the top of the tools
 section narrows the list as you type — every word must match a tool's title
-or first line, and clearing the search restores all 84.
+or first line, and clearing the search restores all 85.
 
 - **Paste-and-protect redactor** — finds and masks email addresses, Cardano
   addresses and US phone numbers in text you paste. Runs entirely in your
@@ -2278,6 +2278,32 @@ or first line, and clearing the search restores all 84.
   no funds move and no wallet
   connects. DUST is never part of
   the fee.
+
+- **Reconcile a batch of bounded
+  fees, line by line — a
+  floor-and-ceiling batch
+  checker** — tools 82–84 check
+  bounded fees one at a time, and
+  tool 79 reconciles a batch only
+  at a pure rate, so on a bounded
+  statement it misjudges every
+  line a bound set. Enter the
+  amounts, the rate, both bounds
+  and the fee charged on each,
+  and it runs every line through
+  tool 83 itself and names each
+  line exact, or over or under by
+  the exact difference, with the
+  bound that set its fee. The
+  verdict follows the lines,
+  never the totals alone: a
+  netted total is not a matched
+  statement. Honestly labelled:
+  it checks; it does not charge.
+  Nothing is charged, refunded or
+  disputed, no funds move and no
+  wallet connects. DUST is never
+  part of the fee.
 
 ## Guides
 
