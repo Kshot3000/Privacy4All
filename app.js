@@ -995,6 +995,72 @@ function feeCappedChargeCheck(amountStr, bpsStr, minStr, maxStr, chargedStr) {
   };
 }
 
+/* ---------- 84. Check a bounded refund came back whole ---------- */
+/* Tool 83 checks a bounded fee on the way in; this one checks the
+   other exit, and tool 78 cannot do it: tool 78 recomputes a pure
+   rate, so on a bounded disclosure it misnames both directions of
+   a bounded refund. Refunded exactly the bounded net on 1,000 at
+   250 bps with a 100 minimum — the disclosed fee of 100 taken from
+   the refund itself — tool 78 sees only a generic "short", because
+   its net is the pure-rate 975; and refunded exactly that 975,
+   tool 78 names it "fee-taken" by 25, when the fee the disclosure
+   actually states is 100, so the 25 that never came back is an
+   unexplained shortfall, not the disclosed fee taken. The rule
+   from tool 78 stands unchanged — a refund reverses the payment,
+   so the whole amount is the expected refund and the fee is taken
+   on release only — but the fee whose taking is named has to be
+   the bounded one. feeCappedRefundCheck takes the amount, the
+   rate, both bounds as disclosed and the amount refunded, and
+   recomputes the expectation with tool 82's own feeCappedQuote —
+   so the expectation can never disagree with the bounded quote —
+   then names the verdict exactly: full when the whole amount came
+   back; fee-taken when what came back is exactly the bounded net
+   (amount minus the bounded fee) and that fee is above zero,
+   named with the bound that set it; short by the exact difference
+   for any other shortfall, including a refund of the pure-rate
+   net, which is NOT the disclosed fee; and over when more came
+   back than was paid. The ceiling's case is the mirror of the
+   floor's: on 1,000,000 at 250 bps capped at 10,000, a refund of
+   990,000 is the ceiling fee taken, not the pure-rate 25,000
+   shortfall tool 78 reports. A zero bounded fee collapses fee-taken
+   into full, because the net is the amount itself. All arithmetic
+   is exact BigInt, so the verdict holds past 2^53. A refunded
+   figure that is not a whole number, and anything tool 82 refuses,
+   are refused (null), never repaired into a plausible verdict.
+   This function only checks — it charges nothing, refunds nothing,
+   disputes nothing and connects no wallet; the verdict is the
+   evidence a user takes back to the app, stated in the app's own
+   disclosed numbers, bounds included. */
+function feeCappedRefundCheck(amountStr, bpsStr, minStr, maxStr, refundedStr) {
+  var quote = feeCappedQuote(amountStr, bpsStr, minStr, maxStr);
+  if (quote === null) return null;
+  var r = (refundedStr == null ? "" : String(refundedStr)).trim();
+  if (!/^\d+$/.test(r)) return null;
+  var refunded = BigInt(r);
+  var amount = BigInt(quote.amount);
+  var fee = BigInt(quote.fee);
+  var net = BigInt(quote.net);
+  var diff = refunded - amount;
+  var status = diff === 0n ? "full"
+    : refunded === net && fee > 0n ? "fee-taken"
+    : diff < 0n ? "short" : "over";
+  return {
+    amount: quote.amount,
+    bps: quote.bps,
+    percent: quote.percent,
+    zeroBelow: quote.zeroBelow,
+    uncappedFee: quote.uncappedFee,
+    minFee: quote.minFee,
+    maxFee: quote.maxFee,
+    boundVerdict: quote.verdict,
+    fee: quote.fee,
+    net: quote.net,
+    refunded: refunded.toString(),
+    status: status,
+    difference: (diff < 0n ? -diff : diff).toString()
+  };
+}
+
 /* ---------- 4. What does this dApp see? ---------- */
 /* level: "low" = usually needed to connect, "caution" = ask why and limit
    it before granting, "high" = do not grant blindly for a routine visit. */
@@ -16190,6 +16256,7 @@ if (typeof module !== "undefined" && module.exports) {
                      feeRateWordingCheck, RATE_WORDING_MAX_PERCENT_DECIMALS,
                      feeCappedQuote,
                      feeCappedChargeCheck,
+                     feeCappedRefundCheck,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
@@ -16973,6 +17040,33 @@ if (typeof document !== "undefined") {
       } else {
         text += "Verdict: under — you were charged " + v.difference + " units less than the bounded disclosure states. " +
           (v.charged === "0" && v.boundVerdict === "floor" ? "Paying nothing is not exact here: below the rate's own fee the floor still takes the whole minimum, so a zero charge falls short of the disclosure by the whole minimum. " : "An undercharge is still a mismatch: the app's books and yours will not reconcile against its own disclosure. ");
+      }
+      text += "This is a check only: nothing was charged, refunded, disputed or signed, and no wallet connected — the verdict is computed locally from the numbers you entered, so check them against the disclosure itself first. DUST is a network transaction cost, never part of this fee.";
+      host.textContent = text;
+    });
+
+    /* --- check a bounded refund came back whole --- */
+    document.getElementById("feecaprefund-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var v = feeCappedRefundCheck(document.getElementById("feecaprefund-amount").value,
+                             document.getElementById("feecaprefund-bps").value,
+                             document.getElementById("feecaprefund-min").value,
+                             document.getElementById("feecaprefund-max").value,
+                             document.getElementById("feecaprefund-refunded").value);
+      var host = document.getElementById("feecaprefund-result");
+      if (v === null) {
+        host.textContent = "Enter an amount in whole units, a fee rate in basis points (a whole number, at most 10000 — e.g. 250 = 2.5%), a minimum fee and a maximum fee in whole units, with the minimum at most the maximum and at most the amount itself, and the amount you were refunded in whole units. Anything else is refused, not guessed at.";
+        return;
+      }
+      var text = "Bounded refund check — on an amount of " + v.amount + " units at " + v.bps + " bps (" + v.percent + "%), the rate alone takes " + v.uncappedFee + " units; with the disclosed minimum of " + v.minFee + " units and maximum of " + v.maxFee + " units, the disclosed fee is " + v.fee + " units (set by the " + v.boundVerdict + "), so a refund that took that fee would return " + v.net + " units. You were refunded " + v.refunded + " units. ";
+      if (v.status === "full") {
+        text += "Verdict: full — the whole amount came back, so no fee was charged on the refund, exactly as a refund requires: a refund reverses the payment, whichever figure set the original fee. ";
+      } else if (v.status === "fee-taken") {
+        text += "Verdict: fee-taken — what came back is exactly the amount minus the bounded fee of " + v.fee + " units (set by the " + v.boundVerdict + "), so the disclosed fee was charged on the refund itself. A refund under a bounded disclosure is still a refund: the fee belongs on the release, not on the way back, and a pure-rate check would have named a different fee here — or missed this one entirely. ";
+      } else if (v.status === "short") {
+        text += "Verdict: short — " + v.difference + " units never came back, and that shortfall is not the disclosed fee of " + v.fee + " units: the refund matches neither the full amount nor the bounded net, so the missing units are unexplained by the rate, the floor or the ceiling, and rounding never explains them, because a disclosed rate rounds down in the user's favour. ";
+      } else {
+        text += "Verdict: over — more came back than was paid, by " + v.difference + " units. Generous is still a mismatch: the app's books and yours will not reconcile, and the extra may be reclaimed. ";
       }
       text += "This is a check only: nothing was charged, refunded, disputed or signed, and no wallet connected — the verdict is computed locally from the numbers you entered, so check them against the disclosure itself first. DUST is a network transaction cost, never part of this fee.";
       host.textContent = text;

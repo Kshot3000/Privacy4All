@@ -75,9 +75,9 @@ renewable resource that pays for shielded transactions.
 
 ## Tools on the hub (local only, no wallet needed)
 
-The hub carries 83 tools; a **find-a-tool search** at the top of the tools
+The hub carries 84 tools; a **find-a-tool search** at the top of the tools
 section narrows the list as you type — every word must match a tool's title
-or first line, and clearing the search restores all 83.
+or first line, and clearing the search restores all 84.
 
 - **Paste-and-protect redactor** — finds and masks email addresses, Cardano
   addresses and US phone numbers in text you paste. Runs entirely in your
@@ -2249,6 +2249,35 @@ or first line, and clearing the search restores all 83.
   disputed, no funds move and no
   wallet connects. DUST is never
   part of the fee.
+
+- **Check a bounded refund came
+  back whole — a floor-and-ceiling
+  refund checker** — tool 83 checks
+  a bounded fee on the way in; this
+  checker is the check on the way
+  back, and tool 78 cannot do it:
+  a pure-rate check sees only a
+  generic shortfall where the
+  bounded fee was taken from the
+  refund, and names a fee taken
+  that is not the fee the
+  disclosure states where only the
+  pure-rate net came back. Enter
+  the amount, the rate, both
+  bounds and the amount refunded,
+  and it recomputes the disclosed
+  fee with tool 82 itself and names
+  the verdict: full, or fee-taken
+  by exactly the bounded fee, or
+  short by an exact difference
+  that is not that fee, or over.
+  Honestly labelled:
+  it checks; it does not refund.
+  Nothing is charged, refunded or
+  disputed,
+  no funds move and no wallet
+  connects. DUST is never part of
+  the fee.
 
 ## Guides
 

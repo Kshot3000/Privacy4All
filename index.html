@@ -226,7 +226,7 @@
 
   <section id="tools" aria-labelledby="tools-h">
     <h2 id="tools-h">Privacy tools — right here, nothing leaves your browser</h2>
-    <p>Eighty-three tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
+    <p>Eighty-four tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
     <div class="filter-row" role="group" aria-label="Find a tool">
       <label for="tool-q">Find a tool</label>
       <input id="tool-q" type="search" placeholder="e.g. vote, sign, DUST, share a secret…" autocomplete="off">
@@ -2583,7 +2583,24 @@
         <button type="submit" class="btn primary">Check the bounded charge, locally</button>
         <p id="feecapcharge-result" role="status" aria-live="polite"></p>
       </form>
-      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 83 tools.</p>
+      <form class="tool" id="feecaprefund-check">
+        <h3>84 · Check a bounded refund came back whole — a floor-and-ceiling refund checker</h3>
+        <p>Tool 83 checks a bounded fee on the way in; this one checks the way back — and tool 78 cannot do it, because tool 78 recomputes a pure rate: refunded exactly the bounded net on a payment whose fee was set by the floor, it sees only a generic shortfall, and refunded exactly the pure-rate net, it names a fee taken that is not the fee the disclosure states. Enter the amount, the rate, both bounds as they were disclosed and the amount you were refunded, and this checker recomputes the disclosed fee with tool 82 itself — so the expectation can never disagree with the bounded quote — and names the verdict exactly: the whole amount came back, or exactly the bounded fee was taken from the refund, or the refund is short by an exact difference that is not that fee, or it is over. It checks; it does not charge: nothing is charged, refunded, disputed or signed, and no wallet connects.</p>
+        <p>The rule is tool 78's, unchanged: a refund reverses the payment, so the whole amount is the expected refund and the fee belongs on the release, never on the way back — but the fee whose taking is named has to be the bounded one, floor and ceiling included. A refund of the pure-rate net under a floor disclosure is short, not fee-taken: the units that never came back are unexplained by any figure in the disclosure. The verdict is computed locally from the numbers you type, in exact integer arithmetic that holds past 2<sup>53</sup>: this checker reads no disclosure and looks nothing up, so check the numbers against the disclosure itself first — the verdict is the evidence you take back to the app, stated in the app's own disclosed numbers, bounds included. DUST is a network transaction cost, never part of this fee.</p>
+        <label for="feecaprefund-amount">Amount you paid, in whole units (a whole number — e.g. 1000000)</label>
+        <input id="feecaprefund-amount" inputmode="numeric" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="feecaprefund-bps">Fee rate that was disclosed, in basis points (a whole number, at most 10000 — e.g. 250 = 2.5%)</label>
+        <input id="feecaprefund-bps" inputmode="numeric" placeholder="e.g. 250" autocomplete="off">
+        <label for="feecaprefund-min">Minimum fee that was disclosed, in whole units (a whole number — e.g. 100)</label>
+        <input id="feecaprefund-min" inputmode="numeric" placeholder="e.g. 100" autocomplete="off">
+        <label for="feecaprefund-max">Maximum fee that was disclosed, in whole units (a whole number, at least the minimum — e.g. 50000)</label>
+        <input id="feecaprefund-max" inputmode="numeric" placeholder="e.g. 50000" autocomplete="off">
+        <label for="feecaprefund-refunded">Amount you were refunded, in whole units (a whole number — e.g. 1000000)</label>
+        <input id="feecaprefund-refunded" inputmode="numeric" placeholder="e.g. 1000000" autocomplete="off">
+        <button type="submit" class="btn primary">Check the bounded refund, locally</button>
+        <p id="feecaprefund-result" role="status" aria-live="polite"></p>
+      </form>
+      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 84 tools.</p>
     </div>
   </section>
 
@@ -2617,6 +2634,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=83"></script>
+<script src="app.js?v=84"></script>
 </body>
 </html>
