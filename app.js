@@ -885,6 +885,62 @@ function feeRateWordingCheck(percentStr, bpsStr, amountStr) {
   };
 }
 
+/* ---------- 82. Quote a fee with a floor and a ceiling ---------- */
+/* Tool 68 quotes a pure rate, and the fee-design guide names the two
+   bounds a real disclosure adds to one: a minimum fee ("or set a
+   minimum fee — knowing a flat minimum is a far larger percentage
+   on a small payment, and must be quoted as plainly as the rate")
+   and a stated cap. No tool above can price that shape: at a pure
+   rate, small amounts round down to a zero fee (tool 68's zeroBelow)
+   and large amounts grow without limit. feeCappedQuote takes the
+   amount, the rate, the disclosed minimum and the disclosed maximum.
+   The uncapped fee is borrowed from tool 68's own honestFeeQuote,
+   so it can never disagree with the pure-rate quote; the bounds
+   then apply exactly — fee = min(max(uncapped, minimum), maximum)
+   — and the verdict names which of the three figures actually set
+   the fee: floor (the minimum raised it), ceiling (the maximum cut
+   it) or rate (the bounds changed nothing, including when the
+   uncapped fee lands exactly on a bound). The sharpest cases are
+   the floor's: an amount below the rate's zero-fee threshold, or a
+   rate of zero itself, still pays the whole minimum — a "0% rate"
+   with a minimum fee is not a free payment, and this quote says so
+   instead of printing the rate's zero. All arithmetic is exact
+   BigInt, so the quote holds past 2^53, and fee + net = amount
+   always. A minimum above the maximum, a minimum above the amount
+   itself (a floor cannot be collected from less than the floor),
+   and anything tool 68 refuses are refused (null), never repaired
+   into a plausible quote. This function only quotes — it charges
+   nothing, moves nothing and names no recipient; the recipient
+   belongs in the app's own quote, next to the amount. */
+
+function feeCappedQuote(amountStr, bpsStr, minStr, maxStr) {
+  var quote = honestFeeQuote(amountStr, bpsStr);
+  if (quote === null) return null;
+  var mn = (minStr == null ? "" : String(minStr)).trim();
+  var mx = (maxStr == null ? "" : String(maxStr)).trim();
+  if (!/^\d+$/.test(mn) || !/^\d+$/.test(mx)) return null;
+  var min = BigInt(mn);
+  var max = BigInt(mx);
+  var amount = BigInt(quote.amount);
+  if (min > max) return null;
+  if (min > amount) return null;
+  var uncapped = BigInt(quote.fee);
+  var fee = uncapped < min ? min : uncapped > max ? max : uncapped;
+  var verdict = uncapped < min ? "floor" : uncapped > max ? "ceiling" : "rate";
+  return {
+    amount: quote.amount,
+    bps: quote.bps,
+    percent: quote.percent,
+    uncappedFee: quote.fee,
+    minFee: min.toString(),
+    maxFee: max.toString(),
+    fee: fee.toString(),
+    net: (amount - fee).toString(),
+    verdict: verdict,
+    zeroBelow: quote.zeroBelow
+  };
+}
+
 /* ---------- 4. What does this dApp see? ---------- */
 /* level: "low" = usually needed to connect, "caution" = ask why and limit
    it before granting, "high" = do not grant blindly for a routine visit. */
@@ -16078,6 +16134,7 @@ if (typeof module !== "undefined" && module.exports) {
                      feeBatchCheck, BATCH_MIN_LINES, BATCH_MAX_LINES,
                      feeRefundBatchCheck,
                      feeRateWordingCheck, RATE_WORDING_MAX_PERCENT_DECIMALS,
+                     feeCappedQuote,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
@@ -16812,6 +16869,31 @@ if (typeof document !== "undefined") {
           "Ask which wording governs before you pay anything; a disclosed fee is one rate, stated the same way everywhere. ";
       }
       text += "This is a check only: nothing was charged, refunded, disputed or signed, and no wallet connected — the verdict is computed locally from the numbers you entered, so check them against the disclosure itself first. DUST is a network transaction cost, never part of this fee.";
+      host.textContent = text;
+    });
+
+    /* --- quote a fee with a floor and a ceiling --- */
+    document.getElementById("feecap-quote").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var v = feeCappedQuote(document.getElementById("feecap-amount").value,
+                             document.getElementById("feecap-bps").value,
+                             document.getElementById("feecap-min").value,
+                             document.getElementById("feecap-max").value);
+      var host = document.getElementById("feecap-result");
+      if (v === null) {
+        host.textContent = "Enter an amount in whole units, a fee rate in basis points (a whole number, at most 10000 — e.g. 250 = 2.5%), a minimum fee and a maximum fee in whole units, with the minimum at most the maximum and at most the amount itself. Anything else is refused, not guessed at.";
+        return;
+      }
+      var text = "Capped fee quote — on an amount of " + v.amount + " units at " + v.bps + " bps (" + v.percent + "%), the rate alone takes a fee of " + v.uncappedFee + " units; the disclosed minimum is " + v.minFee + " units and the disclosed maximum is " + v.maxFee + " units. Fee: " + v.fee + " units; net: " + v.net + " units (fee + net = amount, exactly). ";
+      if (v.verdict === "floor") {
+        text += "Verdict: floor — the minimum fee set this fee, not the rate. " +
+          (v.uncappedFee === "0" ? "The rate alone would have taken nothing from an amount this size, and the minimum takes the whole " + v.fee + " units anyway: a minimum fee is a far larger share of a small payment than the rate suggests, which is why it must be quoted as plainly as the rate. " : "On an amount this size the minimum is a larger share than the rate alone would take, which is why it must be quoted as plainly as the rate. ");
+      } else if (v.verdict === "ceiling") {
+        text += "Verdict: ceiling — the maximum fee set this fee, not the rate: the rate alone would have taken " + v.uncappedFee + " units, and the stated cap cut it to " + v.fee + ". A cap the quote does not apply is a promise the app does not keep. ";
+      } else {
+        text += "Verdict: rate — the rate alone set this fee; neither bound changed it, so this quote is exactly tool 68's pure-rate quote. ";
+      }
+      text += "This is a quote only: nothing was charged, moved or signed, and no wallet connected — the figures are computed locally from the numbers you entered. DUST is a network transaction cost, never part of this fee.";
       host.textContent = text;
     });
 

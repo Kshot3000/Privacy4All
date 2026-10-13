@@ -75,9 +75,9 @@ renewable resource that pays for shielded transactions.
 
 ## Tools on the hub (local only, no wallet needed)
 
-The hub carries 81 tools; a **find-a-tool search** at the top of the tools
+The hub carries 82 tools; a **find-a-tool search** at the top of the tools
 section narrows the list as you type — every word must match a tool's title
-or first line, and clearing the search restores all 81.
+or first line, and clearing the search restores all 82.
 
 - **Paste-and-protect redactor** — finds and masks email addresses, Cardano
   addresses and US phone numbers in text you paste. Runs entirely in your
@@ -2202,6 +2202,29 @@ or first line, and clearing the search restores all 81.
   refunded or disputed, no funds
   move and no wallet connects.
   DUST is never part of the fee.
+
+- **Quote a fee with a floor and a
+  ceiling — a minimum-and-maximum
+  fee quote** — tool 68 quotes a
+  pure rate, but a real disclosure
+  often bounds it: a minimum fee
+  and a maximum fee. Enter the
+  amount, the rate and both bounds,
+  and it prices the bounded fee
+  exactly — the rate's own fee
+  borrowed from tool 68, then the
+  floor and the ceiling — and
+  names which figure set the fee:
+  floor, ceiling or rate. The
+  sharpest case is the floor: a
+  rate of zero with a minimum fee
+  is not a free payment, and the
+  quote says so. Honestly labelled:
+  it quotes; it does not charge.
+  Nothing is charged or moved, no
+  funds move and no wallet
+  connects. DUST is never part of
+  the fee.
 
 ## Guides
 

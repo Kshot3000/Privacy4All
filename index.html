@@ -226,7 +226,7 @@
 
   <section id="tools" aria-labelledby="tools-h">
     <h2 id="tools-h">Privacy tools — right here, nothing leaves your browser</h2>
-    <p>Eighty-one tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
+    <p>Eighty-two tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
     <div class="filter-row" role="group" aria-label="Find a tool">
       <label for="tool-q">Find a tool</label>
       <input id="tool-q" type="search" placeholder="e.g. vote, sign, DUST, share a secret…" autocomplete="off">
@@ -2551,7 +2551,22 @@
         <button type="submit" class="btn primary">Check the two wordings, locally</button>
         <p id="rateword-result" role="status" aria-live="polite"></p>
       </form>
-      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 81 tools.</p>
+      <form class="tool" id="feecap-quote">
+        <h3>82 · Quote a fee with a floor and a ceiling — a minimum-and-maximum fee quote</h3>
+        <p>Tool 68 quotes a pure rate, but a real disclosure often bounds that rate: a minimum fee, so small payments still pay something, and a maximum fee, so large ones are capped. Enter the amount, the rate, and both bounds as they were disclosed, and this quote applies them exactly — the rate's own fee first, borrowed from tool 68 itself so the two quotes can never disagree, then the floor and the ceiling — and names which of the three figures actually set the fee. It quotes; it does not charge: nothing is charged, moved or signed, and no wallet connects.</p>
+        <p>The sharpest case is the floor on a small payment: below the rate's zero-fee threshold the rate alone takes nothing, and at a rate of zero it takes nothing at any size — but a disclosed minimum takes the whole minimum anyway, so a “0% rate” with a minimum fee is not a free payment, and this quote says so instead of printing the rate's zero. A flat minimum is a far larger percentage on a small payment, which is why it must be quoted as plainly as the rate. At the other end, a cap the quote does not apply is a promise the app does not keep, so the ceiling verdict names the uncapped fee it cut. The quote is computed locally from the numbers you type, in exact integer arithmetic that holds past 2<sup>53</sup>, and fee + net = amount always: this quote reads no disclosure and looks nothing up, so check the bounds against the disclosure itself first. DUST is a network transaction cost, never part of this fee.</p>
+        <label for="feecap-amount">Amount, in whole units (a whole number — e.g. 1000000)</label>
+        <input id="feecap-amount" inputmode="numeric" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="feecap-bps">Fee rate that was disclosed, in basis points (a whole number, at most 10000 — e.g. 250 = 2.5%)</label>
+        <input id="feecap-bps" inputmode="numeric" placeholder="e.g. 250" autocomplete="off">
+        <label for="feecap-min">Minimum fee that was disclosed, in whole units (a whole number — e.g. 100)</label>
+        <input id="feecap-min" inputmode="numeric" placeholder="e.g. 100" autocomplete="off">
+        <label for="feecap-max">Maximum fee that was disclosed, in whole units (a whole number, at least the minimum — e.g. 50000)</label>
+        <input id="feecap-max" inputmode="numeric" placeholder="e.g. 50000" autocomplete="off">
+        <button type="submit" class="btn primary">Quote the bounded fee, locally</button>
+        <p id="feecap-result" role="status" aria-live="polite"></p>
+      </form>
+      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 82 tools.</p>
     </div>
   </section>
 
@@ -2585,6 +2600,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=80"></script>
+<script src="app.js?v=81"></script>
 </body>
 </html>
