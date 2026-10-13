@@ -486,6 +486,77 @@ function netTargetPrice(targetStr, bpsStr) {
     amount: quote.amount, fee: quote.fee, net: quote.net });
 }
 
+/* ---------- 76. Say the fee out loud ---------- */
+/* Tools 68-75 quote, split, place and plan a disclosed fee, but
+   none of them writes the words a user actually reads before
+   committing — and the fee-design guide's rule (quoted before
+   committed, exact, named recipient, one fee once) is a rule
+   about words shown in time. feeDisclosure writes those words:
+   given one of the guide's four placements, the rate, a worked
+   example amount and the fee recipient as the builder states
+   them, it composes the complete disclosure statement — the rate
+   as an exact percent and in basis points, when the fee is taken
+   for that placement, the refund and other-leg lines where the
+   placement has them, a worked example quoted by tool 68's own
+   honestFeeQuote so the numbers can never disagree with the
+   quote, the zero-fee threshold stated as the promise it is,
+   and DUST named as a separate network cost, never part of the
+   fee. The recipient is the builder's own text, printed
+   verbatim: nothing here looks an address up or verifies it,
+   and a statement is only as honest as the address typed into
+   it. An unknown placement, a blank or overlong recipient, a
+   recipient carrying a line break, and anything tool 68 refuses
+   are refused (null), never repaired into a plausible statement.
+   This function only writes — it charges nothing, collects
+   nothing and connects no wallet; the statement earns its keep
+   only when an app shows it before the committing step. */
+var FEE_DISCLOSURE_MAX_RECIPIENT = 120;
+var FEE_DISCLOSURE_PLACEMENTS = {
+  "payment":  { label: "a payment",
+                timing: "The fee is taken once, when the payment settles, and never again on the same payment." },
+  "split":    { label: "a split payment",
+                timing: "The fee is taken once, first, before the remainder is split, and is never skimmed from each part." },
+  "escrow":   { label: "an escrow release",
+                timing: "The fee is taken once, only when the escrow is released to the seller, and never on deposit. If the escrow is refunded instead, the full amount goes back and no fee is charged." },
+  "swap-in":  { label: "a swap, taken from the amount paid in",
+                timing: "The fee is taken once, from the amount paid in only; the amount received is never charged." },
+  "swap-out": { label: "a swap, taken from the amount received",
+                timing: "The fee is taken once, from the amount received only; the amount paid in is never charged." }
+};
+
+function feeDisclosure(placement, bpsStr, amountStr, recipientRaw) {
+  var spec = Object.prototype.hasOwnProperty.call(FEE_DISCLOSURE_PLACEMENTS, placement)
+    ? FEE_DISCLOSURE_PLACEMENTS[placement] : null;
+  if (spec === null) return null;
+  var recipient = (recipientRaw == null ? "" : String(recipientRaw)).trim();
+  if (!recipient || recipient.length > FEE_DISCLOSURE_MAX_RECIPIENT) return null;
+  if (/[\r\n]/.test(recipient)) return null;
+  var quote = honestFeeQuote(amountStr, bpsStr);
+  if (quote === null) return null;
+  var threshold = quote.zeroBelow !== null
+    ? "Amounts below " + quote.zeroBelow + " units pay no fee at all: the fee rounds down to zero, never up."
+    : "At a rate of zero, no fee is charged on any amount.";
+  var statement =
+    "Service fee: " + quote.percent + "% (" + quote.bps + " basis points) on " + spec.label +
+    ", paid to " + recipient + ". " +
+    spec.timing + " " +
+    "Worked example: on an amount of " + quote.amount + " units, the fee is " + quote.fee +
+    " units and the remaining " + quote.net + " units settle in full — fee + net = amount, always. " +
+    threshold + " " +
+    "DUST, the network transaction cost, is a separate line and is never part of this fee.";
+  return {
+    placement: placement,
+    bps: quote.bps,
+    percent: quote.percent,
+    recipient: recipient,
+    amount: quote.amount,
+    fee: quote.fee,
+    net: quote.net,
+    zeroBelow: quote.zeroBelow,
+    statement: statement
+  };
+}
+
 /* ---------- 4. What does this dApp see? ---------- */
 /* level: "low" = usually needed to connect, "caution" = ask why and limit
    it before granting, "high" = do not grant blindly for a routine visit. */
@@ -15673,6 +15744,7 @@ if (typeof module !== "undefined" && module.exports) {
                      milestonePayoutCheck, PAYOUT_MIN_MILESTONES, PAYOUT_MAX_MILESTONES,
                      breakEvenPlan,
                      netTargetPrice,
+                     feeDisclosure, FEE_DISCLOSURE_PLACEMENTS, FEE_DISCLOSURE_MAX_RECIPIENT,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
@@ -16255,6 +16327,21 @@ if (typeof document !== "undefined") {
       }
       text += "This is a price plan only: nothing was charged, listed, sold or signed, and no wallet connected — DUST is a network transaction cost, never part of this fee.";
       host.textContent = text;
+    });
+
+    /* --- say the fee out loud --- */
+    document.getElementById("disclosure-gen").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var d = feeDisclosure(document.getElementById("disclosure-placement").value,
+                            document.getElementById("disclosure-bps").value,
+                            document.getElementById("disclosure-amount").value,
+                            document.getElementById("disclosure-recipient").value);
+      var host = document.getElementById("disclosure-result");
+      if (d === null) {
+        host.textContent = "Pick a placement, enter a fee rate in basis points (250 = 2.5%, at most 10000) and a worked example amount as whole numbers, and name the fee recipient exactly as it should be printed. Anything else is refused, not guessed at.";
+        return;
+      }
+      host.textContent = d.statement + " — Generated locally: nothing was charged, collected or signed, and no wallet connected. Paste the statement where the user decides, before the step that commits — and check the recipient character-for-character first, because this generator prints what it is given and verifies nothing.";
     });
 
     /* --- what does this dApp see? --- */

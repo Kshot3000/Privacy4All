@@ -226,7 +226,7 @@
 
   <section id="tools" aria-labelledby="tools-h">
     <h2 id="tools-h">Privacy tools — right here, nothing leaves your browser</h2>
-    <p>Seventy-five tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
+    <p>Seventy-six tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
     <div class="filter-row" role="group" aria-label="Find a tool">
       <label for="tool-q">Find a tool</label>
       <input id="tool-q" type="search" placeholder="e.g. vote, sign, DUST, share a secret…" autocomplete="off">
@@ -2465,7 +2465,28 @@
         <button type="submit" class="btn primary">Find the price, locally</button>
         <p id="netprice-result" role="status" aria-live="polite"></p>
       </form>
-      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 75 tools.</p>
+      <form class="tool" id="disclosure-gen">
+        <h3>76 · Say the fee out loud — a fee disclosure statement generator</h3>
+        <p>Tools 68 to 75 quote, split, place and plan a disclosed fee, but none of them writes the words a user actually reads before committing — and my fee-design guide's rule is a rule about words shown in time: quoted before committed, exact, named recipient, one fee once. Pick the placement, the rate you disclose, a worked example amount and the fee recipient, and this generator writes the complete statement, ready to paste into your own app or receipt. The worked example is quoted by tool 68 itself, so the numbers in the statement can never disagree with the quote. It writes; it does not charge: nothing is charged, collected or signed, and no wallet connects.</p>
+        <p>Every part of the rule is in the text: the rate as an exact percent and in basis points, when the fee is taken for that placement — on release only for escrow, with a refund returning the full amount and no fee charged; from one named leg only for a swap, with the other leg never charged — the zero-fee threshold stated as the promise it is, and DUST named as a separate network cost, never part of this fee. The recipient is printed exactly as you type it: this generator looks nothing up and verifies nothing, so check the address character-for-character before you publish — a disclosure naming the wrong address is worse than none. And the statement earns its keep only where the user decides, before the step that commits: a disclosure written after the fact is not a disclosure.</p>
+        <label for="disclosure-placement">Where the fee sits (one of the four placements in my fee-design guide)</label>
+        <select id="disclosure-placement">
+          <option value="payment">A payment — taken when the payment settles</option>
+          <option value="split">A split payment — taken first, before the split</option>
+          <option value="escrow">An escrow — taken on release only, never on a refund</option>
+          <option value="swap-in">A swap — taken from the amount paid in only</option>
+          <option value="swap-out">A swap — taken from the amount received only</option>
+        </select>
+        <label for="disclosure-bps">Disclosed fee rate, in basis points (a whole number, at most 10000 — e.g. 250 = 2.5%)</label>
+        <input id="disclosure-bps" inputmode="numeric" placeholder="e.g. 250" autocomplete="off">
+        <label for="disclosure-amount">Worked example amount, in whole units (a whole number — e.g. 1000000)</label>
+        <input id="disclosure-amount" inputmode="numeric" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="disclosure-recipient">Fee recipient, printed exactly as typed (a name or your published fee address)</label>
+        <input id="disclosure-recipient" type="text" placeholder="e.g. the app fee wallet" autocomplete="off">
+        <button type="submit" class="btn primary">Write the statement, locally</button>
+        <p id="disclosure-result" role="status" aria-live="polite"></p>
+      </form>
+      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 76 tools.</p>
     </div>
   </section>
 
@@ -2499,6 +2520,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=74"></script>
+<script src="app.js?v=75"></script>
 </body>
 </html>
