@@ -226,7 +226,7 @@
 
   <section id="tools" aria-labelledby="tools-h">
     <h2 id="tools-h">Privacy tools — right here, nothing leaves your browser</h2>
-    <p>Ninety-six tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
+    <p>Ninety-seven tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
     <div class="filter-row" role="group" aria-label="Find a tool">
       <label for="tool-q">Find a tool</label>
       <input id="tool-q" type="search" placeholder="e.g. vote, sign, DUST, share a secret…" autocomplete="off">
@@ -2799,7 +2799,20 @@
         <button type="submit" class="btn primary">Size my crowd, locally</button>
         <p id="anoncrowd-result" role="status" aria-live="polite"></p>
       </form>
-      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 96 tools.</p>
+      <form class="tool" id="anonshed-plan">
+        <h3>97 · Which details should you withhold? — an anonymity withholding planner</h3>
+        <p>Tools 94, 95 and 96 measure a crowd, plan its room and size the crowd a minimum needs — all three take the details an observer knows as given. This planner asks the repair question, for when tool 95 reports you are over your line: the crowd is what it is and your minimum is the line you set, so which known details should you withhold — generalise, delay or never share — to get back above it? Enter your crowd, your minimum and the known details, and it withholds the largest splits first, because withholding a detail divides the combinations by its whole group count, so the biggest split restores the most cover per detail given up — and no other choice of the same number of withholdings can leave a larger group, which is why the fewest withholdings that reach your minimum are found largest-first. It plans withholdings; it does not identify: nobody is looked up, no wallet connects, and no chain data is read — the crowd size is a number you type, not a live pool count, and withholding a detail is your act in the app that asked for it, not something this page does.</p>
+        <p>This is a best case, never a guarantee: like tools 94 to 96 it assumes every detail is independent of the others and every group is equally likely, and real crowds are skewed, so the real group a withholding restores can only be smaller — a plan that only just reaches your minimum on paper may still fall short in a real crowd. A detail that splits the crowd into 1 group is never on the withholding list: everyone shares it, it costs no cover, and giving it up buys nothing. Withholding always suffices when your minimum is at most the crowd, because withholding everything distinguishing leaves the whole crowd — so a minimum above the crowd itself is refused rather than planned around: a group bigger than the crowd can never exist, so that is not a plan but an impossibility. Leave the known-details field empty if nothing is known yet: there is nothing to withhold, and you are already as covered as the crowd itself.</p>
+        <label for="anonshed-crowd">Size of the crowd you are hiding in, in people (a whole number, at least 1 — e.g. 10000)</label>
+        <input id="anonshed-crowd" inputmode="numeric" placeholder="e.g. 10000" autocomplete="off">
+        <label for="anonshed-minset">Smallest group you refuse to drop below, in people (a whole number, at least 1 and at most the crowd — e.g. 100)</label>
+        <input id="anonshed-minset" inputmode="numeric" placeholder="e.g. 100" autocomplete="off">
+        <label for="anonshed-details">Groups each detail an observer knows splits the crowd into, comma-separated (whole numbers, at least 1, at most 1000000 each, up to 12 details — e.g. 4, 8, 25 — or leave empty if nothing is known yet)</label>
+        <input id="anonshed-details" inputmode="numeric" placeholder="e.g. 4, 8, 25" autocomplete="off">
+        <button type="submit" class="btn primary">Plan what to withhold, locally</button>
+        <p id="anonshed-result" role="status" aria-live="polite"></p>
+      </form>
+      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 97 tools.</p>
     </div>
   </section>
 
@@ -2833,6 +2846,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=96"></script>
+<script src="app.js?v=97"></script>
 </body>
 </html>

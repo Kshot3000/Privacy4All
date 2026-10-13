@@ -75,9 +75,9 @@ renewable resource that pays for shielded transactions.
 
 ## Tools on the hub (local only, no wallet needed)
 
-The hub carries 96 tools; a **find-a-tool search** at the top of the tools
+The hub carries 97 tools; a **find-a-tool search** at the top of the tools
 section narrows the list as you type — every word must match a tool's title
-or first line, and clearing the search restores all 96.
+or first line, and clearing the search restores all 97.
 
 - **Paste-and-protect redactor** — finds and masks email addresses, Cardano
   addresses and US phone numbers in text you paste. Runs entirely in your
@@ -2695,6 +2695,41 @@ or first line, and clearing the search restores all 96.
   no wallet connects, no chain
   data is read, and no crowd size
   here is a live pool count.
+
+- **Which details should you
+  withhold? — an anonymity
+  withholding planner** — the
+  repair inverse of the three
+  tools above, asked when the
+  budget planner reports you are
+  over your line: the crowd is
+  what it is and the minimum is
+  set, so which known details do
+  you withhold to get back above
+  it? It withholds the largest
+  splits first, exactly in BigInt
+  — each withholding divides the
+  combinations by that detail's
+  whole group count, so the
+  biggest split restores the most
+  cover per detail given up, and
+  the plan withholds the fewest
+  details that reach the minimum,
+  never one more. A detail that
+  splits nothing is never
+  withheld: it costs no cover.
+  Honestly labelled a best case,
+  never a guarantee, on the same
+  independence and
+  equal-likelihood assumptions,
+  so the real group a withholding
+  restores can only be smaller.
+  It plans withholdings; it does
+  not identify — nobody is looked
+  up, no wallet connects, no
+  chain data is read, and the
+  crowd size is a number you
+  type, not a live pool count.
 
 ## Guides
 

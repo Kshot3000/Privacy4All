@@ -1979,6 +1979,121 @@ function anonymityCrowdNeeded(minSetStr, detailsStr) {
   };
 }
 
+/* ---------- 97. Which details should you withhold? ---------- */
+/* Tools 94, 95 and 96 measure a crowd, plan its room and size
+   the crowd a minimum needs — all three take the known details
+   as given. This is the repair question, asked when tool 95
+   reports over: the crowd is what it is, the minimum is the
+   line you set, so WHICH known details should you withhold —
+   generalise, delay or never share — to get back above it?
+   The answer is exact in BigInt and greedy by necessity, not
+   by shortcut: the expected group is the crowd divided by the
+   product of the KEPT details' group counts, rounded down, so
+   withholding a detail divides that product by its whole group
+   count, and withholding the LARGEST detail first restores the
+   most cover per detail given up — no other choice of the same
+   number of withholdings can leave a larger group, so the
+   fewest withholdings that reach the minimum are found by
+   dropping largest first (ties broken by earliest position,
+   so the answer is deterministic). Details that split into
+   exactly 1 group are never withheld: everyone shares them,
+   they cost no cover, and giving one up buys nothing. The
+   verdict names the outcome: already (the known details leave
+   the group at or above the minimum — nothing to withhold),
+   shed (some withholdings restore the minimum and at least one
+   distinguishing detail can still be shared), or shed-all
+   (every distinguishing detail must go — only details that
+   split nothing can stay). Withholding always suffices when
+   the minimum is at most the crowd, because withholding
+   everything distinguishing leaves the whole crowd; a minimum
+   above the crowd is therefore refused up front as an
+   impossibility, exactly as in tool 95, never planned around.
+   Cross-checkable both ways: tool 94 run on the kept details
+   returns this function's resulting group, tool 95 run on the
+   same inputs reports the position this plan repairs, and
+   restoring any one withheld detail drops the group back below
+   the minimum — the plan withholds the fewest it can, never
+   one more. An empty details list is legitimate and means
+   nothing is known yet — nothing to withhold, verdict already
+   — and an absent list is read the same way, as in tools 95
+   and 96. Refused (null), never repaired: a crowd or minimum
+   that is not a whole number, a crowd of zero, a minimum under
+   1 or above the crowd, a detail of zero groups or above
+   ANONSHED_MAX_GROUPS, more than ANONSHED_MAX_DETAILS details,
+   and malformed lists. This inherits tools 94 to 96's honesty
+   in full: the numbers are a BEST CASE under independence and
+   equal likelihood — real crowds are skewed, so the real group
+   a withholding restores can only be smaller, and a plan that
+   only just reaches the minimum on paper may still fall short
+   in a real crowd. This plans withholdings only — it looks
+   nobody up, identifies nobody, connects no wallet and reads
+   no chain data; the crowd size is a number you type, not a
+   live pool count, and withholding a detail is your act, in
+   the app that asked for it, not something this page does. */
+var ANONSHED_MAX_DETAILS = 12;
+var ANONSHED_MAX_GROUPS = 1000000;
+function anonymityShedPlan(crowdStr, minSetStr, detailsStr) {
+  var c = (crowdStr == null ? "" : String(crowdStr)).trim();
+  if (!/^\d+$/.test(c)) return null;
+  var crowd = BigInt(c);
+  if (crowd === 0n) return null;
+  var m = (minSetStr == null ? "" : String(minSetStr)).trim();
+  if (!/^\d+$/.test(m)) return null;
+  var minSet = BigInt(m);
+  if (minSet < 1n || minSet > crowd) return null;
+  var entries = [];
+  var d = (detailsStr == null ? "" : String(detailsStr)).trim();
+  if (d) {
+    var raw = d.split(",");
+    if (raw.length < 1 || raw.length > ANONSHED_MAX_DETAILS) return null;
+    for (var i = 0; i < raw.length; i++) {
+      var t = raw[i].trim();
+      if (!/^\d+$/.test(t)) return null;
+      var g = BigInt(t);
+      if (g < 1n || g > BigInt(ANONSHED_MAX_GROUPS)) return null;
+      entries.push({ g: g, i: i });
+    }
+  }
+  function keptProduct(list) {
+    var p = 1n;
+    for (var j = 0; j < list.length; j++) p *= list[j].g;
+    return p;
+  }
+  var kept = entries.slice();
+  var dropped = [];
+  while (crowd / keptProduct(kept) < minSet) {
+    var best = null;
+    for (var k = 0; k < kept.length; k++) {
+      if (kept[k].g <= 1n) continue;
+      if (best === null || kept[k].g > best.g ||
+          (kept[k].g === best.g && kept[k].i < best.i)) best = kept[k];
+    }
+    if (best === null) break;
+    kept.splice(kept.indexOf(best), 1);
+    dropped.push(best);
+  }
+  var keptSorted = kept.slice().sort(function (a, b) { return a.i - b.i; });
+  var keptCombinations = keptProduct(keptSorted);
+  var resultingSet = crowd / keptCombinations;
+  function bitsOf(x) {
+    return x >= 1n ? (x.toString(2).length - 1).toString() : null;
+  }
+  var verdict = dropped.length === 0 ? "already"
+    : keptSorted.some(function (e) { return e.g > 1n; }) ? "shed"
+    : "shed-all";
+  return {
+    crowd: crowd.toString(),
+    minSet: minSet.toString(),
+    details: entries.map(function (e) { return e.g.toString(); }),
+    keptDetails: keptSorted.map(function (e) { return e.g.toString(); }),
+    droppedDetails: dropped.map(function (e) { return e.g.toString(); }),
+    keptCombinations: keptCombinations.toString(),
+    resultingSet: resultingSet.toString(),
+    resultingBits: bitsOf(resultingSet),
+    verdict: verdict
+  };
+}
+
 /* ---------- 4. What does this dApp see? ---------- */
 /* level: "low" = usually needed to connect, "caution" = ask why and limit
    it before granting, "high" = do not grant blindly for a routine visit. */
@@ -17187,6 +17302,7 @@ if (typeof module !== "undefined" && module.exports) {
                      anonymitySetEstimate, ANONSET_MAX_DETAILS, ANONSET_MAX_GROUPS,
                      anonymityBudget, ANONBUDGET_MAX_DETAILS, ANONBUDGET_MAX_GROUPS,
                      anonymityCrowdNeeded, ANONCROWD_MAX_DETAILS, ANONCROWD_MAX_GROUPS,
+                     anonymityShedPlan, ANONSHED_MAX_DETAILS, ANONSHED_MAX_GROUPS,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
@@ -18015,6 +18131,39 @@ if (typeof document !== "undefined") {
       }
       text += "The scale is " + verdictPhrase + ". ";
       text += "This is a best case, never a guarantee: it assumes every detail is independent and every group equally likely, and real crowds are skewed, so the real crowd your minimum needs can only be larger — treat this number as a floor to plan from, not a promise. This sizes only: nobody was looked up or identified, no wallet connected, and no chain data was read — no crowd size here is a live pool count.";
+      host.textContent = text;
+    });
+
+    /* --- which details should you withhold? --- */
+    document.getElementById("anonshed-plan").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var p = anonymityShedPlan(document.getElementById("anonshed-crowd").value,
+                            document.getElementById("anonshed-minset").value,
+                            document.getElementById("anonshed-details").value);
+      var host = document.getElementById("anonshed-result");
+      if (p === null) {
+        host.textContent = "Enter the size of your crowd and the smallest group you refuse to drop below (whole numbers, the minimum at least 1 and at most the crowd itself), plus the group count for each detail an observer knows, comma-separated — whole numbers of at least 1, at most 1000000 each, up to 12 details, or leave that field empty if nothing is known yet. Anything else is refused, not guessed at.";
+        return;
+      }
+      var verdictPhrase = p.verdict === "already" ? "already — the details an observer knows leave your group at or above your minimum, so there is nothing you need to withhold"
+        : p.verdict === "shed" ? "shed — withholding the details named restores your minimum, and the rest can still be shared"
+        : "shed-all — only withholding every distinguishing detail restores your minimum; anything that splits the crowd has to go";
+      var text = "Withholding plan — a crowd of " + p.crowd + " people and a minimum group of " + p.minSet + ": ";
+      text += p.details.length === 0
+        ? "nothing is known about you yet, so nothing needs withholding and the expected group is still the whole crowd. "
+        : "the " + p.details.length + (p.details.length === 1 ? " known detail" : " known details") + " (" + p.details.join(", ") + ") leave an expected group below or at your line, checked exactly. ";
+      if (p.droppedDetails.length > 0) {
+        text += "Withhold " + p.droppedDetails.length + (p.droppedDetails.length === 1 ? " detail" : " details") + " — the ones splitting the crowd into " + p.droppedDetails.join(", ") + " groups, largest first, because each withholding restores the most cover when it removes the biggest split, and no smaller set of withholdings reaches your minimum. ";
+        text += p.keptDetails.length === 0
+          ? "Nothing known can stay shared. "
+          : "What can stay shared is " + p.keptDetails.join(", ") + ", making " + p.keptCombinations + (p.keptCombinations === "1" ? " combination" : " combinations") + ". ";
+        text += "Restoring any one withheld detail drops the expected group back below " + p.minSet + " — the plan withholds the fewest it can, never one more. ";
+      }
+      text += "The expected group this leaves is " + p.resultingSet + (p.resultingSet === "1" ? " person" : " people") + ". The verdict is " + verdictPhrase + ". ";
+      if (p.details.indexOf("1") !== -1) {
+        text += "A detail with 1 group splits nothing — everyone shares it — so it is never on the withholding list: giving it up would buy no cover. ";
+      }
+      text += "This is a best case, never a guarantee: it assumes every detail is independent and every group equally likely, and real crowds are skewed, so the real group a withholding restores can only be smaller. This plans withholdings only: nobody was looked up or identified, no wallet connected, and no chain data was read — the crowd size is the number you typed, not a live pool count, and withholding a detail is your act in the app that asked for it, not something this page does.";
       host.textContent = text;
     });
 
