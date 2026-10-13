@@ -226,7 +226,7 @@
 
   <section id="tools" aria-labelledby="tools-h">
     <h2 id="tools-h">Privacy tools — right here, nothing leaves your browser</h2>
-    <p>Seventy-nine tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
+    <p>Eighty tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
     <div class="filter-row" role="group" aria-label="Find a tool">
       <label for="tool-q">Find a tool</label>
       <input id="tool-q" type="search" placeholder="e.g. vote, sign, DUST, share a secret…" autocomplete="off">
@@ -2525,7 +2525,20 @@
         <button type="submit" class="btn primary">Reconcile the batch, locally</button>
         <p id="feebatch-result" role="status" aria-live="polite"></p>
       </form>
-      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 79 tools.</p>
+      <form class="tool" id="refundbatch-check">
+        <h3>80 · Check a batch of refunds came back whole — a refund batch checker</h3>
+        <p>Tools 77 and 79 reconcile charges, and tool 78 checks one refund; refunds arrive in batches too. Enter 2 to 12 amounts that were all paid at one disclosed rate, and the amount refunded on each, in the same order, and this checker runs every line through tool 78 itself — so no line's verdict can disagree with the single-refund checker — and names each line full, fee-taken, short or over by the exact difference. It checks; it does not refund for you: nothing is charged, refunded, disputed or signed, and no wallet connects.</p>
+        <p>The case totals alone would miss: one refund short by a unit and another over by a unit cancel out in the total, while both refunds are wrong — and a fee taken from one refund in the batch is invisible in any sum. So the verdict follows the lines, never the totals alone: a batch whose totals net to the full amount is still named mixed when any line is wrong, because a netted total is not a batch of whole refunds. The sharpest line is named on its own, as in tool 78: when the amount that came back on a line is exactly the disclosed net, the fee was charged on that refund itself, which the disclosure forbids. The verdict is computed locally from the numbers you type, in exact integer arithmetic that holds past 2<sup>53</sup>: this checker reads no statement and looks nothing up, so check the numbers against your own record first — the verdict is the evidence you take back to the app, stated in the app's own disclosed numbers. DUST is a network transaction cost, never part of this fee.</p>
+        <label for="refundbatch-amounts">Amounts that were paid, in whole units, comma-separated (2 to 12 whole numbers — e.g. 1000000, 1000000)</label>
+        <input id="refundbatch-amounts" inputmode="numeric" placeholder="e.g. 1000000, 1000000" autocomplete="off">
+        <label for="refundbatch-bps">Fee rate that was disclosed, in basis points (a whole number, at most 10000 — e.g. 250 = 2.5%)</label>
+        <input id="refundbatch-bps" inputmode="numeric" placeholder="e.g. 250" autocomplete="off">
+        <label for="refundbatch-refundeds">Amount refunded on each, in whole units, comma-separated, in the same order (e.g. 1000000, 975000)</label>
+        <input id="refundbatch-refundeds" inputmode="numeric" placeholder="e.g. 1000000, 975000" autocomplete="off">
+        <button type="submit" class="btn primary">Check the batch of refunds, locally</button>
+        <p id="refundbatch-result" role="status" aria-live="polite"></p>
+      </form>
+      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 80 tools.</p>
     </div>
   </section>
 
@@ -2559,6 +2572,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=78"></script>
+<script src="app.js?v=79"></script>
 </body>
 </html>
