@@ -1139,6 +1139,93 @@ function feeCappedBatchCheck(amountsStr, bpsStr, minStr, maxStr, chargesStr) {
   };
 }
 
+/* ---------- 86. Check a batch of bounded refunds came back whole ---------- */
+/* Tool 85 reconciles a batch of bounded fee charges line by line;
+   refunds under a bounded disclosure arrive in batches too, and
+   tool 80 checks only at a pure rate, so on a bounded batch it
+   misnames the fee-taken lines: a refund of exactly the bounded
+   net reads as a generic shortfall, because its net is the
+   pure-rate one, and the fee it names is not the fee the
+   disclosure states. feeCappedRefundBatchCheck takes 2-12 amounts
+   that were all paid under one bounded disclosure (one rate, one
+   minimum, one maximum), and the amount refunded on each, and
+   runs every line through tool 84's own feeCappedRefundCheck — so
+   no line's verdict can disagree with the bounded refund checker —
+   naming each line full, fee-taken, short or over by the exact
+   difference, with the bound that set its disclosed fee. The
+   verdict follows the lines, never the totals alone: all full is
+   "full"; fee-taken lines with nothing else wrong are "fee-taken"
+   (the mechanism is the finding, as in tools 78, 80 and 84); only-
+   short is "short" and only-over is "over"; any other combination
+   is "mixed", even when the totals happen to net to the full
+   amount, because a netted total is not a batch of whole refunds.
+   A zero bounded fee collapses fee-taken into full on every line,
+   because the net is the amount itself. All arithmetic is exact
+   BigInt, so the verdicts hold past 2^53. A list that is not 2-12
+   whole numbers, two lists of different lengths, and anything
+   tool 84 refuses are refused (null), never repaired into a
+   plausible verdict. This function only checks — it charges
+   nothing, refunds nothing, disputes nothing and connects no
+   wallet; it reads no statement and looks nothing up, so the
+   verdict is evidence stated in the app's own disclosed numbers,
+   bounds included, taken from the numbers entered here. */
+function feeCappedRefundBatchCheck(amountsStr, bpsStr, minStr, maxStr, refundedsStr) {
+  var amounts = parseBatchList(amountsStr);
+  var refundeds = parseBatchList(refundedsStr);
+  if (amounts === null || refundeds === null) return null;
+  if (amounts.length < BATCH_MIN_LINES || amounts.length > BATCH_MAX_LINES) return null;
+  if (refundeds.length !== amounts.length) return null;
+  var lines = [];
+  var totalAmount = 0n, totalRefunded = 0n, totalFees = 0n;
+  var fullCount = 0, feeTakenCount = 0, shortCount = 0, overCount = 0;
+  var percent = null, zeroBelow = null, minFee = null, maxFee = null;
+  for (var i = 0; i < amounts.length; i++) {
+    var one = feeCappedRefundCheck(amounts[i], bpsStr, minStr, maxStr, refundeds[i]);
+    if (one === null) return null;
+    if (percent === null) { percent = one.percent; zeroBelow = one.zeroBelow; minFee = one.minFee; maxFee = one.maxFee; }
+    if (one.status === "full") fullCount++;
+    else if (one.status === "fee-taken") feeTakenCount++;
+    else if (one.status === "short") shortCount++;
+    else overCount++;
+    lines.push({
+      amount: one.amount,
+      uncappedFee: one.uncappedFee,
+      boundVerdict: one.boundVerdict,
+      fee: one.fee,
+      net: one.net,
+      refunded: one.refunded,
+      status: one.status,
+      difference: one.difference
+    });
+    totalAmount += BigInt(one.amount);
+    totalRefunded += BigInt(one.refunded);
+    totalFees += BigInt(one.fee);
+  }
+  var wrong = feeTakenCount + shortCount + overCount;
+  var verdict = wrong === 0 ? "full"
+    : feeTakenCount > 0 && shortCount === 0 && overCount === 0 ? "fee-taken"
+    : shortCount > 0 && feeTakenCount === 0 && overCount === 0 ? "short"
+    : overCount > 0 && feeTakenCount === 0 && shortCount === 0 ? "over"
+    : "mixed";
+  return {
+    bps: String(bpsStr == null ? "" : bpsStr).trim(),
+    percent: percent,
+    zeroBelow: zeroBelow,
+    minFee: minFee,
+    maxFee: maxFee,
+    lines: lines,
+    totalAmount: totalAmount.toString(),
+    totalRefunded: totalRefunded.toString(),
+    totalFees: totalFees.toString(),
+    totalDifference: (totalRefunded >= totalAmount ? totalRefunded - totalAmount : totalAmount - totalRefunded).toString(),
+    fullCount: fullCount,
+    feeTakenCount: feeTakenCount,
+    shortCount: shortCount,
+    overCount: overCount,
+    verdict: verdict
+  };
+}
+
 /* ---------- 4. What does this dApp see? ---------- */
 /* level: "low" = usually needed to connect, "caution" = ask why and limit
    it before granting, "high" = do not grant blindly for a routine visit. */
@@ -16336,6 +16423,7 @@ if (typeof module !== "undefined" && module.exports) {
                      feeCappedChargeCheck,
                      feeCappedRefundCheck,
                      feeCappedBatchCheck,
+                     feeCappedRefundBatchCheck,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
@@ -17178,6 +17266,40 @@ if (typeof document !== "undefined") {
         text += "Verdict: overcharged — " + v.overCount + " line(s) over, by " + v.totalDifference + " units in total. Neither the rate nor either bound explains the extra on any of those lines. ";
       } else {
         text += "Verdict: undercharged — " + v.underCount + " line(s) under, by " + v.totalDifference + " units in total: less than the bounded disclosure states, and worth the app knowing so its books match its disclosure. ";
+      }
+      text += "This is a check only: nothing was charged, refunded, disputed or signed, and no wallet connected — the verdict is computed locally from the numbers you entered, so check them against your statement first. DUST is a network transaction cost, never part of this fee.";
+      host.textContent = text;
+    });
+
+    /* --- check a batch of bounded refunds came back whole --- */
+    document.getElementById("feecaprefundbatch-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var v = feeCappedRefundBatchCheck(document.getElementById("feecaprefundbatch-amounts").value,
+                             document.getElementById("feecaprefundbatch-bps").value,
+                             document.getElementById("feecaprefundbatch-min").value,
+                             document.getElementById("feecaprefundbatch-max").value,
+                             document.getElementById("feecaprefundbatch-refundeds").value);
+      var host = document.getElementById("feecaprefundbatch-result");
+      if (v === null) {
+        host.textContent = "Enter 2 to 12 amounts that were paid and the amount refunded on each — the two lists the same length, in the same order — the fee rate that was disclosed in basis points (250 = 2.5%, at most 10000), and a minimum fee and a maximum fee in whole units, with the minimum at most the maximum and at most every amount itself, all as whole numbers. Anything else is refused, not guessed at.";
+        return;
+      }
+      var text = "Bounded refund batch check — " + v.lines.length + " lines · disclosed fee " + v.percent + "% (" + v.bps + " bps), minimum " + v.minFee + " units, maximum " + v.maxFee + " units · amounts paid total " + v.totalAmount + " units · refunded total " + v.totalRefunded + " units · the disclosed fees on these amounts total " + v.totalFees + " units. ";
+      v.lines.forEach(function (line, i) {
+        text += "Line " + (i + 1) + ": paid " + line.amount + ", disclosed fee " + line.fee + " (set by the " + line.boundVerdict + "), refunded " + line.refunded + " — " +
+          (line.status === "full" ? "full. " : line.status === "fee-taken" ? "a fee was taken: what came back is exactly the bounded net, short by the " + line.difference + "-unit bounded fee. " : line.status === "short" ? "short by " + line.difference + " units, unexplained by the rate, the floor or the ceiling. " : "over by " + line.difference + " units. ");
+      });
+      if (v.verdict === "full") {
+        text += "Verdict: every refund in the batch came back whole and no fee was taken from any of them, bounds included. A pure-rate batch check would agree here only by luck — wherever a bound set a fee, its net is a different number. ";
+      } else if (v.verdict === "fee-taken") {
+        text += "Verdict: the bounded fee was taken from " + v.feeTakenCount + " refund(s) in this batch — what came back on those lines is exactly the amount minus the bounded fee, so the disclosed fee was charged on the refund itself. A refund under a bounded disclosure is still a refund: the fee belongs on the release, not on the way back, and the amount short in total is " + v.totalDifference + " units. A pure-rate batch check names these lines short and quotes the wrong fee. ";
+      } else if (v.verdict === "short") {
+        text += "Verdict: short — " + v.shortCount + " refund(s) came back short, by " + v.totalDifference + " units in total, and none of the shortfalls is the bounded fee, so none is explained by the rate, the floor or the ceiling; a disclosed rate rounds down in the user's favour, never up, so rounding does not explain them either. ";
+      } else if (v.verdict === "over") {
+        text += "Verdict: over — " + v.overCount + " refund(s) returned more than was paid, by " + v.totalDifference + " units in total: worth the app knowing, because its books will not match the payments either. ";
+      } else {
+        text += "Verdict: mixed — " + v.feeTakenCount + " fee-taken, " + v.shortCount + " short and " + v.overCount + " over line(s). The totals " +
+          (v.totalDifference === "0" ? "happen to net to the full amount, but a netted total is not a batch of whole refunds: each wrong line is wrong on its own. " : "differ by " + v.totalDifference + " units, and the wrong lines do not cancel each other out. ");
       }
       text += "This is a check only: nothing was charged, refunded, disputed or signed, and no wallet connected — the verdict is computed locally from the numbers you entered, so check them against your statement first. DUST is a network transaction cost, never part of this fee.";
       host.textContent = text;

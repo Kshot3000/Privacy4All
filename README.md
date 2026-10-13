@@ -75,9 +75,9 @@ renewable resource that pays for shielded transactions.
 
 ## Tools on the hub (local only, no wallet needed)
 
-The hub carries 85 tools; a **find-a-tool search** at the top of the tools
+The hub carries 86 tools; a **find-a-tool search** at the top of the tools
 section narrows the list as you type — every word must match a tool's title
-or first line, and clearing the search restores all 85.
+or first line, and clearing the search restores all 86.
 
 - **Paste-and-protect redactor** — finds and masks email addresses, Cardano
   addresses and US phone numbers in text you paste. Runs entirely in your
@@ -2300,6 +2300,36 @@ or first line, and clearing the search restores all 85.
   netted total is not a matched
   statement. Honestly labelled:
   it checks; it does not charge.
+  Nothing is charged, refunded or
+  disputed, no funds move and no
+  wallet connects. DUST is never
+  part of the fee.
+
+- **Check a batch of bounded refunds
+  came back whole — a
+  floor-and-ceiling refund batch
+  checker** — tool 85 reconciles a
+  batch of bounded fee charges;
+  refunds under a bounded
+  disclosure arrive in batches
+  too, and tool 80 checks a batch
+  only at a pure rate, so on a
+  bounded batch it misnames the
+  fee-taken lines. Enter the
+  amounts, the rate, both bounds
+  and the amount refunded on
+  each, and it runs every line
+  through tool 84 itself and names
+  each line full, or fee-taken by
+  exactly the bounded fee, or
+  short or over by the exact
+  difference, with the bound that
+  set its fee. The verdict follows
+  the lines, never the totals
+  alone: a netted total is not a
+  batch of whole refunds.
+  Honestly labelled:
+  it checks; it does not refund.
   Nothing is charged, refunded or
   disputed, no funds move and no
   wallet connects. DUST is never
