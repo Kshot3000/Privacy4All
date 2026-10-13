@@ -75,9 +75,9 @@ renewable resource that pays for shielded transactions.
 
 ## Tools on the hub (local only, no wallet needed)
 
-The hub carries 76 tools; a **find-a-tool search** at the top of the tools
+The hub carries 77 tools; a **find-a-tool search** at the top of the tools
 section narrows the list as you type — every word must match a tool's title
-or first line, and clearing the search restores all 76.
+or first line, and clearing the search restores all 77.
 
 - **Paste-and-protect redactor** — finds and masks email addresses, Cardano
   addresses and US phone numbers in text you paste. Runs entirely in your
@@ -2065,6 +2065,32 @@ or first line, and clearing the search restores all 76.
   charge. Nothing is charged,
   collected or signed, no funds move
   and no wallet connects.
+
+- **Check the fee you were
+  charged — a fee charge checker** —
+  the after-the-fact companion to
+  the disclosure generator: enter
+  the amount, the fee rate that was
+  disclosed and the fee actually
+  charged, and it recomputes the
+  disclosed fee with the honest fee
+  calculator itself and names the
+  verdict exactly — the charge
+  matches the disclosure to the
+  unit, or it is an overcharge or
+  undercharge by the exact
+  difference, with the net the
+  amount settled for beside the
+  disclosed net. Below the zero-fee
+  threshold the disclosed fee is
+  zero, so any charge there is an
+  overcharge of the whole charged
+  amount. Honestly labelled: it
+  checks; it does not charge.
+  Nothing is charged, refunded or
+  disputed, no funds move and no
+  wallet connects. DUST is never
+  part of the fee.
 
 ## Guides
 

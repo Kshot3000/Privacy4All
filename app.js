@@ -557,6 +557,50 @@ function feeDisclosure(placement, bpsStr, amountStr, recipientRaw) {
   };
 }
 
+/* ---------- 77. Check the fee you were charged ---------- */
+/* Tools 68 to 76 quote, place, plan and disclose a fee before
+   anything commits; this one is the check afterwards. Given the
+   amount, the rate that was disclosed and the fee that was
+   actually charged, it recomputes the disclosed fee with tool
+   68's own honestFeeQuote — so the expectation can never disagree
+   with the quote — and names the verdict exactly: the charge
+   matches the disclosure to the unit, or it is over or under by
+   the exact difference, with the net the amount actually settled
+   for beside the net that was disclosed. The sharpest case is
+   the threshold: below the zero-fee amount the disclosed fee is
+   exactly zero, so any charge at all there is an overcharge of
+   the whole charged amount — floor rounding favours the user,
+   and a charge that rounds up against them is named, not
+   absorbed. All arithmetic is exact BigInt, so the verdict holds
+   past 2^53 where float money maths would blur the difference
+   away. A charged figure that is not a whole number, and anything
+   tool 68 refuses, are refused (null), never repaired into a
+   plausible verdict. This function only checks — it charges
+   nothing, refunds nothing, disputes nothing and connects no
+   wallet; the verdict is the evidence a user takes back to the
+   app, stated in the app's own disclosed numbers. */
+function feeChargeCheck(amountStr, bpsStr, chargedStr) {
+  var quote = honestFeeQuote(amountStr, bpsStr);
+  if (quote === null) return null;
+  var c = (chargedStr == null ? "" : String(chargedStr)).trim();
+  if (!/^\d+$/.test(c)) return null;
+  var charged = BigInt(c);
+  var expected = BigInt(quote.fee);
+  var diff = charged - expected;
+  return {
+    amount: quote.amount,
+    bps: quote.bps,
+    percent: quote.percent,
+    zeroBelow: quote.zeroBelow,
+    expectedFee: quote.fee,
+    expectedNet: quote.net,
+    charged: charged.toString(),
+    chargedNet: (BigInt(quote.amount) - charged).toString(),
+    status: diff === 0n ? "exact" : diff > 0n ? "over" : "under",
+    difference: (diff < 0n ? -diff : diff).toString()
+  };
+}
+
 /* ---------- 4. What does this dApp see? ---------- */
 /* level: "low" = usually needed to connect, "caution" = ask why and limit
    it before granting, "high" = do not grant blindly for a routine visit. */
@@ -15745,6 +15789,7 @@ if (typeof module !== "undefined" && module.exports) {
                      breakEvenPlan,
                      netTargetPrice,
                      feeDisclosure, FEE_DISCLOSURE_PLACEMENTS, FEE_DISCLOSURE_MAX_RECIPIENT,
+                     feeChargeCheck,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
@@ -16342,6 +16387,34 @@ if (typeof document !== "undefined") {
         return;
       }
       host.textContent = d.statement + " — Generated locally: nothing was charged, collected or signed, and no wallet connected. Paste the statement where the user decides, before the step that commits — and check the recipient character-for-character first, because this generator prints what it is given and verifies nothing.";
+    });
+
+    /* --- check the fee you were charged --- */
+    document.getElementById("feecharge-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var v = feeChargeCheck(document.getElementById("feecharge-amount").value,
+                             document.getElementById("feecharge-bps").value,
+                             document.getElementById("feecharge-charged").value);
+      var host = document.getElementById("feecharge-result");
+      if (v === null) {
+        host.textContent = "Enter the amount, the fee rate that was disclosed in basis points (250 = 2.5%, at most 10000) and the fee you were actually charged, all as whole numbers. Anything else is refused, not guessed at.";
+        return;
+      }
+      var text = "Fee charge check — amount " + v.amount + " units · disclosed fee " + v.percent + "% (" + v.bps + " bps) · the disclosed fee on this amount is " + v.expectedFee + " units, and you were charged " + v.charged + " units. ";
+      if (v.status === "exact") {
+        text += "Exact: the charge matches the disclosure to the unit, and the amount settled for " + v.chargedNet + " units, exactly the disclosed net. ";
+      } else if (v.status === "over") {
+        text += "Overcharged by " + v.difference + " units: the amount settled for " + v.chargedNet + " units instead of the disclosed " + v.expectedNet + " units. " +
+          (v.expectedFee === "0"
+            ? (v.zeroBelow !== null
+              ? "The disclosed fee on this amount is zero — at " + v.bps + " bps an amount below " + v.zeroBelow + " units pays no fee at all, so the whole charge is an overcharge, not a rounding difference. "
+              : "The disclosed rate is zero, so no fee is charged on any amount — the whole charge is an overcharge, not a rounding difference. ")
+            : "That difference is not rounding: the disclosed rate rounds down in the user's favour, never up. ");
+      } else {
+        text += "Undercharged by " + v.difference + " units: the amount settled for " + v.chargedNet + " units instead of the disclosed " + v.expectedNet + " units — less than the disclosed fee, in your favour, and worth the app knowing so its books match its disclosure. ";
+      }
+      text += "This is a check only: nothing was charged, refunded, disputed or signed, and no wallet connected — the verdict is computed locally from the numbers you entered, so check them against your receipt first. DUST is a network transaction cost, never part of this fee.";
+      host.textContent = text;
     });
 
     /* --- what does this dApp see? --- */
