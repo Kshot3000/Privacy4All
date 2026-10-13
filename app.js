@@ -1579,6 +1579,79 @@ function feeCappedSwapPlan(inStr, outStr, bpsStr, minStr, maxStr, legStr) {
   };
 }
 
+/* ---------- 92. Break-even, counted in sales, bounded fee ---------- */
+/* Tool 74 counts the sales whose fees cover a stated cost, but
+   only at a pure rate, and tools 82 to 91 price and check bounded
+   fees everywhere except that count — so break-even under a
+   bounded disclosure is planned by neither, and the pure-rate
+   count is wrong in both directions: on a 10,000-unit cost with
+   1,000-unit sales at 250 bps, tool 74 counts 400 sales where a
+   disclosed 100-unit minimum collects 100 per sale and breaks
+   even at 100, and it counts the same 400 where a disclosed
+   10-unit maximum collects 10 per sale and needs 1,000.
+   feeCappedBreakEvenPlan takes the cost, the typical sale amount,
+   the rate and both bounds as disclosed, and counts with the fee
+   per sale quoted by tool 82's own feeCappedQuote — so the fee
+   here can never disagree with the bounded quote — then applies
+   tool 74's exact BigInt ceiling division unchanged: the smallest
+   whole number of sales whose collected fees reach the cost, one
+   sale fewer always falling short, and the surplus the final
+   sale overshoots by named, never hidden. The bounds move the
+   verdicts, not just the count, and both new verdicts are stated
+   honestly. A floor rescues a sale the pure rate prices at zero:
+   a 30-unit sale at 250 bps rounds to no fee at all, so tool 74
+   answers never, but a disclosed 5-unit minimum collects 5 per
+   sale and the cost is reachable. And a ceiling can manufacture
+   a never the rate never made: a maximum of zero collects nothing
+   on every sale, whatever the rate says, so no number of sales
+   covers any cost — the planner says never and names the ceiling
+   as the reason, instead of printing the rate's healthy count.
+   A cost of zero stays already covered at zero sales. A minimum
+   above the typical sale amount is refused (null), never worked
+   around, because a floor cannot be collected from a sale smaller
+   than the floor. All arithmetic is exact BigInt, so the count
+   holds past 2^53. Anything that is not whole numbers, and
+   anything tool 82 refuses, are refused (null), never repaired
+   into a plausible count. This function only plans — it charges
+   nothing, collects nothing, sells nothing and connects no
+   wallet; DUST is a transaction cost of the network, never part
+   of this fee. */
+function feeCappedBreakEvenPlan(costStr, amountStr, bpsStr, minStr, maxStr) {
+  var c = (costStr == null ? "" : String(costStr)).trim();
+  if (!/^\d+$/.test(c)) return null;
+  var quote = feeCappedQuote(amountStr, bpsStr, minStr, maxStr);
+  if (quote === null) return null;
+  var cost = BigInt(c);
+  var amount = BigInt(quote.amount);
+  var feePerSale = BigInt(quote.fee);
+  var base = {
+    cost: cost.toString(),
+    amount: quote.amount,
+    bps: quote.bps,
+    percent: quote.percent,
+    uncappedFee: quote.uncappedFee,
+    minFee: quote.minFee,
+    maxFee: quote.maxFee,
+    boundVerdict: quote.verdict,
+    feePerSale: quote.fee,
+    zeroBelow: quote.zeroBelow
+  };
+  if (cost === 0n) {
+    return Object.assign(base, { status: "covered", sales: "0",
+      feesCollected: "0", surplus: "0", volume: "0" });
+  }
+  if (feePerSale === 0n) {
+    return Object.assign(base, { status: "never", sales: null,
+      feesCollected: null, surplus: null, volume: null });
+  }
+  var sales = (cost + feePerSale - 1n) / feePerSale;
+  var feesCollected = sales * feePerSale;
+  return Object.assign(base, { status: "reachable", sales: sales.toString(),
+    feesCollected: feesCollected.toString(),
+    surplus: (feesCollected - cost).toString(),
+    volume: (sales * amount).toString() });
+}
+
 /* ---------- 4. What does this dApp see? ---------- */
 /* level: "low" = usually needed to connect, "caution" = ask why and limit
    it before granting, "high" = do not grant blindly for a routine visit. */
@@ -16782,6 +16855,7 @@ if (typeof module !== "undefined" && module.exports) {
                      feeCappedSplitPayment,
                      feeCappedEscrowPlan,
                      feeCappedSwapPlan,
+                     feeCappedBreakEvenPlan,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
@@ -17456,6 +17530,42 @@ if (typeof document !== "undefined") {
         text += "At this rate the fee rounds down to 0 — a " + legName + " leg under " + p.zeroBelow + " units pays no fee at " + p.bps + " bps, and floor rounding never rounds it up in the house's favour. ";
       }
       text += "This is a plan only: nothing was swapped, charged, moved or signed, and DUST — the network's transaction resource — is a separate line that is never part of a service fee.";
+      host.textContent = text;
+    });
+
+    /* --- break-even, counted in sales, bounded fee --- */
+    document.getElementById("feecapbreakeven-plan").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var p = feeCappedBreakEvenPlan(document.getElementById("feecapbreakeven-cost").value,
+                            document.getElementById("feecapbreakeven-amount").value,
+                            document.getElementById("feecapbreakeven-bps").value,
+                            document.getElementById("feecapbreakeven-min").value,
+                            document.getElementById("feecapbreakeven-max").value);
+      var host = document.getElementById("feecapbreakeven-result");
+      if (p === null) {
+        host.textContent = "Enter a cost for the period, a typical sale amount, a fee rate in basis points (250 = 2.5%, at most 10000), a minimum fee and a maximum fee in whole units — the minimum at most the maximum and at most the typical sale amount itself, because a floor cannot be collected from a sale smaller than the floor. Anything else is refused, not guessed at.";
+        return;
+      }
+      var boundPhrase = p.boundVerdict === "floor" ? "the minimum fee raises it"
+        : p.boundVerdict === "ceiling" ? "the maximum fee cuts it"
+        : "neither bound changes it";
+      var text = "Bounded break-even plan — cost " + p.cost + " units · typical sale " + p.amount + " units · disclosed fee " + p.percent + "% (" + p.bps + " bps): the rate alone takes " + p.uncappedFee + " units per sale; " + boundPhrase + ", so the fee per sale is " + p.feePerSale + " units. ";
+      if (p.status === "covered") {
+        text += "Already covered: a cost of zero needs zero sales. State a real cost — hosting, a domain, your own time priced honestly — and the count becomes meaningful. ";
+      } else if (p.status === "never") {
+        text += "Never at these numbers: the bounded fee per sale is zero, so no number of sales covers any cost. " +
+          (p.boundVerdict === "ceiling"
+            ? "The disclosed maximum is 0, so the ceiling cuts every sale's fee to nothing, whatever the rate says — a break-even count printed from the rate alone would be a promise this disclosure never makes. Raise the maximum, and say so out loud. "
+            : p.zeroBelow !== null
+              ? "The rate rounds this sale down to no fee and no minimum stands to collect one — at " + p.bps + " bps a sale must be at least " + p.zeroBelow + " units before the fee is even 1 unit. Raise the typical sale amount, the disclosed rate or the minimum, and say which you changed out loud. "
+              : "A rate of zero with no minimum charges no fee at all — set a disclosed rate or a disclosed minimum above zero first. ");
+      } else {
+        text += "Break-even at " + p.sales + " sales: those sales collect " + p.feesCollected + " units of fees against the " + p.cost + "-unit cost (surplus " + p.surplus + " units from the final sale), on " + p.volume + " units of sales volume. One sale fewer collects " + (BigInt(p.feesCollected) - BigInt(p.feePerSale)).toString() + " units and falls short — the count is the smallest whole number that covers the cost, not a rounded guess. ";
+        if (p.boundVerdict === "floor" && p.uncappedFee === "0") {
+          text += "The minimum is doing all of this work: at this rate the sale alone rounds down to no fee at all, so the pure-rate count is never — the disclosed floor is what makes break-even reachable, and it belongs in the disclosure wherever the count is quoted. ";
+        }
+      }
+      text += "This is a plan only: nothing was charged, collected, sold or signed, and no wallet connected — DUST is a network transaction cost, never part of this fee.";
       host.textContent = text;
     });
 

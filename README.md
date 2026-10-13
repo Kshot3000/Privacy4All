@@ -75,9 +75,9 @@ renewable resource that pays for shielded transactions.
 
 ## Tools on the hub (local only, no wallet needed)
 
-The hub carries 91 tools; a **find-a-tool search** at the top of the tools
+The hub carries 92 tools; a **find-a-tool search** at the top of the tools
 section narrows the list as you type — every word must match a tool's title
-or first line, and clearing the search restores all 91.
+or first line, and clearing the search restores all 92.
 
 - **Paste-and-protect redactor** — finds and masks email addresses, Cardano
   addresses and US phone numbers in text you paste. Runs entirely in your
@@ -2522,6 +2522,45 @@ or first line, and clearing the search restores all 91.
   funds move and no wallet
   connects. DUST is never part of
   the fee.
+
+- **Break-even, counted in sales,
+  bounded fee — a
+  floor-and-ceiling fee
+  break-even planner** — the
+  break-even planner counts the
+  sales whose fees cover a cost at
+  a pure rate only, and the bounded
+  tools price everywhere except
+  that count, so break-even under
+  a bounded disclosure is planned
+  by neither, and the pure-rate
+  count is wrong in both
+  directions: on a 10,000-unit
+  cost with 1,000-unit sales at
+  250 bps it counts 400 sales
+  where a disclosed 100-unit
+  minimum breaks even at 100, and
+  the same 400 where a disclosed
+  10-unit maximum needs 1,000.
+  Enter the cost, the typical
+  sale, the rate and both bounds,
+  and it counts with the bounded
+  fee per sale — quoted by the
+  bounded quote itself, so the two
+  can never disagree. The bounds
+  move the verdicts, not just the
+  count: a floor rescues a sale
+  the pure rate prices at zero,
+  and a maximum of zero makes the
+  answer never, whatever the rate
+  says, and the planner names the
+  ceiling as the reason.
+  Honestly labelled: it plans; it
+  does not earn. Nothing is
+  charged, collected, sold or
+  signed, no funds move and no
+  wallet connects. DUST is never
+  part of the fee.
 
 ## Guides
 
