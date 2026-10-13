@@ -226,7 +226,7 @@
 
   <section id="tools" aria-labelledby="tools-h">
     <h2 id="tools-h">Privacy tools — right here, nothing leaves your browser</h2>
-    <p>Eighty-eight tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
+    <p>Eighty-nine tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
     <div class="filter-row" role="group" aria-label="Find a tool">
       <label for="tool-q">Find a tool</label>
       <input id="tool-q" type="search" placeholder="e.g. vote, sign, DUST, share a secret…" autocomplete="off">
@@ -2678,7 +2678,24 @@
         <button type="submit" class="btn primary">Write the bounded statement, locally</button>
         <p id="feecapdisclosure-result" role="status" aria-live="polite"></p>
       </form>
-      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 88 tools.</p>
+      <form class="tool" id="feecapsplit-plan">
+        <h3>89 · Split it fairly, bounded fee first — a floor-and-ceiling payment-split planner</h3>
+        <p>Tool 69 splits a payment fee first, but only at a pure rate, and tools 82 to 88 price and check bounded fees for a single recipient — so a split under a bounded disclosure is planned by neither: at a pure rate the planner takes 25 on 1,000 at 250 bps where the disclosed floor takes 100, and every share downstream of that wrong fee is wrong by its weight's share of the 75. Enter the amount, the rate, both bounds as they were disclosed and the recipient weights, and this planner takes the bounded fee first — quoted by tool 82 itself, so the fee here can never disagree with the bounded quote — then splits what is left. It plans; it does not pay out: nothing is charged, moved or signed, and no wallet connects.</p>
+        <p>The split itself is tool 69's, unchanged: each recipient's share is floored, and the handful of units flooring leaves over go one each to the largest fractional remainders, earliest recipient winning a tie — so the parts add up to the net exactly, with no unit created, lost, or quietly kept as an extra rounding fee on top of the disclosed one. The bounds change the shares, not just the fee: a floor takes more off a small split than the rate alone would, a ceiling leaves more in a large one, and the plan names which figure set the fee the shares were divided under. A rate of zero with a minimum fee is not a free payment: the minimum is taken first, on every amount, before anything splits. The fee is taken once, first, and named — never skimmed again from each part. DUST is a network transaction cost, never part of this fee.</p>
+        <label for="feecapsplit-amount">Amount, in the asset's smallest unit (a whole number — e.g. 1000000)</label>
+        <input id="feecapsplit-amount" inputmode="numeric" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="feecapsplit-bps">Service fee rate, in basis points (a whole number, at most 10000 — e.g. 250 = 2.5%) — taken once, first</label>
+        <input id="feecapsplit-bps" inputmode="numeric" placeholder="e.g. 250" autocomplete="off">
+        <label for="feecapsplit-min">Minimum fee that was disclosed, in whole units (a whole number — e.g. 100)</label>
+        <input id="feecapsplit-min" inputmode="numeric" placeholder="e.g. 100" autocomplete="off">
+        <label for="feecapsplit-max">Maximum fee that was disclosed, in whole units (a whole number, at least the minimum — e.g. 10000)</label>
+        <input id="feecapsplit-max" inputmode="numeric" placeholder="e.g. 10000" autocomplete="off">
+        <label for="feecapsplit-weights">Recipient weights, comma-separated whole numbers (2 to 8 recipients, each 1 to 10,000 — e.g. 50, 30, 20)</label>
+        <input id="feecapsplit-weights" inputmode="numeric" placeholder="e.g. 50, 30, 20" autocomplete="off">
+        <button type="submit" class="btn primary">Plan the bounded split, locally</button>
+        <p id="feecapsplit-result" role="status" aria-live="polite"></p>
+      </form>
+      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 89 tools.</p>
     </div>
   </section>
 
@@ -2712,6 +2729,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=88"></script>
+<script src="app.js?v=89"></script>
 </body>
 </html>

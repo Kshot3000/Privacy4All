@@ -75,9 +75,9 @@ renewable resource that pays for shielded transactions.
 
 ## Tools on the hub (local only, no wallet needed)
 
-The hub carries 88 tools; a **find-a-tool search** at the top of the tools
+The hub carries 89 tools; a **find-a-tool search** at the top of the tools
 section narrows the list as you type — every word must match a tool's title
-or first line, and clearing the search restores all 88.
+or first line, and clearing the search restores all 89.
 
 - **Paste-and-protect redactor** — finds and masks email addresses, Cardano
   addresses and US phone numbers in text you paste. Runs entirely in your
@@ -2404,6 +2404,47 @@ or first line, and clearing the search restores all 88.
   signed, no funds move and no
   wallet connects. DUST is never
   part of the fee.
+
+- **Split it fairly, bounded fee
+  first — a floor-and-ceiling
+  payment-split planner** — the
+  pure split planner takes its fee
+  at a pure rate only, and the
+  bounded tools price for a single
+  recipient, so a split under a
+  bounded disclosure is planned by
+  neither: at a pure rate it takes
+  25 on 1,000 at 250 bps where the
+  disclosed floor takes 100, and
+  every share downstream of that
+  wrong fee is wrong. Enter the
+  amount, the rate, both bounds
+  and 2 to 8 recipient weights,
+  and it takes the bounded fee
+  first — quoted by the bounded
+  quote itself, so the two can
+  never disagree — then splits the
+  bounded net by the split
+  planner's own largest-remainder
+  method: each share floored, the
+  leftover units one each to the
+  largest fractional remainders,
+  earliest recipient winning a
+  tie. The parts sum to the net
+  exactly and fee + net = amount,
+  always; the plan names which
+  figure set the fee — the minimum
+  raised it, the maximum cut it,
+  or neither bound changed it —
+  and a zero rate with a minimum
+  fee is not a free payment: the
+  minimum is taken first, before
+  anything splits. Honestly
+  labelled: it plans; it does not
+  pay out. Nothing is charged,
+  moved or signed, no funds move
+  and no wallet connects. DUST is
+  never part of the fee.
 
 ## Guides
 
