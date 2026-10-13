@@ -941,6 +941,60 @@ function feeCappedQuote(amountStr, bpsStr, minStr, maxStr) {
   };
 }
 
+/* ---------- 83. Check a bounded fee you were charged ---------- */
+/* Tool 82 quotes a fee bounded by a disclosed floor and ceiling;
+   this one is the check afterwards, and tool 77 cannot do it: tool
+   77 recomputes a pure rate, so on a bounded disclosure it names a
+   correct floor charge an overcharge (on 1,000 at 250 bps with a
+   100 minimum, the disclosed fee is 100 and tool 77 expects 25 —
+   an "over by 75" verdict on a charge that matches the disclosure
+   to the unit) and a correct ceiling charge an undercharge.
+   feeCappedChargeCheck takes the amount, the rate, both bounds as
+   disclosed and the fee actually charged, and recomputes the
+   expectation with tool 82's own feeCappedQuote — so the
+   expectation can never disagree with the bounded quote — then
+   names the verdict exactly: exact, or over or under by the exact
+   difference, with the net the amount actually settled for beside
+   the net that was disclosed, and the bound verdict (floor,
+   ceiling or rate) carried through so the evidence names which
+   figure set the expected fee. The floor's sharpest case cuts the
+   other way from tool 77's threshold: below the rate's zero-fee
+   threshold the bounded fee is the whole minimum, so a charge of
+   zero there is UNDER by the whole minimum, not exact — paying
+   nothing is only correct when the disclosure itself prices
+   nothing. All arithmetic is exact BigInt, so the verdict holds
+   past 2^53. A charged figure that is not a whole number, and
+   anything tool 82 refuses, are refused (null), never repaired
+   into a plausible verdict. This function only checks — it
+   charges nothing, refunds nothing, disputes nothing and connects
+   no wallet; the verdict is the evidence a user takes back to the
+   app, stated in the app's own disclosed numbers. */
+function feeCappedChargeCheck(amountStr, bpsStr, minStr, maxStr, chargedStr) {
+  var quote = feeCappedQuote(amountStr, bpsStr, minStr, maxStr);
+  if (quote === null) return null;
+  var c = (chargedStr == null ? "" : String(chargedStr)).trim();
+  if (!/^\d+$/.test(c)) return null;
+  var charged = BigInt(c);
+  var expected = BigInt(quote.fee);
+  var diff = charged - expected;
+  return {
+    amount: quote.amount,
+    bps: quote.bps,
+    percent: quote.percent,
+    zeroBelow: quote.zeroBelow,
+    uncappedFee: quote.uncappedFee,
+    minFee: quote.minFee,
+    maxFee: quote.maxFee,
+    boundVerdict: quote.verdict,
+    expectedFee: quote.fee,
+    expectedNet: quote.net,
+    charged: charged.toString(),
+    chargedNet: (BigInt(quote.amount) - charged).toString(),
+    status: diff === 0n ? "exact" : diff > 0n ? "over" : "under",
+    difference: (diff < 0n ? -diff : diff).toString()
+  };
+}
+
 /* ---------- 4. What does this dApp see? ---------- */
 /* level: "low" = usually needed to connect, "caution" = ask why and limit
    it before granting, "high" = do not grant blindly for a routine visit. */
@@ -16135,6 +16189,7 @@ if (typeof module !== "undefined" && module.exports) {
                      feeRefundBatchCheck,
                      feeRateWordingCheck, RATE_WORDING_MAX_PERCENT_DECIMALS,
                      feeCappedQuote,
+                     feeCappedChargeCheck,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
@@ -16894,6 +16949,32 @@ if (typeof document !== "undefined") {
         text += "Verdict: rate — the rate alone set this fee; neither bound changed it, so this quote is exactly tool 68's pure-rate quote. ";
       }
       text += "This is a quote only: nothing was charged, moved or signed, and no wallet connected — the figures are computed locally from the numbers you entered. DUST is a network transaction cost, never part of this fee.";
+      host.textContent = text;
+    });
+
+    /* --- check a bounded fee you were charged --- */
+    document.getElementById("feecapcharge-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var v = feeCappedChargeCheck(document.getElementById("feecapcharge-amount").value,
+                             document.getElementById("feecapcharge-bps").value,
+                             document.getElementById("feecapcharge-min").value,
+                             document.getElementById("feecapcharge-max").value,
+                             document.getElementById("feecapcharge-charged").value);
+      var host = document.getElementById("feecapcharge-result");
+      if (v === null) {
+        host.textContent = "Enter an amount in whole units, a fee rate in basis points (a whole number, at most 10000 — e.g. 250 = 2.5%), a minimum fee and a maximum fee in whole units, with the minimum at most the maximum and at most the amount itself, and the fee you were charged in whole units. Anything else is refused, not guessed at.";
+        return;
+      }
+      var text = "Bounded fee charge check — on an amount of " + v.amount + " units at " + v.bps + " bps (" + v.percent + "%), the rate alone takes " + v.uncappedFee + " units; with the disclosed minimum of " + v.minFee + " units and maximum of " + v.maxFee + " units, the disclosed fee is " + v.expectedFee + " units (set by the " + v.boundVerdict + "), for a disclosed net of " + v.expectedNet + " units. You were charged " + v.charged + " units, so your amount settled for " + v.chargedNet + " units. ";
+      if (v.status === "exact") {
+        text += "Verdict: exact — the charge matches the bounded disclosure to the unit, bounds included. A pure-rate check would misread this charge whenever a bound set the fee; the bounded disclosure is the one that governs. ";
+      } else if (v.status === "over") {
+        text += "Verdict: over — you were charged " + v.difference + " units more than the bounded disclosure allows. Neither the rate nor either bound explains the extra: the floor and the ceiling are part of the disclosure, and a charge above the expected fee is above all three. ";
+      } else {
+        text += "Verdict: under — you were charged " + v.difference + " units less than the bounded disclosure states. " +
+          (v.charged === "0" && v.boundVerdict === "floor" ? "Paying nothing is not exact here: below the rate's own fee the floor still takes the whole minimum, so a zero charge falls short of the disclosure by the whole minimum. " : "An undercharge is still a mismatch: the app's books and yours will not reconcile against its own disclosure. ");
+      }
+      text += "This is a check only: nothing was charged, refunded, disputed or signed, and no wallet connected — the verdict is computed locally from the numbers you entered, so check them against the disclosure itself first. DUST is a network transaction cost, never part of this fee.";
       host.textContent = text;
     });
 

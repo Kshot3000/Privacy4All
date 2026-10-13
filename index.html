@@ -226,7 +226,7 @@
 
   <section id="tools" aria-labelledby="tools-h">
     <h2 id="tools-h">Privacy tools — right here, nothing leaves your browser</h2>
-    <p>Eighty-two tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
+    <p>Eighty-three tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
     <div class="filter-row" role="group" aria-label="Find a tool">
       <label for="tool-q">Find a tool</label>
       <input id="tool-q" type="search" placeholder="e.g. vote, sign, DUST, share a secret…" autocomplete="off">
@@ -2566,7 +2566,24 @@
         <button type="submit" class="btn primary">Quote the bounded fee, locally</button>
         <p id="feecap-result" role="status" aria-live="polite"></p>
       </form>
-      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 82 tools.</p>
+      <form class="tool" id="feecapcharge-check">
+        <h3>83 · Check the bounded fee you were charged — a floor-and-ceiling charge checker</h3>
+        <p>Tool 82 quotes a fee bounded by a disclosed floor and ceiling; this one is the check afterwards — and tool 77 cannot do it, because tool 77 recomputes a pure rate: on a bounded disclosure it would call a correct floor charge an overcharge and a correct ceiling charge an undercharge. Enter the amount, the rate, both bounds as they were disclosed and the fee you were actually charged, and this checker recomputes the disclosed fee with tool 82 itself — so the expectation can never disagree with the bounded quote — and names the verdict exactly: the charge matches the bounded disclosure to the unit, or it is over or under by the exact difference, with the net your amount actually settled for beside the net that was disclosed. It checks; it does not charge: nothing is charged, refunded, disputed or signed, and no wallet connects.</p>
+        <p>The floor's sharpest case cuts the other way from the pure-rate threshold: below the rate's zero-fee threshold the bounded fee is the whole minimum, so a charge of zero there is under by the whole minimum, not exact — paying nothing is only correct when the disclosure itself prices nothing, and a “0% rate” with a minimum fee is not a free payment after the fact either. The verdict is computed locally from the numbers you type, in exact integer arithmetic that holds past 2<sup>53</sup>: this checker reads no disclosure and looks nothing up, so check the numbers against the disclosure itself first — the verdict is the evidence you take back to the app, stated in the app's own disclosed numbers, bounds included. DUST is a network transaction cost, never part of this fee.</p>
+        <label for="feecapcharge-amount">Amount the fee was charged on, in whole units (a whole number — e.g. 1000000)</label>
+        <input id="feecapcharge-amount" inputmode="numeric" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="feecapcharge-bps">Fee rate that was disclosed, in basis points (a whole number, at most 10000 — e.g. 250 = 2.5%)</label>
+        <input id="feecapcharge-bps" inputmode="numeric" placeholder="e.g. 250" autocomplete="off">
+        <label for="feecapcharge-min">Minimum fee that was disclosed, in whole units (a whole number — e.g. 100)</label>
+        <input id="feecapcharge-min" inputmode="numeric" placeholder="e.g. 100" autocomplete="off">
+        <label for="feecapcharge-max">Maximum fee that was disclosed, in whole units (a whole number, at least the minimum — e.g. 50000)</label>
+        <input id="feecapcharge-max" inputmode="numeric" placeholder="e.g. 50000" autocomplete="off">
+        <label for="feecapcharge-charged">Fee you were actually charged, in whole units (a whole number — e.g. 25000)</label>
+        <input id="feecapcharge-charged" inputmode="numeric" placeholder="e.g. 25000" autocomplete="off">
+        <button type="submit" class="btn primary">Check the bounded charge, locally</button>
+        <p id="feecapcharge-result" role="status" aria-live="polite"></p>
+      </form>
+      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 83 tools.</p>
     </div>
   </section>
 
@@ -2600,6 +2617,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=81"></script>
+<script src="app.js?v=82"></script>
 </body>
 </html>

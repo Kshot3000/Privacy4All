@@ -75,9 +75,9 @@ renewable resource that pays for shielded transactions.
 
 ## Tools on the hub (local only, no wallet needed)
 
-The hub carries 82 tools; a **find-a-tool search** at the top of the tools
+The hub carries 83 tools; a **find-a-tool search** at the top of the tools
 section narrows the list as you type — every word must match a tool's title
-or first line, and clearing the search restores all 82.
+or first line, and clearing the search restores all 83.
 
 - **Paste-and-protect redactor** — finds and masks email addresses, Cardano
   addresses and US phone numbers in text you paste. Runs entirely in your
@@ -2225,6 +2225,30 @@ or first line, and clearing the search restores all 82.
   funds move and no wallet
   connects. DUST is never part of
   the fee.
+
+- **Check the bounded fee you were
+  charged — a floor-and-ceiling
+  charge checker** — tool 82 quotes
+  a bounded fee; this checker is
+  the check afterwards, and tool
+  77 cannot do it: a pure-rate
+  check would call a correct floor
+  charge an overcharge. Enter the
+  amount, the rate, both bounds
+  and the fee actually charged,
+  and it recomputes the disclosed
+  fee with tool 82 itself and names
+  the verdict: exact, or over or
+  under by the exact difference.
+  Below the rate's zero-fee
+  threshold a charge of zero is
+  under by the whole minimum, not
+  exact. Honestly labelled:
+  it checks; it does not charge.
+  Nothing is charged, refunded or
+  disputed, no funds move and no
+  wallet connects. DUST is never
+  part of the fee.
 
 ## Guides
 
