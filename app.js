@@ -16618,7 +16618,7 @@ if (typeof document !== "undefined") {
       var s = splitPayment(document.getElementById("split-amount").value,
                            document.getElementById("split-bps").value,
                            document.getElementById("split-weights").value);
-      var host = document.getElementById("split-result");
+      var host = document.getElementById("splitpay-result");
       if (s === null) {
         host.textContent = "Enter the amount as a whole number of smallest units, the rate as a whole number of basis points at or under 10,000 (100%), and 2 to 8 whole-number weights separated by commas (each 1 to 10,000). Anything else is refused, not split.";
         return;
