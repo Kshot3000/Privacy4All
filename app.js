@@ -1805,6 +1805,96 @@ function anonymitySetEstimate(crowdStr, detailsStr) {
   };
 }
 
+/* ---------- 95. How much room is left in your crowd? ---------- */
+/* Tool 94 measures the crowd that is left after the details an
+   observer already knows. This is its planning inverse, asked
+   BEFORE anything more is shared: given the crowd, the smallest
+   group size you refuse to drop below (your minimum set), and
+   the details already known, how much distinguishing room is
+   left? The budget is exact in BigInt: the most combinations
+   you can afford is the crowd divided by the minimum set,
+   rounded DOWN, and what remains is that budget divided by the
+   combinations the known details already use, rounded DOWN
+   again — every rounding is toward less room, never more,
+   because rounding up would flatter the protection. The
+   remaining combinations are also the largest single next
+   detail you can afford: one more detail splitting the crowd
+   into more groups than that, and the expected group drops
+   below your minimum. The verdict names the position: room
+   (at least one more 2-way split is affordable), at-limit
+   (the minimum holds, but nothing distinguishing is left —
+   the only affordable next detail splits nothing), or over
+   (the known details already put the expected group below
+   the minimum — the position tool 94 would report, checked
+   against the line you set). Bit counts ride along as exact
+   floors of log2 from binary length, as in tool 94. An empty
+   details list is legitimate here and means nothing is known
+   yet — a budget is asked at the start, unlike tool 94 where
+   the list is the whole question — and an absent list is
+   read the same way. Refused (null), never repaired: a crowd
+   or minimum that is not a whole number, a crowd of zero, a
+   minimum under 1 or above the crowd itself (a group bigger
+   than the crowd can never exist, so that minimum is not a
+   plan but an impossibility), a detail of zero groups or
+   above ANONBUDGET_MAX_GROUPS, more than
+   ANONBUDGET_MAX_DETAILS details, and malformed lists. This
+   inherits tool 94's honesty in full: the numbers are a BEST
+   CASE under independence and equal likelihood, real crowds
+   are skewed so the real room can only be smaller, and this
+   plans only — it looks nobody up, identifies nobody,
+   connects no wallet and reads no chain data; the crowd size
+   is a number you type, not a live pool count. */
+var ANONBUDGET_MAX_DETAILS = 12;
+var ANONBUDGET_MAX_GROUPS = 1000000;
+function anonymityBudget(crowdStr, minSetStr, detailsStr) {
+  var c = (crowdStr == null ? "" : String(crowdStr)).trim();
+  if (!/^\d+$/.test(c)) return null;
+  var crowd = BigInt(c);
+  if (crowd === 0n) return null;
+  var m = (minSetStr == null ? "" : String(minSetStr)).trim();
+  if (!/^\d+$/.test(m)) return null;
+  var minSet = BigInt(m);
+  if (minSet < 1n || minSet > crowd) return null;
+  var details = [];
+  var usedCombinations = 1n;
+  var d = (detailsStr == null ? "" : String(detailsStr)).trim();
+  if (d) {
+    var raw = d.split(",");
+    if (raw.length < 1 || raw.length > ANONBUDGET_MAX_DETAILS) return null;
+    for (var i = 0; i < raw.length; i++) {
+      var t = raw[i].trim();
+      if (!/^\d+$/.test(t)) return null;
+      var g = BigInt(t);
+      if (g < 1n || g > BigInt(ANONBUDGET_MAX_GROUPS)) return null;
+      details.push(g.toString());
+      usedCombinations *= g;
+    }
+  }
+  var budgetCombinations = crowd / minSet;
+  var remainingCombinations = budgetCombinations / usedCombinations;
+  var expectedSet = crowd / usedCombinations;
+  function bitsOf(x) {
+    return x >= 1n ? (x.toString(2).length - 1).toString() : null;
+  }
+  var verdict = expectedSet < minSet ? "over"
+    : remainingCombinations <= 1n ? "at-limit"
+    : "room";
+  return {
+    crowd: crowd.toString(),
+    minSet: minSet.toString(),
+    details: details,
+    usedCombinations: usedCombinations.toString(),
+    budgetCombinations: budgetCombinations.toString(),
+    remainingCombinations: remainingCombinations.toString(),
+    largestNextDetail: remainingCombinations.toString(),
+    expectedSet: expectedSet.toString(),
+    usedBits: bitsOf(usedCombinations),
+    budgetBits: bitsOf(budgetCombinations),
+    remainingBits: bitsOf(remainingCombinations),
+    verdict: verdict
+  };
+}
+
 /* ---------- 4. What does this dApp see? ---------- */
 /* level: "low" = usually needed to connect, "caution" = ask why and limit
    it before granting, "high" = do not grant blindly for a routine visit. */
@@ -17011,6 +17101,7 @@ if (typeof module !== "undefined" && module.exports) {
                      feeCappedBreakEvenPlan,
                      feeCappedNetTargetPrice,
                      anonymitySetEstimate, ANONSET_MAX_DETAILS, ANONSET_MAX_GROUPS,
+                     anonymityBudget, ANONBUDGET_MAX_DETAILS, ANONBUDGET_MAX_GROUPS,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
@@ -17786,6 +17877,32 @@ if (typeof document !== "undefined") {
         text += "A detail with 1 group splits nothing — everyone shares it — so it costs no cover; the details that cost cover are the ones with more groups. ";
       }
       text += "This is a best case, never a guarantee: it assumes every detail is independent and every group equally likely, and real crowds are skewed, so the real group can only be smaller. This estimates only: nobody was looked up or identified, no wallet connected, and no chain data was read — the crowd size is the number you typed, not a live pool count.";
+      host.textContent = text;
+    });
+
+    /* --- how much room is left in your crowd? --- */
+    document.getElementById("anonbudget-plan").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var p = anonymityBudget(document.getElementById("anonbudget-crowd").value,
+                            document.getElementById("anonbudget-minset").value,
+                            document.getElementById("anonbudget-details").value);
+      var host = document.getElementById("anonbudget-result");
+      if (p === null) {
+        host.textContent = "Enter the size of your crowd and the smallest group you refuse to drop below (whole numbers, the minimum at least 1 and at most the crowd itself), plus the group count for each detail already known, comma-separated — whole numbers of at least 1, at most 1000000 each, up to 12 details, or leave that field empty if nothing is known yet. Anything else is refused, not guessed at.";
+        return;
+      }
+      var verdictPhrase = p.verdict === "room" ? "room — the minimum holds with distinguishing room to spare"
+        : p.verdict === "at-limit" ? "at the limit — the minimum still holds, but no distinguishing detail is left: the only affordable next detail is one that splits nothing"
+        : "over — the details already known put the expected group below the minimum you set";
+      var text = "Anonymity budget — a crowd of " + p.crowd + " people and a minimum group of " + p.minSet + ": you can afford at most " + p.budgetCombinations + (p.budgetCombinations === "1" ? " combination" : " combinations") + " in total (about " + p.budgetBits + (p.budgetBits === "1" ? " bit" : " bits") + " of distinguishing information). ";
+      text += p.details.length === 0
+        ? "Nothing is known yet, so none of the budget is used and the expected group is still the whole crowd of " + p.expectedSet + ". "
+        : "The " + p.details.length + (p.details.length === 1 ? " detail" : " details") + " already known (" + p.details.join(", ") + ") use" + (p.details.length === 1 ? "s" : "") + " " + p.usedCombinations + (p.usedCombinations === "1" ? " combination" : " combinations") + ", leaving an expected group of " + p.expectedSet + (p.expectedSet === "1" ? " person" : " people") + " and " + p.remainingCombinations + (p.remainingCombinations === "1" ? " combination" : " combinations") + " of room. ";
+      if (p.verdict === "room") {
+        text += "The largest single next detail you can afford splits the crowd into at most " + p.largestNextDetail + " groups — one splitting it into more than that drops the expected group below your minimum. ";
+      }
+      text += "The verdict is " + verdictPhrase + ". ";
+      text += "This is a best case, never a guarantee: it assumes every detail is independent and every group equally likely, and real crowds are skewed, so the real room can only be smaller. This plans only: nobody was looked up or identified, no wallet connected, and no chain data was read — the crowd size is the number you typed, not a live pool count.";
       host.textContent = text;
     });
 

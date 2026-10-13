@@ -226,7 +226,7 @@
 
   <section id="tools" aria-labelledby="tools-h">
     <h2 id="tools-h">Privacy tools — right here, nothing leaves your browser</h2>
-    <p>Ninety-four tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
+    <p>Ninety-five tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
     <div class="filter-row" role="group" aria-label="Find a tool">
       <label for="tool-q">Find a tool</label>
       <input id="tool-q" type="search" placeholder="e.g. vote, sign, DUST, share a secret…" autocomplete="off">
@@ -2775,7 +2775,20 @@
         <button type="submit" class="btn primary">Measure my crowd, locally</button>
         <p id="anonset-result" role="status" aria-live="polite"></p>
       </form>
-      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 94 tools.</p>
+      <form class="tool" id="anonbudget-plan">
+        <h3>95 · How much room is left in your crowd? — an anonymity budget planner</h3>
+        <p>Tool 94 measures the crowd that is left after the details an observer already knows. This planner asks the question before anything more is shared: enter the size of your crowd, the smallest group you refuse to drop below, and the details already known, and it works out exactly how much distinguishing room is left — the most combinations you can afford is the crowd divided by your minimum group, rounded down, and what remains after the known details is that budget divided by their combinations, rounded down again, because rounding up would flatter the protection. The room left is also the largest single next detail you can afford: one more detail splitting the crowd into more groups than that, and you drop below your own minimum. It plans; it does not identify: nobody is looked up, no wallet connects, and no chain data is read — the crowd size is a number you type, not a live pool count.</p>
+        <p>This is a best case, never a guarantee: like tool 94 it assumes every detail is independent of the others and every group is equally likely, and real crowds are skewed, so the real room can only be smaller than this plan, never larger. Leave the known-details field empty if nothing is known yet — a budget is asked at the start. A minimum above the crowd itself is refused rather than planned around: a group bigger than the crowd can never exist, so that is not a plan but an impossibility. The practical lesson cuts the other way from collecting more cover stories: privacy is a budget spent one detail at a time, and the cheapest detail to protect is the one you never share.</p>
+        <label for="anonbudget-crowd">Size of the crowd you are hiding in, in people (a whole number, at least 1 — e.g. 100000)</label>
+        <input id="anonbudget-crowd" inputmode="numeric" placeholder="e.g. 100000" autocomplete="off">
+        <label for="anonbudget-minset">Smallest group you refuse to drop below, in people (a whole number, at least 1 and at most the crowd — e.g. 100)</label>
+        <input id="anonbudget-minset" inputmode="numeric" placeholder="e.g. 100" autocomplete="off">
+        <label for="anonbudget-details">Groups each detail already known splits the crowd into, comma-separated (whole numbers, at least 1, at most 1000000 each, up to 12 details — e.g. 4, 8 — or leave empty if nothing is known yet)</label>
+        <input id="anonbudget-details" inputmode="numeric" placeholder="e.g. 4, 8" autocomplete="off">
+        <button type="submit" class="btn primary">Plan my budget, locally</button>
+        <p id="anonbudget-result" role="status" aria-live="polite"></p>
+      </form>
+      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 95 tools.</p>
     </div>
   </section>
 
@@ -2809,6 +2822,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=94"></script>
+<script src="app.js?v=95"></script>
 </body>
 </html>

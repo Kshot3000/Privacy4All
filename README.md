@@ -75,9 +75,9 @@ renewable resource that pays for shielded transactions.
 
 ## Tools on the hub (local only, no wallet needed)
 
-The hub carries 94 tools; a **find-a-tool search** at the top of the tools
+The hub carries 95 tools; a **find-a-tool search** at the top of the tools
 section narrows the list as you type — every word must match a tool's title
-or first line, and clearing the search restores all 94.
+or first line, and clearing the search restores all 95.
 
 - **Paste-and-protect redactor** — finds and masks email addresses, Cardano
   addresses and US phone numbers in text you paste. Runs entirely in your
@@ -2627,6 +2627,37 @@ or first line, and clearing the search restores all 94.
   equally likely, and real crowds
   are skewed, so the real group
   can only be smaller. It estimates; it does not
+  identify — nobody is looked up,
+  no wallet connects, no chain
+  data is read, and the crowd
+  size is a number you type, not
+  a live pool count.
+
+- **How much room is left in your
+  crowd? — an anonymity budget
+  planner** — the planning inverse
+  of the estimator above, asked
+  before anything more is shared.
+  Enter the crowd, the smallest
+  group you refuse to drop below,
+  and the details already known,
+  and it divides exactly in
+  BigInt: the budget is the crowd
+  divided by the minimum group,
+  rounded down, and the room left
+  is that budget divided by the
+  known details' combinations,
+  rounded down again — and the
+  room is also the largest single
+  next detail you can afford.
+  It names the position: room,
+  at the limit, or over.
+  Honestly labelled a best case,
+  never a guarantee, on the same
+  independence and equal-likelihood
+  assumptions as the estimator,
+  so the real room can only be
+  smaller. It plans; it does not
   identify — nobody is looked up,
   no wallet connects, no chain
   data is read, and the crowd
