@@ -601,6 +601,59 @@ function feeChargeCheck(amountStr, bpsStr, chargedStr) {
   };
 }
 
+/* ---------- 78. Check the refund came back whole ---------- */
+/* Tool 77 checks the fee on a charge that settled; this one checks
+   the other exit. The fee-design guide's rule for escrow — stated
+   in tool 76's own disclosure text — is that the fee is taken on
+   release only and a refund returns the full amount with no fee
+   charged, and the same rule belongs anywhere a disclosed fee
+   meets a refund: a refund reverses the payment, so the whole
+   amount is the expected refund. Given the amount paid, the rate
+   that was disclosed and the amount refunded, this checker names
+   the verdict exactly. The sharpest case is named on its own:
+   when what came back is exactly tool 68's net — the amount minus
+   the disclosed fee — the fee was charged on the refund itself,
+   which the disclosure forbids, so the verdict is "fee-taken",
+   not a generic shortfall. A shortfall of any other size is
+   "short" and unexplained: it is not the disclosed fee, and
+   rounding never explains it, because a disclosed rate rounds
+   down in the user's favour. More back than was paid is "over" —
+   the app's books will not match either. The fee expectation is
+   borrowed from tool 68's own honestFeeQuote, so it can never
+   disagree with the quote; all arithmetic is exact BigInt, so
+   the verdict holds past 2^53. A refunded figure that is not a
+   whole number, and anything tool 68 refuses, are refused
+   (null), never repaired into a plausible verdict. This
+   function only checks — it charges nothing, refunds nothing,
+   disputes nothing and connects no wallet; the verdict is the
+   evidence a user takes back to the app, stated in the app's
+   own disclosed numbers. */
+function feeRefundCheck(amountStr, bpsStr, refundedStr) {
+  var quote = honestFeeQuote(amountStr, bpsStr);
+  if (quote === null) return null;
+  var r = (refundedStr == null ? "" : String(refundedStr)).trim();
+  if (!/^\d+$/.test(r)) return null;
+  var refunded = BigInt(r);
+  var amount = BigInt(quote.amount);
+  var fee = BigInt(quote.fee);
+  var net = BigInt(quote.net);
+  var diff = refunded - amount;
+  var status = diff === 0n ? "full"
+    : refunded === net && fee > 0n ? "fee-taken"
+    : diff < 0n ? "short" : "over";
+  return {
+    amount: quote.amount,
+    bps: quote.bps,
+    percent: quote.percent,
+    zeroBelow: quote.zeroBelow,
+    fee: quote.fee,
+    net: quote.net,
+    refunded: refunded.toString(),
+    status: status,
+    difference: (diff < 0n ? -diff : diff).toString()
+  };
+}
+
 /* ---------- 4. What does this dApp see? ---------- */
 /* level: "low" = usually needed to connect, "caution" = ask why and limit
    it before granting, "high" = do not grant blindly for a routine visit. */
@@ -15790,6 +15843,7 @@ if (typeof module !== "undefined" && module.exports) {
                      netTargetPrice,
                      feeDisclosure, FEE_DISCLOSURE_PLACEMENTS, FEE_DISCLOSURE_MAX_RECIPIENT,
                      feeChargeCheck,
+                     feeRefundCheck,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
@@ -16412,6 +16466,31 @@ if (typeof document !== "undefined") {
             : "That difference is not rounding: the disclosed rate rounds down in the user's favour, never up. ");
       } else {
         text += "Undercharged by " + v.difference + " units: the amount settled for " + v.chargedNet + " units instead of the disclosed " + v.expectedNet + " units — less than the disclosed fee, in your favour, and worth the app knowing so its books match its disclosure. ";
+      }
+      text += "This is a check only: nothing was charged, refunded, disputed or signed, and no wallet connected — the verdict is computed locally from the numbers you entered, so check them against your receipt first. DUST is a network transaction cost, never part of this fee.";
+      host.textContent = text;
+    });
+
+    /* --- check the refund came back whole --- */
+    document.getElementById("feerefund-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var v = feeRefundCheck(document.getElementById("feerefund-amount").value,
+                             document.getElementById("feerefund-bps").value,
+                             document.getElementById("feerefund-refunded").value);
+      var host = document.getElementById("feerefund-result");
+      if (v === null) {
+        host.textContent = "Enter the amount that was paid, the fee rate that was disclosed in basis points (250 = 2.5%, at most 10000) and the amount you were refunded, all as whole numbers. Anything else is refused, not guessed at.";
+        return;
+      }
+      var text = "Fee refund check — amount paid " + v.amount + " units · disclosed fee " + v.percent + "% (" + v.bps + " bps) · the disclosed fee on this amount is " + v.fee + " units, and you were refunded " + v.refunded + " units. ";
+      if (v.status === "full") {
+        text += "Full refund: the whole amount came back and no fee was taken — a refund reverses the payment, and the disclosed fee is taken on settlement, never on a refund. ";
+      } else if (v.status === "fee-taken") {
+        text += "A fee was taken from the refund: what came back is exactly the disclosed net — the amount minus the " + v.fee + "-unit fee — so the fee was charged on the refund itself, which the disclosure forbids: refunds are never charged. The amount short is " + v.difference + " units. ";
+      } else if (v.status === "short") {
+        text += "Short by " + v.difference + " units: less came back than the full amount, and the shortfall is not explained by the disclosed fee, which is " + v.fee + " units on this amount — a disclosed rate rounds down in the user's favour, never up, so rounding does not explain it either. ";
+      } else {
+        text += "Over by " + v.difference + " units: more came back than was paid — worth the app knowing, because its books will not match the payment either. ";
       }
       text += "This is a check only: nothing was charged, refunded, disputed or signed, and no wallet connected — the verdict is computed locally from the numbers you entered, so check them against your receipt first. DUST is a network transaction cost, never part of this fee.";
       host.textContent = text;

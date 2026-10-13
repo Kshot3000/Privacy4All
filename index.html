@@ -226,7 +226,7 @@
 
   <section id="tools" aria-labelledby="tools-h">
     <h2 id="tools-h">Privacy tools — right here, nothing leaves your browser</h2>
-    <p>Seventy-seven tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
+    <p>Seventy-eight tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
     <div class="filter-row" role="group" aria-label="Find a tool">
       <label for="tool-q">Find a tool</label>
       <input id="tool-q" type="search" placeholder="e.g. vote, sign, DUST, share a secret…" autocomplete="off">
@@ -2499,7 +2499,20 @@
         <button type="submit" class="btn primary">Check the charge, locally</button>
         <p id="feecharge-result" role="status" aria-live="polite"></p>
       </form>
-      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 77 tools.</p>
+      <form class="tool" id="feerefund-check">
+        <h3>78 · Check the refund came back whole — a fee refund checker</h3>
+        <p>Tool 77 checks the fee on a charge that settled; this one checks the other exit. My fee-design guide's rule for escrow is that the fee is taken on release only and a refund returns the full amount with no fee charged — and the same rule belongs anywhere a disclosed fee meets a refund: a refund reverses the payment, so the whole amount comes back. Enter the amount that was paid, the fee rate that was disclosed and the amount you were refunded, and this checker names the verdict exactly: the refund is whole, or a fee was taken from it, or it is short or over by the exact difference. It checks; it does not refund: nothing is charged, refunded, disputed or signed, and no wallet connects.</p>
+        <p>The sharpest case is named on its own: when the amount that came back is exactly the disclosed net — the amount minus the fee — the fee was charged on the refund itself, which the disclosure forbids, and this checker says so rather than calling it a shortfall. A shortfall of any other size is named as unexplained: it is not the disclosed fee, and rounding never explains it, because a disclosed rate rounds down in the user's favour. The verdict is computed locally from the numbers you type, in exact integer arithmetic that holds past 2<sup>53</sup>: this checker reads no receipt and looks nothing up, so check the numbers against your own record first — the verdict is the evidence you take back to the app, stated in the app's own disclosed numbers. DUST is a network transaction cost, never part of this fee.</p>
+        <label for="feerefund-amount">Amount that was paid, in whole units (a whole number — e.g. 1000000)</label>
+        <input id="feerefund-amount" inputmode="numeric" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="feerefund-bps">Fee rate that was disclosed, in basis points (a whole number, at most 10000 — e.g. 250 = 2.5%)</label>
+        <input id="feerefund-bps" inputmode="numeric" placeholder="e.g. 250" autocomplete="off">
+        <label for="feerefund-refunded">Amount you were refunded, in whole units (a whole number — e.g. 1000000)</label>
+        <input id="feerefund-refunded" inputmode="numeric" placeholder="e.g. 1000000" autocomplete="off">
+        <button type="submit" class="btn primary">Check the refund, locally</button>
+        <p id="feerefund-result" role="status" aria-live="polite"></p>
+      </form>
+      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 78 tools.</p>
     </div>
   </section>
 
@@ -2533,6 +2546,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=76"></script>
+<script src="app.js?v=77"></script>
 </body>
 </html>

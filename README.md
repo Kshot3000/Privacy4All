@@ -75,9 +75,9 @@ renewable resource that pays for shielded transactions.
 
 ## Tools on the hub (local only, no wallet needed)
 
-The hub carries 77 tools; a **find-a-tool search** at the top of the tools
+The hub carries 78 tools; a **find-a-tool search** at the top of the tools
 section narrows the list as you type — every word must match a tool's title
-or first line, and clearing the search restores all 77.
+or first line, and clearing the search restores all 78.
 
 - **Paste-and-protect redactor** — finds and masks email addresses, Cardano
   addresses and US phone numbers in text you paste. Runs entirely in your
@@ -2091,6 +2091,31 @@ or first line, and clearing the search restores all 77.
   disputed, no funds move and no
   wallet connects. DUST is never
   part of the fee.
+
+- **Check the refund came back
+  whole — a fee refund checker** —
+  the refund-side companion to the
+  charge checker: a refund reverses
+  the payment, so the disclosed
+  fee — taken on settlement or
+  release only, never on a refund —
+  means the whole amount comes
+  back. Enter the amount paid, the
+  disclosed rate and the amount
+  refunded, and it names the
+  verdict exactly: a full refund,
+  a fee taken from the refund (the
+  amount that came back is exactly
+  the disclosed net, so the fee
+  was charged on the refund
+  itself), or a refund short or
+  over by the exact difference.
+  Honestly labelled: it checks; it
+  does not refund. Nothing is
+  charged, refunded or disputed,
+  no funds move and no wallet
+  connects. DUST is never part of
+  the fee.
 
 ## Guides
 
