@@ -654,6 +654,93 @@ function feeRefundCheck(amountStr, bpsStr, refundedStr) {
   };
 }
 
+/* ---------- 79. Reconcile a batch of fees, line by line ---------- */
+/* Tools 77 and 78 check one charge and one refund; a real statement
+   has many lines, and checking only the totals is not enough: an
+   overcharge on one line and an undercharge on another cancel out
+   in the total while both lines are wrong. feeBatchCheck takes
+   2-12 amounts that were all charged at one disclosed rate, and
+   the fee charged on each, recomputes every line's disclosed fee
+   with tool 68's own honestFeeQuote — so no line's expectation can
+   disagree with the quote — and names each line exact, over or
+   under by the exact difference. The verdict follows the lines,
+   never the totals alone: all exact is "exact"; any mix of over
+   and under lines is "mixed" even when the totals happen to net
+   to zero, because a netted total is not a matched statement.
+   All arithmetic is exact BigInt, so the verdicts hold past 2^53.
+   A list that is not 2-12 whole numbers, two lists of different
+   lengths, and anything tool 68 refuses are refused (null), never
+   repaired into a plausible verdict. This function only checks —
+   it charges nothing, refunds nothing, disputes nothing and
+   connects no wallet; it reads no statement and looks nothing up,
+   so the verdict is evidence stated in the app's own disclosed
+   numbers, taken from the numbers entered here. */
+var BATCH_MIN_LINES = 2;
+var BATCH_MAX_LINES = 12;
+
+function parseBatchList(str) {
+  if (str == null) return null;
+  var t = String(str).trim();
+  if (!t) return null;
+  var raw = t.split(",");
+  var out = [];
+  for (var i = 0; i < raw.length; i++) {
+    var x = raw[i].trim();
+    if (!/^\d+$/.test(x)) return null;
+    out.push(x);
+  }
+  return out;
+}
+
+function feeBatchCheck(amountsStr, bpsStr, chargesStr) {
+  var amounts = parseBatchList(amountsStr);
+  var charges = parseBatchList(chargesStr);
+  if (amounts === null || charges === null) return null;
+  if (amounts.length < BATCH_MIN_LINES || amounts.length > BATCH_MAX_LINES) return null;
+  if (charges.length !== amounts.length) return null;
+  var lines = [];
+  var totalAmount = 0n, totalExpected = 0n, totalCharged = 0n;
+  var exactCount = 0, overCount = 0, underCount = 0;
+  var percent = null, zeroBelow = null;
+  for (var i = 0; i < amounts.length; i++) {
+    var quote = honestFeeQuote(amounts[i], bpsStr);
+    if (quote === null) return null;
+    if (percent === null) { percent = quote.percent; zeroBelow = quote.zeroBelow; }
+    var charged = BigInt(charges[i]);
+    var expected = BigInt(quote.fee);
+    var diff = charged - expected;
+    var status = diff === 0n ? "exact" : diff > 0n ? "over" : "under";
+    if (status === "exact") exactCount++; else if (status === "over") overCount++; else underCount++;
+    lines.push({
+      amount: quote.amount,
+      expected: quote.fee,
+      charged: charged.toString(),
+      status: status,
+      difference: (diff < 0n ? -diff : diff).toString()
+    });
+    totalAmount += BigInt(quote.amount);
+    totalExpected += expected;
+    totalCharged += charged;
+  }
+  var verdict = overCount === 0 && underCount === 0 ? "exact"
+    : overCount > 0 && underCount > 0 ? "mixed"
+    : overCount > 0 ? "over" : "under";
+  return {
+    bps: lines.length ? String(bpsStr == null ? "" : bpsStr).trim() : "",
+    percent: percent,
+    zeroBelow: zeroBelow,
+    lines: lines,
+    totalAmount: totalAmount.toString(),
+    totalExpected: totalExpected.toString(),
+    totalCharged: totalCharged.toString(),
+    totalDifference: (totalCharged >= totalExpected ? totalCharged - totalExpected : totalExpected - totalCharged).toString(),
+    exactCount: exactCount,
+    overCount: overCount,
+    underCount: underCount,
+    verdict: verdict
+  };
+}
+
 /* ---------- 4. What does this dApp see? ---------- */
 /* level: "low" = usually needed to connect, "caution" = ask why and limit
    it before granting, "high" = do not grant blindly for a routine visit. */
@@ -15844,6 +15931,7 @@ if (typeof module !== "undefined" && module.exports) {
                      feeDisclosure, FEE_DISCLOSURE_PLACEMENTS, FEE_DISCLOSURE_MAX_RECIPIENT,
                      feeChargeCheck,
                      feeRefundCheck,
+                     feeBatchCheck, BATCH_MIN_LINES, BATCH_MAX_LINES,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
@@ -16493,6 +16581,36 @@ if (typeof document !== "undefined") {
         text += "Over by " + v.difference + " units: more came back than was paid — worth the app knowing, because its books will not match the payment either. ";
       }
       text += "This is a check only: nothing was charged, refunded, disputed or signed, and no wallet connected — the verdict is computed locally from the numbers you entered, so check them against your receipt first. DUST is a network transaction cost, never part of this fee.";
+      host.textContent = text;
+    });
+
+    /* --- reconcile a batch of fees --- */
+    document.getElementById("feebatch-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var v = feeBatchCheck(document.getElementById("feebatch-amounts").value,
+                            document.getElementById("feebatch-bps").value,
+                            document.getElementById("feebatch-charges").value);
+      var host = document.getElementById("feebatch-result");
+      if (v === null) {
+        host.textContent = "Enter 2 to 12 amounts and the fee charged on each — the two lists the same length, in the same order — and the fee rate that was disclosed in basis points (250 = 2.5%, at most 10000), all as whole numbers. Anything else is refused, not guessed at.";
+        return;
+      }
+      var text = "Fee batch check — " + v.lines.length + " lines · disclosed fee " + v.percent + "% (" + v.bps + " bps) · amounts total " + v.totalAmount + " units · disclosed fees total " + v.totalExpected + " units · charged fees total " + v.totalCharged + " units. ";
+      v.lines.forEach(function (line, i) {
+        text += "Line " + (i + 1) + ": amount " + line.amount + ", disclosed fee " + line.expected + ", charged " + line.charged + " — " +
+          (line.status === "exact" ? "exact. " : line.status === "over" ? "over by " + line.difference + " units. " : "under by " + line.difference + " units. ");
+      });
+      if (v.verdict === "exact") {
+        text += "Verdict: every line matches the disclosure exactly. ";
+      } else if (v.verdict === "mixed") {
+        text += "Verdict: mixed — " + v.overCount + " line(s) over and " + v.underCount + " line(s) under. The totals " +
+          (v.totalDifference === "0" ? "happen to net to zero, but a netted total is not a matched statement: each wrong line is wrong on its own. " : "differ by " + v.totalDifference + " units, and the wrong lines do not cancel each other out. ");
+      } else if (v.verdict === "over") {
+        text += "Verdict: overcharged — " + v.overCount + " line(s) over, by " + v.totalDifference + " units in total. A disclosed rate rounds down in the user's favour, never up, so no overcharge here is explained by rounding. ";
+      } else {
+        text += "Verdict: undercharged — " + v.underCount + " line(s) under, by " + v.totalDifference + " units in total: less than the disclosed fee, in the users' favour, and worth the app knowing so its books match its disclosure. ";
+      }
+      text += "This is a check only: nothing was charged, refunded, disputed or signed, and no wallet connected — the verdict is computed locally from the numbers you entered, so check them against your statement first. DUST is a network transaction cost, never part of this fee.";
       host.textContent = text;
     });
 

@@ -226,7 +226,7 @@
 
   <section id="tools" aria-labelledby="tools-h">
     <h2 id="tools-h">Privacy tools — right here, nothing leaves your browser</h2>
-    <p>Seventy-eight tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
+    <p>Seventy-nine tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
     <div class="filter-row" role="group" aria-label="Find a tool">
       <label for="tool-q">Find a tool</label>
       <input id="tool-q" type="search" placeholder="e.g. vote, sign, DUST, share a secret…" autocomplete="off">
@@ -2512,7 +2512,20 @@
         <button type="submit" class="btn primary">Check the refund, locally</button>
         <p id="feerefund-result" role="status" aria-live="polite"></p>
       </form>
-      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 78 tools.</p>
+      <form class="tool" id="feebatch-check">
+        <h3>79 · Reconcile a batch of fees, line by line — a fee batch checker</h3>
+        <p>Tools 77 and 78 check one charge and one refund; a real statement has many lines. Enter 2 to 12 amounts that were all charged at one disclosed rate, and the fee that was charged on each, in the same order, and this checker recomputes every line's disclosed fee with tool 68 itself — so no line's expectation can disagree with the quote — and names each line exact, over or under by the exact difference. It checks; it does not reconcile for you: nothing is charged, refunded, disputed or signed, and no wallet connects.</p>
+        <p>The case totals alone would miss: an overcharge on one line and an undercharge on another cancel out in the total, while both lines are wrong — so the verdict follows the lines, never the totals alone, and a batch whose totals net to zero is still named mixed when any line is wrong, because a netted total is not a matched statement. The verdict is computed locally from the numbers you type, in exact integer arithmetic that holds past 2<sup>53</sup>: this checker reads no statement and looks nothing up, so check the numbers against your own record first — the verdict is the evidence you take back to the app, stated in the app's own disclosed numbers. DUST is a network transaction cost, never part of this fee.</p>
+        <label for="feebatch-amounts">Amounts the fees were charged on, in whole units, comma-separated (2 to 12 whole numbers — e.g. 1000000, 1000000)</label>
+        <input id="feebatch-amounts" inputmode="numeric" placeholder="e.g. 1000000, 1000000" autocomplete="off">
+        <label for="feebatch-bps">Fee rate that was disclosed, in basis points (a whole number, at most 10000 — e.g. 250 = 2.5%)</label>
+        <input id="feebatch-bps" inputmode="numeric" placeholder="e.g. 250" autocomplete="off">
+        <label for="feebatch-charges">Fee charged on each amount, in whole units, comma-separated, in the same order (e.g. 25000, 25000)</label>
+        <input id="feebatch-charges" inputmode="numeric" placeholder="e.g. 25000, 25000" autocomplete="off">
+        <button type="submit" class="btn primary">Reconcile the batch, locally</button>
+        <p id="feebatch-result" role="status" aria-live="polite"></p>
+      </form>
+      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 79 tools.</p>
     </div>
   </section>
 
@@ -2546,6 +2559,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=77"></script>
+<script src="app.js?v=78"></script>
 </body>
 </html>

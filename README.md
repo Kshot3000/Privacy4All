@@ -75,9 +75,9 @@ renewable resource that pays for shielded transactions.
 
 ## Tools on the hub (local only, no wallet needed)
 
-The hub carries 78 tools; a **find-a-tool search** at the top of the tools
+The hub carries 79 tools; a **find-a-tool search** at the top of the tools
 section narrows the list as you type — every word must match a tool's title
-or first line, and clearing the search restores all 78.
+or first line, and clearing the search restores all 79.
 
 - **Paste-and-protect redactor** — finds and masks email addresses, Cardano
   addresses and US phone numbers in text you paste. Runs entirely in your
@@ -2112,6 +2112,34 @@ or first line, and clearing the search restores all 78.
   over by the exact difference.
   Honestly labelled: it checks; it
   does not refund. Nothing is
+  charged, refunded or disputed,
+  no funds move and no wallet
+  connects. DUST is never part of
+  the fee.
+
+- **Reconcile a batch of fees,
+  line by line — a fee batch
+  checker** — the statement-scale
+  companion to the charge checker:
+  tools 77 and 78 check one line at
+  a time, but a real statement has
+  many. Enter 2 to 12 amounts
+  charged at one disclosed rate and
+  the fee charged on each, and it
+  recomputes every line with the
+  honest fee calculator itself and
+  names each line exact, over or
+  under by the exact difference.
+  The verdict follows the lines,
+  never the totals alone: an
+  overcharge and an undercharge
+  cancel out in a total while both
+  lines are wrong, so a batch whose
+  totals net to zero is still named
+  mixed — a netted total is not a
+  matched statement. Honestly
+  labelled: it checks; it does not
+  reconcile for you. Nothing is
   charged, refunded or disputed,
   no funds move and no wallet
   connects. DUST is never part of
