@@ -1652,6 +1652,87 @@ function feeCappedBreakEvenPlan(costStr, amountStr, bpsStr, minStr, maxStr) {
     volume: (sales * amount).toString() });
 }
 
+/* ---------- 93. Price it so the net is the price, bounded fee ---------- */
+/* Tool 75 prices the net-target problem at a pure rate only, and
+   tools 82 to 92 price, check and plan bounded fees everywhere
+   except that inverse problem — so net-target pricing under a
+   bounded disclosure is planned by neither, and the pure-rate
+   price is wrong in both directions: to receive 1,000 at 250 bps
+   tool 75 prices 1,025, but under a disclosed 100-unit minimum
+   that price pays the floor's 100 and nets only 925 — and at a
+   100% rate tool 75 answers never, while a disclosed ceiling
+   makes the target reachable. feeCappedNetTargetPrice takes the
+   amount that must be received, the rate and both bounds as
+   disclosed, and searches the bounded net function itself — every
+   candidate price quoted by tool 82's own feeCappedQuote, so the
+   fee here can never disagree with the bounded quote — for the
+   smallest whole-unit price whose bounded net reaches the target.
+   The exactness survives the bounds, and this planner can say
+   why: at the smallest price a fee can be collected from (the
+   minimum itself) the net is zero, and from there the net rises
+   by 0 or 1 per unit of price — 1 wherever a bound sets the fee,
+   since a fixed floor or ceiling leaves every extra unit to the
+   seller — so the smallest reaching price still nets the target
+   EXACTLY, never a unit more quietly kept. The bounds move the
+   verdict, not just the price. There is no never left: a ceiling
+   removes the pure rate's only never, because at a 100% rate the
+   capped fee leaves net = price - maximum, so a target of 1,000
+   under a 400 maximum is priced at 1,400 — and since the fee can
+   never exceed the maximum at any rate, the net grows without
+   limit and every target is reachable. A floor raises the price
+   instead: the price must first cover the whole minimum before
+   a single unit of net appears. A minimum above the target is
+   NOT refused — unlike a quote on an amount already chosen, the
+   price here is the output, so it simply grows past the minimum
+   (a 100 target under a 500 minimum prices at 600). A target of
+   zero is priced at zero at any bounds. All arithmetic is exact
+   BigInt, so the price holds past 2^53. A minimum above the
+   maximum, and anything tool 82 refuses, are refused (null),
+   never repaired into a plausible price. This function only
+   prices — it charges nothing, lists nothing, sells nothing and
+   connects no wallet; DUST is a transaction cost of the
+   network, never part of this fee. */
+function feeCappedNetTargetPrice(targetStr, bpsStr, minStr, maxStr) {
+  var t = (targetStr == null ? "" : String(targetStr)).trim();
+  var mn = (minStr == null ? "" : String(minStr)).trim();
+  var mx = (maxStr == null ? "" : String(maxStr)).trim();
+  if (!/^\d+$/.test(t) || !/^\d+$/.test(mn) || !/^\d+$/.test(mx)) return null;
+  var probe = honestFeeQuote("0", bpsStr);
+  if (probe === null) return null;
+  var min = BigInt(mn);
+  var max = BigInt(mx);
+  if (min > max) return null;
+  var target = BigInt(t);
+  var base = {
+    target: target.toString(),
+    bps: probe.bps,
+    percent: probe.percent,
+    minFee: min.toString(),
+    maxFee: max.toString()
+  };
+  if (target === 0n) {
+    return Object.assign(base, { status: "priced", amount: "0",
+      fee: "0", net: "0", uncappedFee: "0", boundVerdict: "rate",
+      zeroBelow: probe.zeroBelow });
+  }
+  function netOf(x) {
+    var q = feeCappedQuote(x.toString(), bpsStr, minStr, maxStr);
+    return q === null ? -1n : BigInt(q.net);
+  }
+  var lo = target > min ? target : min;
+  var hi = lo;
+  while (netOf(hi) < target) hi = hi * 2n + 1n;
+  while (lo < hi) {
+    var mid = (lo + hi) / 2n;
+    if (netOf(mid) >= target) hi = mid; else lo = mid + 1n;
+  }
+  var quote = feeCappedQuote(lo.toString(), bpsStr, minStr, maxStr);
+  return Object.assign(base, { status: "priced",
+    amount: quote.amount, fee: quote.fee, net: quote.net,
+    uncappedFee: quote.uncappedFee, boundVerdict: quote.verdict,
+    zeroBelow: quote.zeroBelow });
+}
+
 /* ---------- 4. What does this dApp see? ---------- */
 /* level: "low" = usually needed to connect, "caution" = ask why and limit
    it before granting, "high" = do not grant blindly for a routine visit. */
@@ -16856,6 +16937,7 @@ if (typeof module !== "undefined" && module.exports) {
                      feeCappedEscrowPlan,
                      feeCappedSwapPlan,
                      feeCappedBreakEvenPlan,
+                     feeCappedNetTargetPrice,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
@@ -17566,6 +17648,47 @@ if (typeof document !== "undefined") {
         }
       }
       text += "This is a plan only: nothing was charged, collected, sold or signed, and no wallet connected — DUST is a network transaction cost, never part of this fee.";
+      host.textContent = text;
+    });
+
+    /* --- price it so the net is the price, bounded fee --- */
+    document.getElementById("feecapnetprice-plan").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var p = feeCappedNetTargetPrice(document.getElementById("feecapnetprice-target").value,
+                            document.getElementById("feecapnetprice-bps").value,
+                            document.getElementById("feecapnetprice-min").value,
+                            document.getElementById("feecapnetprice-max").value);
+      var host = document.getElementById("feecapnetprice-result");
+      if (p === null) {
+        host.textContent = "Enter the amount you must receive, a fee rate in basis points (250 = 2.5%, at most 10000), a minimum fee and a maximum fee in whole units — the minimum at most the maximum. Anything else is refused, not guessed at.";
+        return;
+      }
+      var boundPhrase = p.boundVerdict === "floor" ? "the minimum fee raises it"
+        : p.boundVerdict === "ceiling" ? "the maximum fee cuts it"
+        : "neither bound changes it";
+      var text = "Bounded net-target price — you must receive " + p.target + " units · disclosed fee " + p.percent + "% (" + p.bps + " bps): the rate alone takes " + p.uncappedFee + " units on the price below; " + boundPhrase + ", so the fee is " + p.fee + " units. ";
+      if (p.amount === "0") {
+        text += "Price 0 units: a target of zero needs no price at any rate or bounds. State the amount you actually must receive and the price becomes meaningful. ";
+      } else {
+        text += "Price it at " + p.amount + " units: the disclosed fee takes " + p.fee + " units and you receive exactly " + p.net + " units. ";
+        var prev = BigInt(p.amount) - 1n;
+        if (prev >= BigInt(p.minFee)) {
+          text += "One unit less — " + prev.toString() + " — nets " + feeCappedQuote(prev.toString(), p.bps, p.minFee, p.maxFee).net + " and falls short, so this is the smallest price that reaches the target, not a rounded-up guess; ";
+        } else {
+          text += "One unit less is below the disclosed minimum itself, so no smaller price can even be charged under this disclosure; ";
+        }
+        text += "and because the buyer sees the price, the fee and the net side by side, the gross-up is disclosed, never hidden in the price. ";
+        if (p.bps === "10000") {
+          text += "At a pure 100% rate this target would be never reachable — the net is zero at any price — but the disclosed maximum caps the fee at " + p.maxFee + " units, so every unit of price above the maximum is a unit of net, and the target is reachable at the target plus the maximum. ";
+        }
+        if (p.boundVerdict === "floor" && p.bps === "0") {
+          text += "The rate is 0 bps but the disclosed minimum still applies, so this is not a free sale: the price first covers the whole " + p.fee + "-unit minimum before a single unit of net appears. ";
+        }
+        if (p.boundVerdict === "ceiling" && p.fee === "0") {
+          text += "The disclosed maximum is zero, so no fee is ever taken under this disclosure and the price is the target itself. ";
+        }
+      }
+      text += "This is a price plan only: nothing was charged, listed, sold or signed, and no wallet connected — DUST is a network transaction cost, never part of this fee.";
       host.textContent = text;
     });
 

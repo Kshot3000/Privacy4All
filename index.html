@@ -226,7 +226,7 @@
 
   <section id="tools" aria-labelledby="tools-h">
     <h2 id="tools-h">Privacy tools — right here, nothing leaves your browser</h2>
-    <p>Ninety-two tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
+    <p>Ninety-three tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
     <div class="filter-row" role="group" aria-label="Find a tool">
       <label for="tool-q">Find a tool</label>
       <input id="tool-q" type="search" placeholder="e.g. vote, sign, DUST, share a secret…" autocomplete="off">
@@ -2749,7 +2749,22 @@
         <button type="submit" class="btn primary">Count the bounded sales, locally</button>
         <p id="feecapbreakeven-result" role="status" aria-live="polite"></p>
       </form>
-      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 92 tools.</p>
+      <form class="tool" id="feecapnetprice-plan">
+        <h3>93 · Price it so the net is the price, bounded fee — a floor-and-ceiling net-target pricing planner</h3>
+        <p>Tool 75 prices the net-target problem at a pure rate only, and tools 82 to 92 price and plan bounded fees everywhere except that inverse problem — so net-target pricing under a bounded disclosure is planned by neither, and the pure-rate price is wrong in both directions: to receive 1,000 at 250 bps it prices 1,025, but under a disclosed 100-unit minimum that price pays the floor's 100 and nets only 925, and at a 100% rate it answers never where a disclosed ceiling makes the target reachable. Enter the amount you must receive, the rate and both bounds as they were disclosed, and this planner finds the exact price with every candidate quoted by tool 82 itself, so the fee here can never disagree with the bounded quote. It prices; it does not sell: nothing is charged, listed, sold or signed, and no wallet connects.</p>
+        <p>The smallest price still nets the target exactly: at the smallest price a fee can be collected from — the minimum itself — the net is zero, and from there the net rises by 0 or 1 per unit of price, so no extra unit is quietly kept and one unit less falls short. There is no never left: a ceiling removes the pure rate's only never, because at a 100% rate the capped fee leaves net = price minus the maximum, so a target of 1,000 under a 400 maximum is priced at 1,400 — and because the fee can never exceed the maximum at any rate, every target is reachable. A floor raises the price instead: the price must first cover the whole minimum before a single unit of net appears, and a minimum above the target is not refused — the price is the output here, so it simply grows past the minimum, and a 100 target under a 500 minimum prices at 600. The gross-up is honest only while it is disclosed: the buyer sees the price, the fee and your net side by side — a fee hidden inside a price is a hidden fee. DUST is a network transaction cost, never part of this fee.</p>
+        <label for="feecapnetprice-target">Amount you must receive after the fee, in whole units (a whole number — e.g. 1000)</label>
+        <input id="feecapnetprice-target" inputmode="numeric" placeholder="e.g. 1000" autocomplete="off">
+        <label for="feecapnetprice-bps">Disclosed fee rate, in basis points (a whole number, at most 10000 — e.g. 250 = 2.5%)</label>
+        <input id="feecapnetprice-bps" inputmode="numeric" placeholder="e.g. 250" autocomplete="off">
+        <label for="feecapnetprice-min">Minimum fee that was disclosed, in whole units (a whole number — e.g. 100)</label>
+        <input id="feecapnetprice-min" inputmode="numeric" placeholder="e.g. 100" autocomplete="off">
+        <label for="feecapnetprice-max">Maximum fee that was disclosed, in whole units (a whole number, at least the minimum — e.g. 10000)</label>
+        <input id="feecapnetprice-max" inputmode="numeric" placeholder="e.g. 10000" autocomplete="off">
+        <button type="submit" class="btn primary">Find the bounded price, locally</button>
+        <p id="feecapnetprice-result" role="status" aria-live="polite"></p>
+      </form>
+      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 93 tools.</p>
     </div>
   </section>
 
@@ -2783,6 +2798,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=92"></script>
+<script src="app.js?v=93"></script>
 </body>
 </html>

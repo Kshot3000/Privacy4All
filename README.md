@@ -75,9 +75,9 @@ renewable resource that pays for shielded transactions.
 
 ## Tools on the hub (local only, no wallet needed)
 
-The hub carries 92 tools; a **find-a-tool search** at the top of the tools
+The hub carries 93 tools; a **find-a-tool search** at the top of the tools
 section narrows the list as you type — every word must match a tool's title
-or first line, and clearing the search restores all 92.
+or first line, and clearing the search restores all 93.
 
 - **Paste-and-protect redactor** — finds and masks email addresses, Cardano
   addresses and US phone numbers in text you paste. Runs entirely in your
@@ -2558,6 +2558,46 @@ or first line, and clearing the search restores all 92.
   Honestly labelled: it plans; it
   does not earn. Nothing is
   charged, collected, sold or
+  signed, no funds move and no
+  wallet connects. DUST is never
+  part of the fee.
+
+- **Price it so the net is the
+  price, bounded fee — a
+  floor-and-ceiling net-target
+  pricing planner** — tool 75
+  prices the net-target problem
+  at a pure rate only, and the
+  bounded tools price everywhere
+  except that inverse problem,
+  so net-target pricing under a
+  bounded disclosure is planned
+  by neither, and the pure-rate
+  price is wrong in both
+  directions: to receive 1,000
+  at 250 bps it prices 1,025,
+  which under a disclosed
+  100-unit minimum nets only
+  925, and at a 100% rate it
+  answers never. Enter the
+  amount you must receive, the
+  rate and both bounds, and it
+  finds the smallest price whose
+  bounded net reaches the target
+  exactly — every candidate
+  quoted by the bounded quote
+  itself, so the two can never
+  disagree. A ceiling removes
+  the never: the capped fee
+  leaves net = price minus the
+  maximum, so the target is
+  reachable at the target plus
+  the maximum. A minimum above
+  the target is not refused —
+  the price grows past it.
+  Honestly labelled: it prices; it
+  does not sell. Nothing is
+  charged, listed, sold or
   signed, no funds move and no
   wallet connects. DUST is never
   part of the fee.
