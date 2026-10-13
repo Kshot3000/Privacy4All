@@ -226,7 +226,7 @@
 
   <section id="tools" aria-labelledby="tools-h">
     <h2 id="tools-h">Privacy tools — right here, nothing leaves your browser</h2>
-    <p>Eighty-seven tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
+    <p>Eighty-eight tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
     <div class="filter-row" role="group" aria-label="Find a tool">
       <label for="tool-q">Find a tool</label>
       <input id="tool-q" type="search" placeholder="e.g. vote, sign, DUST, share a secret…" autocomplete="off">
@@ -2651,7 +2651,34 @@
         <button type="submit" class="btn primary">Check the bounded wordings, locally</button>
         <p id="feecaprateword-result" role="status" aria-live="polite"></p>
       </form>
-      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 87 tools.</p>
+      <form class="tool" id="feecapdisclosure-gen">
+        <h3>88 · Say the bounded fee out loud — a floor-and-ceiling disclosure statement generator</h3>
+        <p>Tool 76 writes the disclosure statement for a pure rate, and tools 82 to 87 price and check bounded fees — but the bounded statement itself is still composed by hand, and a hand-written statement can drop a bound, restate a promise the floor breaks, or carry two rate wordings that disagree. Pick the placement, state the rate both ways it will appear, enter both bounds, a worked example amount and the fee recipient, and this generator writes the complete bounded statement, ready to paste into your own app or receipt. The worked example is quoted by tool 82 itself, so the numbers in the statement can never disagree with the bounded quote. It writes; it does not charge: nothing is charged, collected or signed, and no wallet connects.</p>
+        <p>Two honesty gates run before any words are written. The two wordings must state the same rate — checked by tool 87 itself — and a mismatch is refused, not written: a statement whose percent and basis points state different rates is the oldest hidden-fee shape there is, and a floor or ceiling masking the mismatch on the example amount does not settle it. And the threshold line follows the floor: the zero-fee promise is printed only when the minimum is zero, because with a minimum above zero there is no amount that pays no fee — the statement says so instead, and a zero rate with a minimum fee is named as not a free payment. The worked example names which figure set its fee — the minimum raised it, the maximum cut it, or neither bound changed it. The recipient is printed exactly as you type it: this generator looks nothing up and verifies nothing, so check the address character-for-character before you publish — a disclosure naming the wrong address is worse than none. And the statement earns its keep only where the user decides, before the step that commits: a disclosure written after the fact is not a disclosure. DUST is a network transaction cost, never part of this fee.</p>
+        <label for="feecapdisclosure-placement">Where the fee sits (one of the placements in my fee-design guide)</label>
+        <select id="feecapdisclosure-placement">
+          <option value="payment">A payment — taken when the payment settles</option>
+          <option value="split">A split payment — taken first, before the split</option>
+          <option value="escrow">An escrow — taken on release only, never on a refund</option>
+          <option value="swap-in">A swap — taken from the amount paid in only</option>
+          <option value="swap-out">A swap — taken from the amount received only</option>
+        </select>
+        <label for="feecapdisclosure-percent">Disclosed fee rate as it will appear in percent (a number, at most 100, with at most 6 decimal places — e.g. 2.5)</label>
+        <input id="feecapdisclosure-percent" inputmode="decimal" placeholder="e.g. 2.5" autocomplete="off">
+        <label for="feecapdisclosure-bps">Disclosed fee rate as it will appear in basis points (a whole number, at most 10000 — e.g. 250 = 2.5%)</label>
+        <input id="feecapdisclosure-bps" inputmode="numeric" placeholder="e.g. 250" autocomplete="off">
+        <label for="feecapdisclosure-min">Minimum fee you disclose, in whole units (a whole number — e.g. 100)</label>
+        <input id="feecapdisclosure-min" inputmode="numeric" placeholder="e.g. 100" autocomplete="off">
+        <label for="feecapdisclosure-max">Maximum fee you disclose, in whole units (a whole number, at least the minimum — e.g. 50000)</label>
+        <input id="feecapdisclosure-max" inputmode="numeric" placeholder="e.g. 50000" autocomplete="off">
+        <label for="feecapdisclosure-amount">Worked example amount, in whole units (a whole number — e.g. 1000000)</label>
+        <input id="feecapdisclosure-amount" inputmode="numeric" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="feecapdisclosure-recipient">Fee recipient, printed exactly as typed (a name or your published fee address)</label>
+        <input id="feecapdisclosure-recipient" type="text" placeholder="e.g. the app fee wallet" autocomplete="off">
+        <button type="submit" class="btn primary">Write the bounded statement, locally</button>
+        <p id="feecapdisclosure-result" role="status" aria-live="polite"></p>
+      </form>
+      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 88 tools.</p>
     </div>
   </section>
 
@@ -2685,6 +2712,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=87"></script>
+<script src="app.js?v=88"></script>
 </body>
 </html>

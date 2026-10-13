@@ -75,9 +75,9 @@ renewable resource that pays for shielded transactions.
 
 ## Tools on the hub (local only, no wallet needed)
 
-The hub carries 87 tools; a **find-a-tool search** at the top of the tools
+The hub carries 88 tools; a **find-a-tool search** at the top of the tools
 section narrows the list as you type — every word must match a tool's title
-or first line, and clearing the search restores all 87.
+or first line, and clearing the search restores all 88.
 
 - **Paste-and-protect redactor** — finds and masks email addresses, Cardano
   addresses and US phone numbers in text you paste. Runs entirely in your
@@ -2363,6 +2363,47 @@ or first line, and clearing the search restores all 87.
   refunded or disputed, no funds
   move and no wallet connects.
   DUST is never part of the fee.
+
+- **Say the bounded fee out loud — a
+  floor-and-ceiling disclosure
+  statement generator** — the pure
+  disclosure generator writes for a
+  pure rate only, so a bounded
+  statement is still composed by
+  hand, and a hand-written statement
+  can drop a bound, restate a promise
+  the floor breaks, or carry two rate
+  wordings that disagree. Pick a
+  placement, state the rate both
+  ways it will appear, enter both
+  bounds, a worked example amount
+  and the fee recipient, and it
+  writes the complete bounded
+  statement: the rate and both
+  bounds in the opening line, the
+  fee taken once at the named moment,
+  and a worked example quoted by
+  the bounded quote itself, naming
+  which figure set its fee. Two
+  honesty gates run first: the two
+  wordings must agree — checked by
+  the bounded wording checker
+  itself — and a mismatch is refused,
+  never written; and the zero-fee
+  promise is printed only when the
+  minimum is zero, because with a
+  minimum above zero there is no
+  amount that pays no fee, and a
+  zero rate with a minimum fee is
+  named as not a free payment. The
+  recipient is printed exactly as
+  typed — nothing is looked up or
+  verified. Honestly labelled: it
+  writes; it does not charge.
+  Nothing is charged, collected or
+  signed, no funds move and no
+  wallet connects. DUST is never
+  part of the fee.
 
 ## Guides
 

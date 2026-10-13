@@ -1298,6 +1298,98 @@ function feeCappedRateWordingCheck(percentStr, bpsStr, minStr, maxStr, amountStr
   };
 }
 
+/* ---------- 88. Say the bounded fee out loud ---------- */
+/* Tool 76 writes the disclosure statement for a pure rate and
+   tools 82-87 price and check fees under a disclosed floor and
+   ceiling, but no tool writes the bounded statement itself — so a
+   bounded disclosure is still composed by hand, and a hand-written
+   statement can drop a bound, restate the threshold promise a floor
+   breaks, or carry two rate wordings that disagree. feeCappedDisclosure
+   writes those words: given one of the guide's placements, the rate
+   stated BOTH ways it will appear (a percent and basis points), the
+   disclosed minimum and maximum, a worked example amount and the fee
+   recipient, it composes the complete bounded statement — the rate
+   and both bounds in the opening line, when the fee is taken for
+   that placement, a worked example quoted by tool 82's own
+   feeCappedQuote so the numbers can never disagree with the bounded
+   quote, naming which figure set the example's fee (the minimum
+   raised it, the maximum cut it, or neither bound changed it), and
+   DUST named as a separate network cost, never part of the fee.
+   Two honesty gates run before any words are written. The wordings
+   must agree: the verdict is borrowed from tool 87's own
+   feeCappedRateWordingCheck, and a mismatch is REFUSED (null),
+   never printed — a generator that writes both wordings into one
+   statement while they state different rates would manufacture the
+   exact hidden-fee shape tool 87 exists to catch, and bounds masking
+   the mismatch on the example amount do not rescue it. And the
+   threshold line follows the floor: tool 76's zero-fee promise is
+   printed only when the minimum is zero, because with a minimum
+   above zero there is no amount that pays no fee — the statement
+   says so instead, and a zero rate with a minimum is named as not
+   a free payment. The recipient is the builder's own text, printed
+   verbatim: nothing here looks an address up or verifies it, and a
+   statement is only as honest as the address typed into it. An
+   unknown placement, a blank or overlong recipient, a recipient
+   carrying a line break, and anything tools 82 or 87 refuse are
+   refused (null), never repaired into a plausible statement. All
+   arithmetic is exact BigInt, so the statement holds past 2^53.
+   This function only writes — it charges nothing, collects nothing
+   and connects no wallet; the statement earns its keep only when
+   an app shows it before the committing step. */
+function feeCappedDisclosure(placement, percentStr, bpsStr, minStr, maxStr, amountStr, recipientRaw) {
+  var spec = Object.prototype.hasOwnProperty.call(FEE_DISCLOSURE_PLACEMENTS, placement)
+    ? FEE_DISCLOSURE_PLACEMENTS[placement] : null;
+  if (spec === null) return null;
+  var recipient = (recipientRaw == null ? "" : String(recipientRaw)).trim();
+  if (!recipient || recipient.length > FEE_DISCLOSURE_MAX_RECIPIENT) return null;
+  if (/[\r\n]/.test(recipient)) return null;
+  var wording = feeCappedRateWordingCheck(percentStr, bpsStr, minStr, maxStr, amountStr);
+  if (wording === null) return null;
+  if (wording.verdict !== "agree") return null;
+  var quote = feeCappedQuote(amountStr, bpsStr, minStr, maxStr);
+  if (quote === null) return null;
+  var boundClause = quote.verdict === "floor" ? "the minimum fee raises it, so the fee is "
+    : quote.verdict === "ceiling" ? "the maximum fee cuts it, so the fee is "
+    : "neither bound changes it, so the fee is ";
+  var threshold;
+  if (quote.bps === "0" && quote.minFee !== "0") {
+    threshold = "A rate of zero with a minimum fee is not a free payment: the minimum is the fee, on every amount.";
+  } else if (quote.minFee !== "0") {
+    threshold = "There is no amount that pays no fee: the minimum applies to every amount" +
+      (quote.zeroBelow !== null ? ", even below " + quote.zeroBelow + " units, where the rate alone would charge nothing" : "") + ".";
+  } else if (quote.zeroBelow !== null) {
+    threshold = "Amounts below " + quote.zeroBelow + " units pay no fee at all: the fee rounds down to zero, never up.";
+  } else {
+    threshold = "At a rate of zero and with no minimum fee, no fee is charged on any amount.";
+  }
+  var statement =
+    "Service fee: " + quote.percent + "% (" + quote.bps + " basis points) on " + spec.label +
+    ", with a minimum fee of " + quote.minFee + " units and a maximum fee of " + quote.maxFee +
+    " units, paid to " + recipient + ". " +
+    spec.timing + " " +
+    "Worked example: on an amount of " + quote.amount + " units, the rate alone takes " + quote.uncappedFee +
+    " units; " + boundClause + quote.fee +
+    " units and the remaining " + quote.net + " units settle in full — fee + net = amount, always. " +
+    threshold + " " +
+    "DUST, the network transaction cost, is a separate line and is never part of this fee.";
+  return {
+    placement: placement,
+    percent: quote.percent,
+    bps: quote.bps,
+    impliedBps: wording.impliedBps,
+    minFee: quote.minFee,
+    maxFee: quote.maxFee,
+    recipient: recipient,
+    amount: quote.amount,
+    uncappedFee: quote.uncappedFee,
+    fee: quote.fee,
+    net: quote.net,
+    verdict: quote.verdict,
+    zeroBelow: quote.zeroBelow,
+    statement: statement
+  };
+}
+
 /* ---------- 4. What does this dApp see? ---------- */
 /* level: "low" = usually needed to connect, "caution" = ask why and limit
    it before granting, "high" = do not grant blindly for a routine visit. */
@@ -16497,6 +16589,7 @@ if (typeof module !== "undefined" && module.exports) {
                      feeCappedBatchCheck,
                      feeCappedRefundBatchCheck,
                      feeCappedRateWordingCheck,
+                     feeCappedDisclosure,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
@@ -17405,6 +17498,24 @@ if (typeof document !== "undefined") {
       }
       text += "This is a check only: nothing was charged, refunded, disputed or signed, and no wallet connected — the verdict is computed locally from the numbers you entered, so check them against the disclosure itself first. DUST is a network transaction cost, never part of this fee.";
       host.textContent = text;
+    });
+
+    /* --- say the bounded fee out loud --- */
+    document.getElementById("feecapdisclosure-gen").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var d = feeCappedDisclosure(document.getElementById("feecapdisclosure-placement").value,
+                            document.getElementById("feecapdisclosure-percent").value,
+                            document.getElementById("feecapdisclosure-bps").value,
+                            document.getElementById("feecapdisclosure-min").value,
+                            document.getElementById("feecapdisclosure-max").value,
+                            document.getElementById("feecapdisclosure-amount").value,
+                            document.getElementById("feecapdisclosure-recipient").value);
+      var host = document.getElementById("feecapdisclosure-result");
+      if (d === null) {
+        host.textContent = "Pick a placement, state the fee rate both ways it will appear — a percent (a number, at most 100, with at most 6 decimal places — e.g. 2.5) and basis points (a whole number, at most 10000 — e.g. 250) — and the two wordings must state the same rate: a statement whose wordings disagree is refused, not written. Then enter a minimum fee and a maximum fee in whole units, with the minimum at most the maximum and at most the amount itself, a worked example amount as a whole number, and the fee recipient exactly as it should be printed. Anything else is refused, not guessed at.";
+        return;
+      }
+      host.textContent = d.statement + " — Generated locally: nothing was charged, collected or signed, and no wallet connected. Paste the statement where the user decides, before the step that commits — and check the recipient character-for-character first, because this generator prints what it is given and verifies nothing.";
     });
 
     /* --- what does this dApp see? --- */
