@@ -75,9 +75,9 @@ renewable resource that pays for shielded transactions.
 
 ## Tools on the hub (local only, no wallet needed)
 
-The hub carries 86 tools; a **find-a-tool search** at the top of the tools
+The hub carries 87 tools; a **find-a-tool search** at the top of the tools
 section narrows the list as you type — every word must match a tool's title
-or first line, and clearing the search restores all 86.
+or first line, and clearing the search restores all 87.
 
 - **Paste-and-protect redactor** — finds and masks email addresses, Cardano
   addresses and US phone numbers in text you paste. Runs entirely in your
@@ -2334,6 +2334,35 @@ or first line, and clearing the search restores all 86.
   disputed, no funds move and no
   wallet connects. DUST is never
   part of the fee.
+
+- **Check a bounded rate says the
+  same thing twice — a
+  floor-and-ceiling rate wording
+  checker** — tool 81 checks a
+  disclosure's two rate wordings
+  at a pure rate, so on a bounded
+  disclosure the fees it shows are
+  not the fees either wording
+  would actually take. Enter both
+  wordings, both bounds and an
+  example amount, and it borrows
+  the wording verdict from tool 81
+  itself and the bounded fee from
+  tool 82 itself, and bounds the
+  percent wording's fee by exactly
+  the same floor and ceiling. The
+  verdict follows the wording,
+  never the bounded fees: a floor
+  or a ceiling can set both
+  wordings to the same bounded fee
+  and mask a mismatch the uncapped
+  fees show plainly, so both pairs
+  of fees are printed. Honestly
+  labelled: it checks; it does not
+  charge. Nothing is charged,
+  refunded or disputed, no funds
+  move and no wallet connects.
+  DUST is never part of the fee.
 
 ## Guides
 

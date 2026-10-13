@@ -226,7 +226,7 @@
 
   <section id="tools" aria-labelledby="tools-h">
     <h2 id="tools-h">Privacy tools — right here, nothing leaves your browser</h2>
-    <p>Eighty-six tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
+    <p>Eighty-seven tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
     <div class="filter-row" role="group" aria-label="Find a tool">
       <label for="tool-q">Find a tool</label>
       <input id="tool-q" type="search" placeholder="e.g. vote, sign, DUST, share a secret…" autocomplete="off">
@@ -2634,7 +2634,24 @@
         <button type="submit" class="btn primary">Check the bounded refund batch, locally</button>
         <p id="feecaprefundbatch-result" role="status" aria-live="polite"></p>
       </form>
-      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 86 tools.</p>
+      <form class="tool" id="feecaprateword-check">
+        <h3>87 · Check a bounded rate says the same thing twice — a floor-and-ceiling rate wording checker</h3>
+        <p>Tool 81 checks that a disclosure's two rate wordings — a percent in the prose and basis points in the terms — state the same rate, but it prices its example at a pure rate, and tools 82 to 86 price bounded fees from only one wording. On a bounded disclosure the fees tool 81 shows as evidence are not the fees either wording would actually take. Enter the rate both ways it was stated, both bounds as they were disclosed and an example amount, and this checker converts the percent to the basis points it implies — exactly, in integer arithmetic, never a float — with the wording verdict borrowed from tool 81 itself and the bounded basis-points fee borrowed from tool 82 itself, so neither can disagree with the checker that owns it. It checks; it does not charge: nothing is charged, refunded, disputed or signed, and no wallet connects.</p>
+        <p>The verdict follows the wording, never the bounded fees — and bounds add a second way for equal fees to hide a mismatch: a floor raises both wordings' small fees to the same minimum and a ceiling cuts both wordings' large fees to the same maximum, so two different rates can take the identical bounded fee on an amount where their uncapped fees differ plainly. The uncapped fees are shown beside the bounded ones so the masking is visible, not hidden, and each wording carries the bound that set its own fee, because the two wordings can be set by different figures on the same amount. The verdict is computed locally from the numbers you type, in exact integer arithmetic that holds past 2<sup>53</sup>: this checker reads no disclosure and looks nothing up, so check the numbers against the disclosure itself first — the verdict is the evidence you take back to the app, stated in the app's own two wordings, bounds included. DUST is a network transaction cost, never part of this fee.</p>
+        <label for="feecaprateword-percent">Fee rate as stated in percent (a number, at most 100, with at most 6 decimal places — e.g. 2.5)</label>
+        <input id="feecaprateword-percent" inputmode="decimal" placeholder="e.g. 2.5" autocomplete="off">
+        <label for="feecaprateword-bps">Fee rate as stated in basis points (a whole number, at most 10000 — e.g. 250 = 2.5%)</label>
+        <input id="feecaprateword-bps" inputmode="numeric" placeholder="e.g. 250" autocomplete="off">
+        <label for="feecaprateword-min">Minimum fee that was disclosed, in whole units (a whole number — e.g. 100)</label>
+        <input id="feecaprateword-min" inputmode="numeric" placeholder="e.g. 100" autocomplete="off">
+        <label for="feecaprateword-max">Maximum fee that was disclosed, in whole units (a whole number, at least the minimum — e.g. 50000)</label>
+        <input id="feecaprateword-max" inputmode="numeric" placeholder="e.g. 50000" autocomplete="off">
+        <label for="feecaprateword-amount">Example amount, in whole units (a whole number — e.g. 1000000)</label>
+        <input id="feecaprateword-amount" inputmode="numeric" placeholder="e.g. 1000000" autocomplete="off">
+        <button type="submit" class="btn primary">Check the bounded wordings, locally</button>
+        <p id="feecaprateword-result" role="status" aria-live="polite"></p>
+      </form>
+      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 87 tools.</p>
     </div>
   </section>
 
@@ -2668,6 +2685,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=86"></script>
+<script src="app.js?v=87"></script>
 </body>
 </html>

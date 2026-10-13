@@ -1226,6 +1226,78 @@ function feeCappedRefundBatchCheck(amountsStr, bpsStr, minStr, maxStr, refundeds
   };
 }
 
+/* ---------- 87. Check a bounded rate says the same thing twice ---------- */
+/* Tool 81 checks that a disclosure's two rate wordings — a percent
+   in the prose and basis points in the terms — state the same rate,
+   and tools 82-86 price and check fees under a disclosed floor and
+   ceiling, but no tool does both at once: tool 81 prices its example
+   at a pure rate, so on a bounded disclosure the fees it shows as
+   evidence are not the fees either wording would actually take.
+   feeCappedRateWordingCheck takes both wordings, both bounds and an
+   example amount. The wording verdict is borrowed from tool 81's
+   own feeRateWordingCheck, so the two checkers can never disagree
+   about whether the wordings agree, and the bounded basis-points
+   fee is borrowed from tool 82's own feeCappedQuote, so it can
+   never disagree with the bounded quote; the percent wording's fee
+   is bounded by exactly the same floor and ceiling. The verdict
+   follows the WORDING, never the bounded fees — and bounds add a
+   second way for equal fees to hide a mismatch: a floor raises both
+   wordings' small fees to the same minimum and a ceiling cuts both
+   wordings' large fees to the same maximum, so two different rates
+   can take the identical bounded fee on an amount where their
+   uncapped fees differ plainly. Equal bounded fees never rescue a
+   mismatched wording; the uncapped fees and their difference are
+   shown beside the bounded ones so the masking is visible, not
+   hidden. Each wording also carries the bound that set its own fee
+   (floor, ceiling or rate), because the two wordings can be set by
+   different figures on the same amount. All arithmetic is exact
+   BigInt, so the verdict holds past 2^53. A percent that is
+   malformed, negative, exponential, over 100 or finer than 6
+   decimal places, and anything tools 81 or 82 refuse, are refused
+   (null), never repaired into a plausible verdict. This function
+   only checks — it charges nothing, refunds nothing, disputes
+   nothing and connects no wallet; it reads no disclosure and looks
+   nothing up, so the verdict is evidence stated in the app's own
+   two wordings and two bounds, taken from the numbers entered
+   here. */
+function feeCappedRateWordingCheck(percentStr, bpsStr, minStr, maxStr, amountStr) {
+  var wording = feeRateWordingCheck(percentStr, bpsStr, amountStr);
+  if (wording === null) return null;
+  var quote = feeCappedQuote(amountStr, bpsStr, minStr, maxStr);
+  if (quote === null) return null;
+  var min = BigInt(quote.minFee);
+  var max = BigInt(quote.maxFee);
+  function bounded(uncapped) {
+    return uncapped < min ? min : uncapped > max ? max : uncapped;
+  }
+  function boundVerdict(uncapped) {
+    return uncapped < min ? "floor" : uncapped > max ? "ceiling" : "rate";
+  }
+  var percentUncapped = BigInt(wording.percentFee);
+  var bpsUncapped = BigInt(wording.bpsFee);
+  var percentFee = bounded(percentUncapped);
+  var bpsFee = bounded(bpsUncapped);
+  var diff = percentFee >= bpsFee ? percentFee - bpsFee : bpsFee - percentFee;
+  return {
+    percent: wording.percent,
+    bps: wording.bps,
+    bpsPercent: wording.bpsPercent,
+    impliedBps: wording.impliedBps,
+    amount: wording.amount,
+    minFee: quote.minFee,
+    maxFee: quote.maxFee,
+    percentUncappedFee: wording.percentFee,
+    bpsUncappedFee: wording.bpsFee,
+    uncappedFeeDifference: wording.feeDifference,
+    percentFee: percentFee.toString(),
+    bpsFee: bpsFee.toString(),
+    feeDifference: diff.toString(),
+    percentBoundVerdict: boundVerdict(percentUncapped),
+    bpsBoundVerdict: boundVerdict(bpsUncapped),
+    verdict: wording.verdict
+  };
+}
+
 /* ---------- 4. What does this dApp see? ---------- */
 /* level: "low" = usually needed to connect, "caution" = ask why and limit
    it before granting, "high" = do not grant blindly for a routine visit. */
@@ -16424,6 +16496,7 @@ if (typeof module !== "undefined" && module.exports) {
                      feeCappedRefundCheck,
                      feeCappedBatchCheck,
                      feeCappedRefundBatchCheck,
+                     feeCappedRateWordingCheck,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
@@ -17302,6 +17375,35 @@ if (typeof document !== "undefined") {
           (v.totalDifference === "0" ? "happen to net to the full amount, but a netted total is not a batch of whole refunds: each wrong line is wrong on its own. " : "differ by " + v.totalDifference + " units, and the wrong lines do not cancel each other out. ");
       }
       text += "This is a check only: nothing was charged, refunded, disputed or signed, and no wallet connected — the verdict is computed locally from the numbers you entered, so check them against your statement first. DUST is a network transaction cost, never part of this fee.";
+      host.textContent = text;
+    });
+
+    /* --- check a bounded rate says the same thing twice --- */
+    document.getElementById("feecaprateword-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var v = feeCappedRateWordingCheck(document.getElementById("feecaprateword-percent").value,
+                                  document.getElementById("feecaprateword-bps").value,
+                                  document.getElementById("feecaprateword-min").value,
+                                  document.getElementById("feecaprateword-max").value,
+                                  document.getElementById("feecaprateword-amount").value);
+      var host = document.getElementById("feecaprateword-result");
+      if (v === null) {
+        host.textContent = "Enter the fee rate both ways it was stated — a percent (a number, at most 100, with at most 6 decimal places — e.g. 2.5) and basis points (a whole number, at most 10000 — e.g. 250) — a minimum fee and a maximum fee in whole units, with the minimum at most the maximum and at most the amount itself, and an example amount in whole units. Anything else is refused, not guessed at.";
+        return;
+      }
+      var text = "Bounded rate wording check — the percent wording says " + v.percent + "%, which is " + v.impliedBps + " bps exactly; the basis-points wording says " + v.bps + " bps, which is " + v.bpsPercent + "%. On an example amount of " + v.amount + " units, before any bound the percent wording takes " + v.percentUncappedFee + " units and the basis-points wording takes " + v.bpsUncappedFee + " units; with the disclosed minimum of " + v.minFee + " units and maximum of " + v.maxFee + " units, the percent wording takes " + v.percentFee + " units (set by the " + v.percentBoundVerdict + ") and the basis-points wording takes " + v.bpsFee + " units (set by the " + v.bpsBoundVerdict + "). ";
+      if (v.verdict === "agree") {
+        text += "Verdict: agree — both wordings state the same rate, and the bounded fee is the same under either, bounds included. ";
+      } else {
+        text += "Verdict: mismatch — the two wordings state different rates, so one of them is not the fee you agreed to. " +
+          (v.feeDifference === "0" && v.uncappedFeeDifference !== "0"
+            ? "On this example the bounds hide it completely: uncapped, the two fees differ by " + v.uncappedFeeDifference + " units, but the floor or the ceiling sets both wordings to the same bounded fee — a bound can mask a mismatched wording on one amount, never settle it, and an amount where no bound bites would show the full difference. "
+            : v.feeDifference === "0"
+            ? "On an amount this size the two fees happen to come out the same, bounded and uncapped, but the rates themselves differ, and a larger amount would show it: equal fees never settle a mismatched wording. "
+            : "On this example the bounded fees differ by " + v.feeDifference + " units (uncapped, by " + v.uncappedFeeDifference + " units). ") +
+          "Ask which wording governs before you pay anything; a disclosed fee is one rate, stated the same way everywhere, bounds included. ";
+      }
+      text += "This is a check only: nothing was charged, refunded, disputed or signed, and no wallet connected — the verdict is computed locally from the numbers you entered, so check them against the disclosure itself first. DUST is a network transaction cost, never part of this fee.";
       host.textContent = text;
     });
 
