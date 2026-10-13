@@ -1475,6 +1475,52 @@ function feeCappedSplitPayment(amountStr, bpsStr, minStr, maxStr, weightsStr) {
   };
 }
 
+/* ---------- 90. Escrow, both endings priced, bounded fee ---------- */
+/* Tool 70 prices both endings of an escrow, but only at a pure
+   rate, and tools 82 to 89 price and check bounded fees everywhere
+   except an escrow — so an escrow under a bounded disclosure is
+   planned by neither: at a pure rate tool 70 takes 25 on release
+   of 1,000 at 250 bps where the disclosed floor takes 100, and the
+   seller is promised 975 the disclosure never offered.
+   feeCappedEscrowPlan takes the held amount, the rate and both
+   bounds as disclosed, and prices both endings with tool 82's own
+   feeCappedQuote — so the release fee here can never disagree with
+   the bounded quote — while tool 70's rule stands unchanged,
+   bounds included: the disclosed fee is taken ONCE, on release
+   only, never on deposit (the money is not yet earned) and never
+   on refund (a deal that did not happen charges nothing). The
+   bounds bind the release fee only: a floor can raise what the
+   seller pays on release, but it can never be collected out of a
+   refund — on refund the fee is exactly 0 and the buyer receives
+   the full held amount back, whatever the minimum says. The
+   invariants are the honesty: on release, bounded fee + seller
+   net = held amount exactly; on refund, fee = 0 and buyer back =
+   held amount exactly. No third ending and no other numbers
+   exist. All arithmetic is exact BigInt, so the plan holds past
+   2^53. Anything tool 82 refuses is refused (null), never
+   repaired into a plausible plan. This function only plans — it
+   holds nothing, charges nothing, moves nothing and names no
+   recipient; the names belong in the app's own quote, next to
+   the amounts. */
+function feeCappedEscrowPlan(amountStr, bpsStr, minStr, maxStr) {
+  var quote = feeCappedQuote(amountStr, bpsStr, minStr, maxStr);
+  if (quote === null) return null;
+  return {
+    amount: quote.amount,
+    bps: quote.bps,
+    percent: quote.percent,
+    zeroBelow: quote.zeroBelow,
+    uncappedFee: quote.uncappedFee,
+    minFee: quote.minFee,
+    maxFee: quote.maxFee,
+    boundVerdict: quote.verdict,
+    releaseFee: quote.fee,
+    releaseNet: quote.net,
+    refundFee: "0",
+    refundAmount: quote.amount
+  };
+}
+
 /* ---------- 4. What does this dApp see? ---------- */
 /* level: "low" = usually needed to connect, "caution" = ask why and limit
    it before granting, "high" = do not grant blindly for a routine visit. */
@@ -16676,6 +16722,7 @@ if (typeof module !== "undefined" && module.exports) {
                      feeCappedRateWordingCheck,
                      feeCappedDisclosure,
                      feeCappedSplitPayment,
+                     feeCappedEscrowPlan,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
@@ -17297,6 +17344,27 @@ if (typeof document !== "undefined") {
       host.textContent = "Bounded split — amount: " + s.amount + " units · service fee first at " + s.bps + " bps (" + s.percent + "%): the rate alone takes " +
         s.uncappedFee + " units; " + boundPhrase + ", so the fee is " + s.fee + " units · net split " + s.parts.length + " ways: " + s.net + " units. " + lines.join(" · ") +
         ". The parts add up to the net exactly, and fee + net = amount, exactly. Leftover units from flooring go one each to the largest fractional remainders, earliest recipient winning a tie. This is a plan only: nothing was charged, moved or signed, and DUST — the network's transaction resource — is a separate line that is never part of a service fee.";
+    });
+
+    /* --- escrow, both endings priced, bounded fee first --- */
+    document.getElementById("feecapescrow-plan").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var p = feeCappedEscrowPlan(document.getElementById("feecapescrow-amount").value,
+                            document.getElementById("feecapescrow-bps").value,
+                            document.getElementById("feecapescrow-min").value,
+                            document.getElementById("feecapescrow-max").value);
+      var host = document.getElementById("feecapescrow-result");
+      if (p === null) {
+        host.textContent = "Enter the held amount as a whole number of smallest units, the rate as a whole number of basis points at or under 10,000 (100%), and a minimum fee and a maximum fee in whole units — the minimum at most the maximum and at most the held amount itself. Anything else is refused, not planned.";
+        return;
+      }
+      var boundPhrase = p.boundVerdict === "floor" ? "the minimum fee raises it"
+        : p.boundVerdict === "ceiling" ? "the maximum fee cuts it"
+        : "neither bound changes it";
+      host.textContent = "Bounded escrow plan — held: " + p.amount + " units · disclosed service fee at " + p.bps + " bps (" + p.percent + "%): the rate alone takes " +
+        p.uncappedFee + " units; " + boundPhrase + ", so on release the fee is " + p.releaseFee + " units · the seller receives " + p.releaseNet + " units — fee + seller = held, exactly. " +
+        "If the deal falls through and the escrow refunds: fee " + p.refundFee + " units · the buyer receives the full " + p.refundAmount + " units back — a refund is never charged, and no minimum fee is collected out of a refund. " +
+        "Nothing is charged on deposit either. This is a plan only: nothing was held, charged, moved or signed, and DUST — the network's transaction resource — is a separate line that is never part of a service fee.";
     });
 
     /* --- check the fee you were charged --- */

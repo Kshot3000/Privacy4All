@@ -226,7 +226,7 @@
 
   <section id="tools" aria-labelledby="tools-h">
     <h2 id="tools-h">Privacy tools — right here, nothing leaves your browser</h2>
-    <p>Eighty-nine tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
+    <p>Ninety tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
     <div class="filter-row" role="group" aria-label="Find a tool">
       <label for="tool-q">Find a tool</label>
       <input id="tool-q" type="search" placeholder="e.g. vote, sign, DUST, share a secret…" autocomplete="off">
@@ -2695,7 +2695,22 @@
         <button type="submit" class="btn primary">Plan the bounded split, locally</button>
         <p id="feecapsplit-result" role="status" aria-live="polite"></p>
       </form>
-      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 89 tools.</p>
+      <form class="tool" id="feecapescrow-plan">
+        <h3>90 · Escrow, both endings priced, bounded fee — a floor-and-ceiling release-and-refund planner</h3>
+        <p>Tool 70 prices both endings of an escrow, but only at a pure rate, and tools 82 to 89 price and check bounded fees everywhere except an escrow — so an escrow under a bounded disclosure is planned by neither: at a pure rate the planner takes 25 on release of 1,000 at 250 bps where the disclosed floor takes 100, and the seller is promised 975 the disclosure never offered. Enter the amount that would be held, the rate and both bounds as they were disclosed, and this planner prices both endings with the bounded fee — quoted by tool 82 itself, so the release fee here can never disagree with the bounded quote. It plans; it does not hold: nothing is held, charged or signed, and no wallet connects.</p>
+        <p>Tool 70's rule stands unchanged, bounds included: the fee is taken once, on release only — never on deposit, because the money is not yet earned, and never on a refund, because a deal that did not happen charges nothing. The bounds bind the release fee only: a floor can raise what the seller pays on release, but it can never be collected out of a refund, and on refund the fee is exactly 0 and the buyer receives the full held amount back, whatever the minimum says. On release, bounded fee + what the seller receives = the held amount, exactly. There is no third ending and no other numbers. DUST is a network transaction cost, never part of this fee.</p>
+        <label for="feecapescrow-amount">Amount to be held in escrow, in the asset's smallest unit (a whole number — e.g. 1000000)</label>
+        <input id="feecapescrow-amount" inputmode="numeric" placeholder="e.g. 1000000" autocomplete="off">
+        <label for="feecapescrow-bps">Service fee rate, in basis points (a whole number, at most 10000 — e.g. 250 = 2.5%) — taken once, on release only</label>
+        <input id="feecapescrow-bps" inputmode="numeric" placeholder="e.g. 250" autocomplete="off">
+        <label for="feecapescrow-min">Minimum fee that was disclosed, in whole units (a whole number — e.g. 100)</label>
+        <input id="feecapescrow-min" inputmode="numeric" placeholder="e.g. 100" autocomplete="off">
+        <label for="feecapescrow-max">Maximum fee that was disclosed, in whole units (a whole number, at least the minimum — e.g. 10000)</label>
+        <input id="feecapescrow-max" inputmode="numeric" placeholder="e.g. 10000" autocomplete="off">
+        <button type="submit" class="btn primary">Price both bounded endings, locally</button>
+        <p id="feecapescrow-result" role="status" aria-live="polite"></p>
+      </form>
+      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 90 tools.</p>
     </div>
   </section>
 
@@ -2729,6 +2744,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=89"></script>
+<script src="app.js?v=90"></script>
 </body>
 </html>

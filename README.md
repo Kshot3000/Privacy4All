@@ -75,9 +75,9 @@ renewable resource that pays for shielded transactions.
 
 ## Tools on the hub (local only, no wallet needed)
 
-The hub carries 89 tools; a **find-a-tool search** at the top of the tools
+The hub carries 90 tools; a **find-a-tool search** at the top of the tools
 section narrows the list as you type — every word must match a tool's title
-or first line, and clearing the search restores all 89.
+or first line, and clearing the search restores all 90.
 
 - **Paste-and-protect redactor** — finds and masks email addresses, Cardano
   addresses and US phone numbers in text you paste. Runs entirely in your
@@ -2445,6 +2445,43 @@ or first line, and clearing the search restores all 89.
   moved or signed, no funds move
   and no wallet connects. DUST is
   never part of the fee.
+
+- **Escrow, both endings priced,
+  bounded fee — a floor-and-ceiling
+  release-and-refund planner** — the
+  escrow planner prices both endings
+  at a pure rate only, and the
+  bounded tools price everywhere
+  except an escrow, so an escrow
+  under a bounded disclosure is
+  planned by neither: at a pure rate
+  it takes 25 on release of 1,000 at
+  250 bps where the disclosed floor
+  takes 100, and the seller is
+  promised 975 the disclosure never
+  offered. Enter the held amount,
+  the rate and both bounds, and it
+  prices both endings with the
+  bounded fee — quoted by the
+  bounded quote itself, so the two
+  can never disagree. The escrow
+  rule stands, bounds included: the
+  fee is taken once, on release
+  only, never on deposit and never
+  on a refund — a floor can raise
+  the release fee, but it can never
+  be collected out of a refund, and
+  on refund the fee is exactly 0 and
+  the buyer receives the full held
+  amount back. On release, bounded
+  fee + what the seller receives =
+  the held amount, exactly.
+  Honestly labelled: it plans; it
+  does not hold. Nothing is held,
+  charged, moved or signed, no
+  funds move and no wallet
+  connects. DUST is never part of
+  the fee.
 
 ## Guides
 
