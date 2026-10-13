@@ -75,9 +75,9 @@ renewable resource that pays for shielded transactions.
 
 ## Tools on the hub (local only, no wallet needed)
 
-The hub carries 93 tools; a **find-a-tool search** at the top of the tools
+The hub carries 94 tools; a **find-a-tool search** at the top of the tools
 section narrows the list as you type — every word must match a tool's title
-or first line, and clearing the search restores all 93.
+or first line, and clearing the search restores all 94.
 
 - **Paste-and-protect redactor** — finds and masks email addresses, Cardano
   addresses and US phone numbers in text you paste. Runs entirely in your
@@ -2601,6 +2601,37 @@ or first line, and clearing the search restores all 93.
   signed, no funds move and no
   wallet connects. DUST is never
   part of the fee.
+
+- **How big is your crowd? — an
+  anonymity-set estimator** — a
+  shielded transfer hides in the
+  crowd of everyone else using
+  the shielded pool at the same
+  time, and the crowd shrinks
+  every time a detail an observer
+  knows about you divides it.
+  Enter the size of your crowd
+  and, for each known detail, how
+  many groups it splits the crowd
+  into, and it multiplies the
+  combinations exactly in BigInt
+  and divides the crowd by them,
+  rounded down — rounding up
+  would flatter the protection —
+  and names what is left: a crowd,
+  a small crowd, a handful, a few,
+  or alone. Honestly labelled a
+  best case, never a guarantee:
+  it assumes every detail is
+  independent and every group
+  equally likely, and real crowds
+  are skewed, so the real group
+  can only be smaller. It estimates; it does not
+  identify — nobody is looked up,
+  no wallet connects, no chain
+  data is read, and the crowd
+  size is a number you type, not
+  a live pool count.
 
 ## Guides
 

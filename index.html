@@ -226,7 +226,7 @@
 
   <section id="tools" aria-labelledby="tools-h">
     <h2 id="tools-h">Privacy tools — right here, nothing leaves your browser</h2>
-    <p>Ninety-three tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
+    <p>Ninety-four tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
     <div class="filter-row" role="group" aria-label="Find a tool">
       <label for="tool-q">Find a tool</label>
       <input id="tool-q" type="search" placeholder="e.g. vote, sign, DUST, share a secret…" autocomplete="off">
@@ -2764,7 +2764,18 @@
         <button type="submit" class="btn primary">Find the bounded price, locally</button>
         <p id="feecapnetprice-result" role="status" aria-live="polite"></p>
       </form>
-      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 93 tools.</p>
+      <form class="tool" id="anonset-plan">
+        <h3>94 · How big is your crowd? — an anonymity-set estimator</h3>
+        <p>A shielded transfer hides in the crowd of everyone else using the shielded pool at the same time — and the crowd shrinks every time a detail an observer knows about you divides it. Tools 9 and 10 show what an observer can see, but neither puts a number on what is left. Enter the size of your crowd and, for each known detail, how many groups it splits the crowd into (a wallet type used by about 1 in 4 people is 4 groups, a language by 1 in 8 is 8), and this estimator multiplies the combinations exactly and divides the crowd by them, rounded down — rounding up would flatter the protection. It estimates; it does not identify: nobody is looked up, no wallet connects, and no chain data is read — the crowd size is a number you type, not a live pool count.</p>
+        <p>This is a best case, never a guarantee: the estimate assumes every detail is independent of the others and every group is equally likely. Real crowds are skewed — one wallet type dominates, languages correlate with regions — so the real group sharing your exact combination can only be smaller than this estimate, never larger. An expected group under 2 means you are expected to be alone in it: the details together single you out even though each one looked harmless alone, which is why a proof that hides a value (tool 5) still pairs with a crowd big enough to hide in. The fix is rarely a better proof — it is fewer distinguishing details shared, or a bigger crowd to share them in.</p>
+        <label for="anonset-crowd">Size of the crowd you are hiding in, in people (a whole number, at least 1 — e.g. 100000)</label>
+        <input id="anonset-crowd" inputmode="numeric" placeholder="e.g. 100000" autocomplete="off">
+        <label for="anonset-details">Groups each known detail splits the crowd into, comma-separated (whole numbers, at least 1, at most 1000000 each, up to 12 details — e.g. 4, 8, 25)</label>
+        <input id="anonset-details" inputmode="numeric" placeholder="e.g. 4, 8, 25" autocomplete="off">
+        <button type="submit" class="btn primary">Measure my crowd, locally</button>
+        <p id="anonset-result" role="status" aria-live="polite"></p>
+      </form>
+      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 94 tools.</p>
     </div>
   </section>
 
@@ -2798,6 +2809,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=93"></script>
+<script src="app.js?v=94"></script>
 </body>
 </html>

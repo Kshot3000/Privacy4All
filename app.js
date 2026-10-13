@@ -1733,6 +1733,78 @@ function feeCappedNetTargetPrice(targetStr, bpsStr, minStr, maxStr) {
     zeroBelow: quote.zeroBelow });
 }
 
+/* ---------- 94. How big is your crowd? ---------- */
+/* Tools 9 and 10 show what an observer can and cannot see, but
+   neither puts a number on the protection a shielded action
+   actually gets: it hides in a crowd, and the crowd shrinks
+   every time a known detail divides it. anonymitySetEstimate
+   takes the size of the crowd (everyone in the shielded pool, a
+   voting roll, a set of senders — whoever you are hiding among)
+   and, for each detail an observer knows about you, how many
+   groups that detail splits the crowd into (a wallet type known
+   to 1 in 4 users is 4 groups, a language 1 in 8 is 8, and so
+   on). The combinations multiply exactly in BigInt, and the
+   expected size of the group sharing your exact combination is
+   the crowd divided by that product, rounded DOWN — rounding up
+   would flatter the protection, so the floor is the honest
+   direction. The verdict names what is left: at least 1,000 is
+   a crowd, 100 a small crowd, 10 a handful, 2 a few, and under
+   2 you are expected to be alone — an expected set of 0 means
+   the combinations outnumber the crowd itself. Two bit counts
+   ride along, each an exact floor of log2 taken from the binary
+   length: how many bits of distinguishing information the
+   details carry together, and how many bits of crowd are left.
+   This is a BEST CASE, never a guarantee, and the function says
+   so in its own terms: it assumes every detail is independent
+   of the others and every group is equally likely. Real crowds
+   are skewed — one wallet type dominates, languages correlate
+   with regions — so the real set sharing your combination can
+   only be smaller than this estimate, never larger. A crowd of
+   zero, a detail that splits into zero groups, more than
+   ANONSET_MAX_DETAILS details, a group count above
+   ANONSET_MAX_GROUPS, and anything that is not whole numbers
+   are refused (null), never repaired into a plausible estimate.
+   This function only estimates — it looks nobody up, identifies
+   nobody, connects no wallet and reads no chain data; the
+   crowd size is a number you type, not a live pool count. */
+var ANONSET_MAX_DETAILS = 12;
+var ANONSET_MAX_GROUPS = 1000000;
+function anonymitySetEstimate(crowdStr, detailsStr) {
+  var c = (crowdStr == null ? "" : String(crowdStr)).trim();
+  if (!/^\d+$/.test(c)) return null;
+  var crowd = BigInt(c);
+  if (crowd === 0n) return null;
+  var d = (detailsStr == null ? "" : String(detailsStr)).trim();
+  if (!d) return null;
+  var raw = d.split(",");
+  if (raw.length < 1 || raw.length > ANONSET_MAX_DETAILS) return null;
+  var details = [];
+  var combinations = 1n;
+  for (var i = 0; i < raw.length; i++) {
+    var t = raw[i].trim();
+    if (!/^\d+$/.test(t)) return null;
+    var g = BigInt(t);
+    if (g < 1n || g > BigInt(ANONSET_MAX_GROUPS)) return null;
+    details.push(g.toString());
+    combinations *= g;
+  }
+  var expectedSet = crowd / combinations;
+  var verdict = expectedSet >= 1000n ? "crowd"
+    : expectedSet >= 100n ? "small-crowd"
+    : expectedSet >= 10n ? "handful"
+    : expectedSet >= 2n ? "few"
+    : "alone";
+  return {
+    crowd: crowd.toString(),
+    details: details,
+    combinations: combinations.toString(),
+    expectedSet: expectedSet.toString(),
+    detailBits: (combinations.toString(2).length - 1).toString(),
+    setBits: expectedSet >= 1n ? (expectedSet.toString(2).length - 1).toString() : null,
+    verdict: verdict
+  };
+}
+
 /* ---------- 4. What does this dApp see? ---------- */
 /* level: "low" = usually needed to connect, "caution" = ask why and limit
    it before granting, "high" = do not grant blindly for a routine visit. */
@@ -16938,6 +17010,7 @@ if (typeof module !== "undefined" && module.exports) {
                      feeCappedSwapPlan,
                      feeCappedBreakEvenPlan,
                      feeCappedNetTargetPrice,
+                     anonymitySetEstimate, ANONSET_MAX_DETAILS, ANONSET_MAX_GROUPS,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
@@ -17689,6 +17762,30 @@ if (typeof document !== "undefined") {
         }
       }
       text += "This is a price plan only: nothing was charged, listed, sold or signed, and no wallet connected — DUST is a network transaction cost, never part of this fee.";
+      host.textContent = text;
+    });
+
+    /* --- how big is your crowd? --- */
+    document.getElementById("anonset-plan").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var p = anonymitySetEstimate(document.getElementById("anonset-crowd").value,
+                            document.getElementById("anonset-details").value);
+      var host = document.getElementById("anonset-result");
+      if (p === null) {
+        host.textContent = "Enter the size of your crowd (a whole number, at least 1) and the group count for each known detail, comma-separated — whole numbers of at least 1, at most 1000000 each, up to 12 details. Anything else is refused, not guessed at.";
+        return;
+      }
+      var verdictPhrase = p.verdict === "crowd" ? "a crowd — at this size a single combination is one of many, and an observer who knows these details still faces the whole group"
+        : p.verdict === "small-crowd" ? "a small crowd — real cover, but thin enough that one more known detail could halve it again"
+        : p.verdict === "handful" ? "a handful — few enough that an observer could plausibly check each person in the group"
+        : p.verdict === "few" ? "a few — barely a crowd at all, and one more distinguishing detail ends it"
+        : "alone — the details together single you out, even though each one looked harmless on its own";
+      var text = "Anonymity-set estimate — a crowd of " + p.crowd + " people, split by " + p.details.length + (p.details.length === 1 ? " known detail" : " known details") + " (" + p.details.join(", ") + ") into " + p.combinations + " combinations: in the best case about " + p.expectedSet + (p.expectedSet === "1" ? " person shares" : " people share") + " your exact combination. The verdict is " + verdictPhrase + ". ";
+      text += "Together the details carry about " + p.detailBits + (p.detailBits === "1" ? " bit" : " bits") + " of distinguishing information" + (p.setBits !== null ? ", leaving about " + p.setBits + (p.setBits === "1" ? " bit" : " bits") + " of crowd" : ", leaving no whole crowd at all — the combinations outnumber the crowd itself") + ". ";
+      if (p.details.indexOf("1") !== -1) {
+        text += "A detail with 1 group splits nothing — everyone shares it — so it costs no cover; the details that cost cover are the ones with more groups. ";
+      }
+      text += "This is a best case, never a guarantee: it assumes every detail is independent and every group equally likely, and real crowds are skewed, so the real group can only be smaller. This estimates only: nobody was looked up or identified, no wallet connected, and no chain data was read — the crowd size is the number you typed, not a live pool count.";
       host.textContent = text;
     });
 
