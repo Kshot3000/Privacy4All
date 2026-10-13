@@ -819,6 +819,72 @@ function feeRefundBatchCheck(amountsStr, bpsStr, refundedsStr) {
   };
 }
 
+/* ---------- 81. Check the rate says the same thing twice ---------- */
+/* Tools 68-80 all take the disclosed rate as one number in basis
+   points, but a real disclosure states the rate at least twice: a
+   percent in the prose a user reads ("2.5%") and basis points in the
+   terms or the code ("250 bps"). When the two wordings disagree,
+   one of them is the fee that will actually be charged and the
+   other is the fee the user agreed to — the oldest hidden-fee shape
+   there is, and no checker above can see it, because each takes
+   only one wording as given. feeRateWordingCheck takes both
+   wordings plus an example amount. The percent is parsed exactly,
+   as a decimal with at most 6 decimal places, into micro-percent
+   BigInt — never a float, so "2.05" is 205 bps exactly, not
+   204.999… — and converted to the basis points it implies
+   (percent x 100), rendered exactly even when it lands between
+   whole basis points ("0.255%" implies 25.5 bps, which no whole-bps
+   wording can equal). The verdict follows the WORDING, not the
+   example amount: agree only when the implied rate is the stated
+   bps exactly. The fees each wording would take from the example
+   amount are shown as evidence — the stated-bps fee borrowed from
+   tool 68's own honestFeeQuote, the percent fee computed with the
+   same floor — but a small example can hide a real mismatch (a
+   0.0001 bps gap takes nothing from 1,000,000 units and 100 units
+   from 10^10), so equal fees on the example never rescue a
+   mismatched wording. All arithmetic is exact BigInt, so the
+   verdict holds past 2^53. A percent that is malformed, negative,
+   exponential, over 100, or finer than 6 decimal places, and
+   anything tool 68 refuses, are refused (null), never repaired
+   into a plausible verdict. This function only checks — it charges
+   nothing, refunds nothing, disputes nothing and connects no
+   wallet; it reads no disclosure and looks nothing up, so the
+   verdict is evidence stated in the app's own two wordings,
+   taken from the numbers entered here. */
+var RATE_WORDING_MAX_PERCENT_DECIMALS = 6;
+
+function feeRateWordingCheck(percentStr, bpsStr, amountStr) {
+  var quote = honestFeeQuote(amountStr, bpsStr);
+  if (quote === null) return null;
+  var p = (percentStr == null ? "" : String(percentStr)).trim();
+  var m = /^(\d+)(?:\.(\d+))?$/.exec(p);
+  if (m === null) return null;
+  var frac = m[2] || "";
+  if (frac.length > RATE_WORDING_MAX_PERCENT_DECIMALS) return null;
+  var scaled = BigInt(m[1]) * 1000000n + BigInt((frac + "000000").slice(0, 6));
+  if (scaled > 100000000n) return null;
+  var whole = scaled / 10000n;
+  var rem = scaled % 10000n;
+  var impliedBps = rem === 0n ? whole.toString()
+    : whole.toString() + "." + rem.toString().padStart(4, "0").replace(/0+$/, "");
+  var amount = BigInt(quote.amount);
+  var percentFee = (amount * scaled) / 100000000n;
+  var bpsFee = BigInt(quote.fee);
+  var agree = rem === 0n && whole === BigInt(quote.bps);
+  var diff = percentFee >= bpsFee ? percentFee - bpsFee : bpsFee - percentFee;
+  return {
+    percent: p,
+    bps: quote.bps,
+    bpsPercent: quote.percent,
+    impliedBps: impliedBps,
+    amount: quote.amount,
+    percentFee: percentFee.toString(),
+    bpsFee: bpsFee.toString(),
+    feeDifference: diff.toString(),
+    verdict: agree ? "agree" : "mismatch"
+  };
+}
+
 /* ---------- 4. What does this dApp see? ---------- */
 /* level: "low" = usually needed to connect, "caution" = ask why and limit
    it before granting, "high" = do not grant blindly for a routine visit. */
@@ -16011,6 +16077,7 @@ if (typeof module !== "undefined" && module.exports) {
                      feeRefundCheck,
                      feeBatchCheck, BATCH_MIN_LINES, BATCH_MAX_LINES,
                      feeRefundBatchCheck,
+                     feeRateWordingCheck, RATE_WORDING_MAX_PERCENT_DECIMALS,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
@@ -16722,6 +16789,29 @@ if (typeof document !== "undefined") {
           (v.totalDifference === "0" ? "happen to net to the full amount, but a netted total is not a batch of whole refunds: each wrong line is wrong on its own. " : "differ by " + v.totalDifference + " units, and the wrong lines do not cancel each other out. ");
       }
       text += "This is a check only: nothing was charged, refunded, disputed or signed, and no wallet connected — the verdict is computed locally from the numbers you entered, so check them against your statement first. DUST is a network transaction cost, never part of this fee.";
+      host.textContent = text;
+    });
+
+    /* --- check the rate says the same thing twice --- */
+    document.getElementById("rateword-check").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var v = feeRateWordingCheck(document.getElementById("rateword-percent").value,
+                                  document.getElementById("rateword-bps").value,
+                                  document.getElementById("rateword-amount").value);
+      var host = document.getElementById("rateword-result");
+      if (v === null) {
+        host.textContent = "Enter the fee rate both ways it was stated — a percent (a number, at most 100, with at most 6 decimal places — e.g. 2.5) and basis points (a whole number, at most 10000 — e.g. 250) — and an example amount in whole units. Anything else is refused, not guessed at.";
+        return;
+      }
+      var text = "Rate wording check — the percent wording says " + v.percent + "%, which is " + v.impliedBps + " bps exactly; the basis-points wording says " + v.bps + " bps, which is " + v.bpsPercent + "%. On an example amount of " + v.amount + " units, the percent wording takes a fee of " + v.percentFee + " units and the basis-points wording takes " + v.bpsFee + " units. ";
+      if (v.verdict === "agree") {
+        text += "Verdict: agree — both wordings state the same rate, and the fee is the same under either. ";
+      } else {
+        text += "Verdict: mismatch — the two wordings state different rates, so one of them is not the fee you agreed to. On this example amount the two fees differ by " + v.feeDifference + " units" +
+          (v.feeDifference === "0" ? " — nothing on an amount this size, but the rates themselves differ, and a larger amount would show it: a small example can hide a real mismatch, never settle one. " : ". ") +
+          "Ask which wording governs before you pay anything; a disclosed fee is one rate, stated the same way everywhere. ";
+      }
+      text += "This is a check only: nothing was charged, refunded, disputed or signed, and no wallet connected — the verdict is computed locally from the numbers you entered, so check them against the disclosure itself first. DUST is a network transaction cost, never part of this fee.";
       host.textContent = text;
     });
 

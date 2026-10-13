@@ -75,9 +75,9 @@ renewable resource that pays for shielded transactions.
 
 ## Tools on the hub (local only, no wallet needed)
 
-The hub carries 80 tools; a **find-a-tool search** at the top of the tools
+The hub carries 81 tools; a **find-a-tool search** at the top of the tools
 section narrows the list as you type — every word must match a tool's title
-or first line, and clearing the search restores all 80.
+or first line, and clearing the search restores all 81.
 
 - **Paste-and-protect redactor** — finds and masks email addresses, Cardano
   addresses and US phone numbers in text you paste. Runs entirely in your
@@ -2174,6 +2174,34 @@ or first line, and clearing the search restores all 80.
   no funds move and no wallet
   connects. DUST is never part of
   the fee.
+
+- **Check the rate says the same
+  thing twice — a rate wording
+  checker** — every other fee
+  checker takes the disclosed rate
+  as one number, but a real
+  disclosure states it at least
+  twice: a percent in the prose
+  and basis points in the terms.
+  Enter the rate both ways it was
+  stated, plus an example amount,
+  and it converts the percent to
+  the basis points it implies —
+  exactly, in integer arithmetic,
+  never a float — and names the
+  verdict: agree, or mismatch by
+  the exact implied rate. The
+  verdict follows the wording, not
+  the example amount: a small
+  example can hide a real
+  mismatch, so equal fees on the
+  example never rescue a
+  mismatched wording. Honestly
+  labelled: it checks; it does not
+  charge. Nothing is charged,
+  refunded or disputed, no funds
+  move and no wallet connects.
+  DUST is never part of the fee.
 
 ## Guides
 

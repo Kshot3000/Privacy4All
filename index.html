@@ -226,7 +226,7 @@
 
   <section id="tools" aria-labelledby="tools-h">
     <h2 id="tools-h">Privacy tools — right here, nothing leaves your browser</h2>
-    <p>Eighty tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
+    <p>Eighty-one tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
     <div class="filter-row" role="group" aria-label="Find a tool">
       <label for="tool-q">Find a tool</label>
       <input id="tool-q" type="search" placeholder="e.g. vote, sign, DUST, share a secret…" autocomplete="off">
@@ -2538,7 +2538,20 @@
         <button type="submit" class="btn primary">Check the batch of refunds, locally</button>
         <p id="refundbatch-result" role="status" aria-live="polite"></p>
       </form>
-      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 80 tools.</p>
+      <form class="tool" id="rateword-check">
+        <h3>81 · Check the rate says the same thing twice — a rate wording checker</h3>
+        <p>Every checker above takes the disclosed rate as one number, but a real disclosure states the rate at least twice: a percent in the prose you read, and basis points in the terms or the code. When the two wordings disagree, one of them is the fee that will actually be charged and the other is the fee you agreed to. Enter the rate both ways it was stated, plus an example amount, and this checker converts the percent to the basis points it implies — exactly, in integer arithmetic, never a float — and names the verdict: the wordings agree, or they state different rates. It checks; it does not charge: nothing is charged, refunded, disputed or signed, and no wallet connects.</p>
+        <p>The verdict follows the wording, not the example amount: the fees each wording would take from the amount are shown as evidence, but a small example can hide a real mismatch — a fraction-of-a-basis-point gap takes nothing from a small amount and real units from a large one — so equal fees on the example never rescue a mismatched wording. A percent finer than whole basis points (0.255% is 25.5 bps) can never equal a whole-bps wording, and this checker says the implied rate exactly rather than rounding it into agreement. The verdict is computed locally from the numbers you type, in exact integer arithmetic that holds past 2<sup>53</sup>: this checker reads no disclosure and looks nothing up, so check the numbers against the disclosure itself first — the verdict is the evidence you take back to the app, stated in the app's own two wordings. DUST is a network transaction cost, never part of this fee.</p>
+        <label for="rateword-percent">Fee rate as stated in percent (a number, at most 100, with at most 6 decimal places — e.g. 2.5)</label>
+        <input id="rateword-percent" inputmode="decimal" placeholder="e.g. 2.5" autocomplete="off">
+        <label for="rateword-bps">Fee rate as stated in basis points (a whole number, at most 10000 — e.g. 250 = 2.5%)</label>
+        <input id="rateword-bps" inputmode="numeric" placeholder="e.g. 250" autocomplete="off">
+        <label for="rateword-amount">Example amount, in whole units (a whole number — e.g. 1000000)</label>
+        <input id="rateword-amount" inputmode="numeric" placeholder="e.g. 1000000" autocomplete="off">
+        <button type="submit" class="btn primary">Check the two wordings, locally</button>
+        <p id="rateword-result" role="status" aria-live="polite"></p>
+      </form>
+      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 81 tools.</p>
     </div>
   </section>
 
@@ -2572,6 +2585,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=79"></script>
+<script src="app.js?v=80"></script>
 </body>
 </html>
