@@ -75,9 +75,9 @@ renewable resource that pays for shielded transactions.
 
 ## Tools on the hub (local only, no wallet needed)
 
-The hub carries 95 tools; a **find-a-tool search** at the top of the tools
+The hub carries 96 tools; a **find-a-tool search** at the top of the tools
 section narrows the list as you type — every word must match a tool's title
-or first line, and clearing the search restores all 95.
+or first line, and clearing the search restores all 96.
 
 - **Paste-and-protect redactor** — finds and masks email addresses, Cardano
   addresses and US phone numbers in text you paste. Runs entirely in your
@@ -2663,6 +2663,38 @@ or first line, and clearing the search restores all 95.
   data is read, and the crowd
   size is a number you type, not
   a live pool count.
+
+- **How big a crowd do you need?
+  — an anonymity crowd sizer** —
+  the sizing inverse of the two
+  tools above, asked when the
+  crowd itself is the thing being
+  chosen: which pool, which
+  moment, how long to wait for
+  more cover. Enter the smallest
+  group you refuse to drop below
+  and the details an observer
+  knows, and it multiplies
+  exactly in BigInt — the crowd
+  needed is the minimum times the
+  details' combinations, with no
+  rounding anywhere, so one
+  person fewer drops the expected
+  group below the minimum and
+  this crowd meets it exactly.
+  It names the scale: the minimum
+  itself, modest, large, or huge.
+  Honestly labelled a best case,
+  never a guarantee, on the same
+  independence and equal-likelihood
+  assumptions, so the real crowd
+  needed can only be larger — a
+  floor to plan from, not a
+  promise. It sizes; it does not
+  identify — nobody is looked up,
+  no wallet connects, no chain
+  data is read, and no crowd size
+  here is a live pool count.
 
 ## Guides
 

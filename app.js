@@ -1895,6 +1895,90 @@ function anonymityBudget(crowdStr, minSetStr, detailsStr) {
   };
 }
 
+/* ---------- 96. How big a crowd do you need? ---------- */
+/* Tools 94 and 95 both start from a crowd that already exists:
+   94 measures the group the known details leave in it, and 95
+   plans how much distinguishing room a stated minimum leaves.
+   This is the sizing inverse, asked when the crowd itself is
+   the thing being chosen — which pool, which moment, how long
+   to wait for more cover: given the smallest group you refuse
+   to drop below and the details an observer knows, how large
+   must the crowd be for that group to survive the details at
+   all? The answer is exact in BigInt and needs no rounding:
+   the smallest crowd whose expected group still meets the
+   minimum is the minimum multiplied by the combinations the
+   details make, because tool 94's expected group is the crowd
+   divided by that same product, rounded down — so at one
+   person less than this crowd the floor drops below the
+   minimum, and at this crowd it meets it exactly. That makes
+   the answer cross-checkable in both directions: tool 94 run
+   on this crowd returns the minimum itself, and tool 95 run
+   on this crowd with this minimum reports at-limit with
+   exactly one combination of room. The verdict names the
+   scale of what is being asked for: minimum-only when the
+   details split nothing (combinations of 1 — the crowd needed
+   is the minimum itself, because nothing known distinguishes
+   anyone), modest at a crowd of at most 10,000, large at at
+   most 1,000,000, and huge above that — size bands for
+   planning, not safety grades. Bit counts ride along as exact
+   floors of log2 from binary length, as in tools 94 and 95.
+   An empty details list is legitimate here and means nothing
+   is known yet — the starting point for a sizing question, as
+   in tool 95 — and an absent list is read the same way.
+   Refused (null), never repaired: a minimum that is not a
+   whole number or is under 1, a detail of zero groups or above
+   ANONCROWD_MAX_GROUPS, more than ANONCROWD_MAX_DETAILS
+   details, and malformed lists. This inherits tools 94 and
+   95's honesty in full: the numbers are a BEST CASE under
+   independence and equal likelihood — real crowds are skewed,
+   so the real crowd a minimum needs can only be larger, never
+   smaller, and a crowd of the computed size is a floor to plan
+   from, not a promise that the group will be there. This
+   sizes only — it looks nobody up, identifies nobody,
+   connects no wallet and reads no chain data; no crowd size
+   here is a live pool count. */
+var ANONCROWD_MAX_DETAILS = 12;
+var ANONCROWD_MAX_GROUPS = 1000000;
+function anonymityCrowdNeeded(minSetStr, detailsStr) {
+  var m = (minSetStr == null ? "" : String(minSetStr)).trim();
+  if (!/^\d+$/.test(m)) return null;
+  var minSet = BigInt(m);
+  if (minSet < 1n) return null;
+  var details = [];
+  var combinations = 1n;
+  var d = (detailsStr == null ? "" : String(detailsStr)).trim();
+  if (d) {
+    var raw = d.split(",");
+    if (raw.length < 1 || raw.length > ANONCROWD_MAX_DETAILS) return null;
+    for (var i = 0; i < raw.length; i++) {
+      var t = raw[i].trim();
+      if (!/^\d+$/.test(t)) return null;
+      var g = BigInt(t);
+      if (g < 1n || g > BigInt(ANONCROWD_MAX_GROUPS)) return null;
+      details.push(g.toString());
+      combinations *= g;
+    }
+  }
+  var crowdNeeded = minSet * combinations;
+  function bitsOf(x) {
+    return x >= 1n ? (x.toString(2).length - 1).toString() : null;
+  }
+  var verdict = combinations === 1n ? "minimum-only"
+    : crowdNeeded <= 10000n ? "modest"
+    : crowdNeeded <= 1000000n ? "large"
+    : "huge";
+  return {
+    minSet: minSet.toString(),
+    details: details,
+    combinations: combinations.toString(),
+    crowdNeeded: crowdNeeded.toString(),
+    detailBits: bitsOf(combinations),
+    minBits: bitsOf(minSet),
+    crowdBits: bitsOf(crowdNeeded),
+    verdict: verdict
+  };
+}
+
 /* ---------- 4. What does this dApp see? ---------- */
 /* level: "low" = usually needed to connect, "caution" = ask why and limit
    it before granting, "high" = do not grant blindly for a routine visit. */
@@ -17102,6 +17186,7 @@ if (typeof module !== "undefined" && module.exports) {
                      feeCappedNetTargetPrice,
                      anonymitySetEstimate, ANONSET_MAX_DETAILS, ANONSET_MAX_GROUPS,
                      anonymityBudget, ANONBUDGET_MAX_DETAILS, ANONBUDGET_MAX_GROUPS,
+                     anonymityCrowdNeeded, ANONCROWD_MAX_DETAILS, ANONCROWD_MAX_GROUPS,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
@@ -17903,6 +17988,33 @@ if (typeof document !== "undefined") {
       }
       text += "The verdict is " + verdictPhrase + ". ";
       text += "This is a best case, never a guarantee: it assumes every detail is independent and every group equally likely, and real crowds are skewed, so the real room can only be smaller. This plans only: nobody was looked up or identified, no wallet connected, and no chain data was read — the crowd size is the number you typed, not a live pool count.";
+      host.textContent = text;
+    });
+
+    /* --- how big a crowd do you need? --- */
+    document.getElementById("anoncrowd-plan").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var p = anonymityCrowdNeeded(document.getElementById("anoncrowd-minset").value,
+                            document.getElementById("anoncrowd-details").value);
+      var host = document.getElementById("anoncrowd-result");
+      if (p === null) {
+        host.textContent = "Enter the smallest group you refuse to drop below (a whole number, at least 1), plus the group count for each detail an observer knows, comma-separated — whole numbers of at least 1, at most 1000000 each, up to 12 details, or leave that field empty if nothing is known yet. Anything else is refused, not guessed at.";
+        return;
+      }
+      var verdictPhrase = p.verdict === "minimum-only" ? "the minimum itself — the details split nothing, so no crowd beyond the group you demand is needed"
+        : p.verdict === "modest" ? "modest — a small pool or a quiet moment already carries a crowd this size"
+        : p.verdict === "large" ? "large — a crowd this size is a busy pool or a well-attended moment, not a quiet one"
+        : "huge — a crowd this size is the largest pools at their busiest, and may not exist at the moment you need it";
+      var text = "Crowd needed — to keep at least " + p.minSet + (p.minSet === "1" ? " person" : " people") + " sharing your exact combination";
+      text += p.details.length === 0
+        ? ", with nothing known about you yet, the crowd must be at least " + p.crowdNeeded + " people: the minimum itself, because no detail divides it. "
+        : ", against " + p.details.length + (p.details.length === 1 ? " known detail" : " known details") + " (" + p.details.join(", ") + ") making " + p.combinations + " combinations (about " + p.detailBits + (p.detailBits === "1" ? " bit" : " bits") + " of distinguishing information), the crowd must be at least " + p.crowdNeeded + " people. ";
+      if (p.crowdNeeded !== "1") {
+        var fewer = BigInt(p.crowdNeeded) - 1n;
+        text += "One person fewer — " + fewer.toString() + " — and the expected group sharing your combination drops below " + p.minSet + ", so this is the smallest crowd that holds your minimum, not a rounded-up guess. ";
+      }
+      text += "The scale is " + verdictPhrase + ". ";
+      text += "This is a best case, never a guarantee: it assumes every detail is independent and every group equally likely, and real crowds are skewed, so the real crowd your minimum needs can only be larger — treat this number as a floor to plan from, not a promise. This sizes only: nobody was looked up or identified, no wallet connected, and no chain data was read — no crowd size here is a live pool count.";
       host.textContent = text;
     });
 
