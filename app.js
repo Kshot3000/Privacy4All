@@ -1521,6 +1521,64 @@ function feeCappedEscrowPlan(amountStr, bpsStr, minStr, maxStr) {
   };
 }
 
+/* ---------- 91. Swap fee, one named leg, bounded ---------- */
+/* Tool 71 names the leg a swap fee comes out of, but only at a
+   pure rate, and tools 82 to 90 price and check bounded fees
+   everywhere except a swap — so a swap under a bounded disclosure
+   is planned by neither: at a pure rate tool 71 takes 25 out of a
+   1,000-unit output leg at 250 bps where the disclosed floor takes
+   100, and the user is promised 975 out the disclosure never
+   offered. feeCappedSwapPlan takes both leg amounts as they will
+   settle, the rate, both bounds as disclosed and the one named
+   leg, and prices the fee on the named leg with tool 82's own
+   feeCappedQuote — so the fee here can never disagree with the
+   bounded quote — while tool 71's rule stands unchanged, bounds
+   included: the fee is taken once, from the named leg only, never
+   both legs, and never against a mid-price. The bounds bind the
+   named leg only: a floor can raise the fee taken from that leg,
+   but the other leg is never cut to meet it — a minimum above the
+   named leg's own amount is refused (null), even when it would
+   fit the other leg, because a floor cannot be collected from a
+   leg smaller than the floor. On the output leg, bounded fee +
+   what the user receives = the output settlement amount exactly,
+   and the full input reaches the pool; on the input leg, bounded
+   fee + what reaches the pool = the amount paid in exactly, and
+   the output is untouched. A zero rate with a minimum still pays
+   the whole minimum out of the named leg — it is not a free swap,
+   and this planner says so instead of printing the rate's zero.
+   The planner invents no exchange rate: both amounts are entered
+   as they will settle, and it prices only the fee. All arithmetic
+   is exact BigInt, so the plan holds past 2^53. Anything tool 82
+   refuses, an unnamed or misspelt leg, and a non-whole-number leg
+   amount are refused (null), never repaired into a plausible
+   plan. This function only plans — it swaps nothing, charges
+   nothing, moves nothing and names no recipient; the names belong
+   in the app's own quote, next to the amounts. */
+function feeCappedSwapPlan(inStr, outStr, bpsStr, minStr, maxStr, legStr) {
+  var li = (inStr == null ? "" : String(inStr)).trim();
+  var lo = (outStr == null ? "" : String(outStr)).trim();
+  var leg = (legStr == null ? "" : String(legStr)).trim();
+  if (leg !== "in" && leg !== "out") return null;
+  if (!/^\d+$/.test(li) || !/^\d+$/.test(lo)) return null;
+  var quote = feeCappedQuote(leg === "in" ? li : lo, bpsStr, minStr, maxStr);
+  if (quote === null) return null;
+  return {
+    amountIn: li,
+    amountOut: lo,
+    bps: quote.bps,
+    percent: quote.percent,
+    zeroBelow: quote.zeroBelow,
+    leg: leg,
+    uncappedFee: quote.uncappedFee,
+    minFee: quote.minFee,
+    maxFee: quote.maxFee,
+    boundVerdict: quote.verdict,
+    fee: quote.fee,
+    poolIn: leg === "in" ? quote.net : li,
+    userOut: leg === "out" ? quote.net : lo
+  };
+}
+
 /* ---------- 4. What does this dApp see? ---------- */
 /* level: "low" = usually needed to connect, "caution" = ask why and limit
    it before granting, "high" = do not grant blindly for a routine visit. */
@@ -16723,6 +16781,7 @@ if (typeof module !== "undefined" && module.exports) {
                      feeCappedDisclosure,
                      feeCappedSplitPayment,
                      feeCappedEscrowPlan,
+                     feeCappedSwapPlan,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
@@ -17365,6 +17424,39 @@ if (typeof document !== "undefined") {
         p.uncappedFee + " units; " + boundPhrase + ", so on release the fee is " + p.releaseFee + " units · the seller receives " + p.releaseNet + " units — fee + seller = held, exactly. " +
         "If the deal falls through and the escrow refunds: fee " + p.refundFee + " units · the buyer receives the full " + p.refundAmount + " units back — a refund is never charged, and no minimum fee is collected out of a refund. " +
         "Nothing is charged on deposit either. This is a plan only: nothing was held, charged, moved or signed, and DUST — the network's transaction resource — is a separate line that is never part of a service fee.";
+    });
+
+    /* --- swap fee, one named leg, bounded --- */
+    document.getElementById("feecapswap-plan").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var p = feeCappedSwapPlan(document.getElementById("feecapswap-in").value,
+                            document.getElementById("feecapswap-out").value,
+                            document.getElementById("feecapswap-bps").value,
+                            document.getElementById("feecapswap-min").value,
+                            document.getElementById("feecapswap-max").value,
+                            document.getElementById("feecapswap-leg").value);
+      var host = document.getElementById("feecapswap-result");
+      if (p === null) {
+        host.textContent = "Enter both leg amounts as whole numbers of smallest units, the rate as a whole number of basis points at or under 10,000 (100%), a minimum fee and a maximum fee in whole units — the minimum at most the maximum and at most the named leg's own amount — and name the one leg the fee comes out of. Anything else is refused, not priced.";
+        return;
+      }
+      var legName = p.leg === "out" ? "output" : "input";
+      var boundPhrase = p.boundVerdict === "floor" ? "the minimum fee raises it"
+        : p.boundVerdict === "ceiling" ? "the maximum fee cuts it"
+        : "neither bound changes it";
+      var text = "Bounded swap plan — you pay in " + p.amountIn + " units · the swap settles at " + p.amountOut + " units out before the service fee · disclosed service fee at " + p.bps + " bps (" + p.percent + "%), taken once, from the " + legName + " leg only: the rate alone takes " +
+        p.uncappedFee + " units; " + boundPhrase + ", so the fee is " + p.fee + " units. " +
+        "The pool receives " + p.poolIn + " units in · you receive " + p.userOut + " units out. " +
+        "On the " + legName + " leg, fee + net = that leg's amount, exactly; the other leg is untouched — no second cut, the bounds never reach across to it, and no fee is ever quoted against a mid-price. ";
+      if (p.bps === "0" && p.fee !== "0") {
+        text += "The rate is 0 bps but the disclosed minimum still applies, so this is not a free swap: the whole minimum comes out of the " + legName + " leg. ";
+      } else if (p.zeroBelow === null) {
+        text += "The rate is 0 bps and no minimum stands, so every swap pays no fee. ";
+      } else if (p.uncappedFee === "0" && p.fee === "0") {
+        text += "At this rate the fee rounds down to 0 — a " + legName + " leg under " + p.zeroBelow + " units pays no fee at " + p.bps + " bps, and floor rounding never rounds it up in the house's favour. ";
+      }
+      text += "This is a plan only: nothing was swapped, charged, moved or signed, and DUST — the network's transaction resource — is a separate line that is never part of a service fee.";
+      host.textContent = text;
     });
 
     /* --- check the fee you were charged --- */

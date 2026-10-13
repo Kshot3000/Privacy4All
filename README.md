@@ -75,9 +75,9 @@ renewable resource that pays for shielded transactions.
 
 ## Tools on the hub (local only, no wallet needed)
 
-The hub carries 90 tools; a **find-a-tool search** at the top of the tools
+The hub carries 91 tools; a **find-a-tool search** at the top of the tools
 section narrows the list as you type — every word must match a tool's title
-or first line, and clearing the search restores all 90.
+or first line, and clearing the search restores all 91.
 
 - **Paste-and-protect redactor** — finds and masks email addresses, Cardano
   addresses and US phone numbers in text you paste. Runs entirely in your
@@ -2478,6 +2478,46 @@ or first line, and clearing the search restores all 90.
   the held amount, exactly.
   Honestly labelled: it plans; it
   does not hold. Nothing is held,
+  charged, moved or signed, no
+  funds move and no wallet
+  connects. DUST is never part of
+  the fee.
+
+- **Name the leg the fee comes
+  out of, bounded fee — a
+  floor-and-ceiling swap-fee
+  planner** — the swap planner
+  names the leg its fee comes out
+  of at a pure rate only, and the
+  bounded tools price everywhere
+  except a swap, so a swap under a
+  bounded disclosure is planned by
+  neither: at a pure rate it takes
+  25 out of a 1,000-unit output leg
+  at 250 bps where the disclosed
+  floor takes 100, and you are
+  promised 975 out the disclosure
+  never offered. Enter both leg
+  amounts as they will settle, the
+  rate, both bounds and the one
+  named leg, and it prices the
+  bounded fee on that leg alone —
+  quoted by the bounded quote
+  itself, so the two can never
+  disagree. The swap rule stands,
+  bounds included: the fee is taken
+  once, from the named leg only,
+  never both legs and never against
+  a mid-price, and the bounds bind
+  the named leg only — the other
+  leg is never cut to meet a floor,
+  and a minimum above the named
+  leg's own amount is refused even
+  when it would fit the other leg.
+  A zero rate with a minimum is
+  not a free swap. Honestly
+  labelled: it plans; it does not
+  swap. Nothing is swapped,
   charged, moved or signed, no
   funds move and no wallet
   connects. DUST is never part of
