@@ -23,7 +23,7 @@ every public page the site serves, not just the front door.
 
 > Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) —
 > this is an independent community builder hub for the Midnight ecosystem
-> (22 catalogued projects, 4 live flagship sites). Team feedback and
+> (23 catalogued projects, 4 live flagship sites). Team feedback and
 > corrections welcome.
 
 ## What is Midnight?
@@ -55,6 +55,7 @@ renewable resource that pays for shielded transactions.
 | Repo | What it does |
 |---|---|
 | [nocturne](https://github.com/Kshot3000/nocturne) | Private messaging & email on Midnight |
+| [ShieldPass](https://github.com/Kshot3000/ShieldPass) | ZK compliance gate for Midnight dApps — prove KYC / sanctions / country / age without revealing them; testnet MVP on Preprod, Midnight Buildathon, not audited |
 | [Midnight-GrokBot-Agent](https://github.com/Kshot3000/Midnight-GrokBot-Agent) | Midnight build lab — Compact starters, Lace kit, agent escrow |
 | [Cardano-Midnight-Qwen-Builder](https://github.com/Kshot3000/Cardano-Midnight-Qwen-Builder) | Agent escrow, network monitors, privacy dashboards; fleet showcase hub |
 | [midnight-bank](https://github.com/Kshot3000/midnight-bank) | ZK banking example — private transfers, encrypted balances (fork, upstream work) |

@@ -53,7 +53,7 @@ check("README documents the structured data and the complete sitemap", readme.in
 check("mobile browser chrome tints to the page background: theme-color matches the --bg token exactly", html.includes('<meta name="theme-color" content="#07040f">') && css.includes("--bg:#07040f"));
 check("dark color-scheme declared in both the head meta and the stylesheet, so controls render dark", html.includes('<meta name="color-scheme" content="dark">') && css.includes("color-scheme:dark"));
 check("README documents the canonical, theme-color and color-scheme declarations", readme.includes("canonical URL") && readme.includes("theme-color") && readme.includes("color-scheme"));
-check("hero catalogue count matches the cards on the page", html.includes("22 Midnight / privacy") && (html.match(/class="card"/g) || []).length === 22);
+check("hero catalogue count matches the cards on the page", html.includes("23 Midnight / privacy") && (html.match(/class="card"/g) || []).length === 23);
 check("dApp permission tool present", html.includes('id="dapp-see"') && html.includes('id="dapp-result"'));
 check("ZK claim simulator present", html.includes('id="zk-prover"') && html.includes('id="zk-result"'));
 check("ZK simulator honestly labelled a simulation", html.includes("teaching simulation, not a cryptographic proof"));
@@ -136,7 +136,13 @@ for (const url of ["https://github.com/Kshot3000/midnight-faucet-api", "https://
 for (const url of ["https://github.com/Kshot3000/compact", "https://github.com/Kshot3000/compact-testbed", "https://github.com/Kshot3000/midnight-node", "https://github.com/Kshot3000/midnight-sdk", "https://github.com/Kshot3000/example-zkloan", "https://github.com/Kshot3000/vaxzk"]) {
   check("catalogue fork linked: " + url, html.includes(url) && readme.includes(url));
 }
-check("README catalogue count matches the hub", readme.includes("22 catalogued projects"));
+/* catalogue owned repo added 2026-10-14 — ShieldPass, Kyle's own Midnight
+   Buildathon repo (created 2026-10-11), verified live (HTTP 200) and
+   described from its own README (testnet MVP on Preprod, not audited) */
+for (const url of ["https://github.com/Kshot3000/ShieldPass"]) {
+  check("catalogue project linked: " + url, html.includes(url) && readme.includes(url));
+}
+check("README catalogue count matches the hub", readme.includes("23 catalogued projects"));
 
 /* redactor */
 const sample = "Mail me at kyle@example.com, call (262) 555-0148, or send to " + ADA + " — thanks";
