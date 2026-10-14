@@ -2314,6 +2314,106 @@ function anonymityShareEstimate(crowdStr, sharesStr) {
     verdict: verdict
   };
 }
+/* ---------- 100. What if your details travel together? ---------- */
+/* Every tool in this family from 94 to 99 assumes the details
+   an observer knows are independent of each other, and every
+   one of them warns that real details correlate — a language
+   with a region, a wallet with the hours it is used. This
+   planner stops assuming and prices both ends of that warning
+   in exact BigInt. At one end, independence: the details make
+   the full product of their group counts in combinations,
+   which is tool 94's arithmetic, and the expected group is
+   the crowd divided by that product, rounded down. At the
+   other end, the details travel together completely: every
+   smaller detail's groups sit entirely inside the largest
+   detail's groups, so knowing all of them splits the crowd
+   no finer than the largest detail alone, and the expected
+   group is the crowd divided by that largest group count,
+   rounded down. The number of combinations any real
+   correlation pattern realises lies between the largest
+   group count and the full product — never fewer, never
+   more — so the true expected group lies between the two
+   figures this returns, and correlation can move it inside
+   that range but never outside it. Judged against the
+   smallest group the visitor refuses to drop below, the
+   verdict is three-way: safe-anyway (the independence end
+   already clears the minimum, so the group holds however
+   the details correlate), depends (only the travelling-
+   together end clears it, so the protection rests on a
+   correlation this page cannot measure), or unsafe-anyway
+   (even the travelling-together end falls below it, so no
+   correlation can save the group). A single detail can
+   never return depends — with one detail the two ends are
+   the same number, which the tests pin. The cross-checks
+   that pin this planner to the family: the independence
+   end is tool 94's expected group for the same details,
+   and the travelling-together end is tool 94's expected
+   group for the largest detail alone. What the range does
+   NOT price: skew inside a detail — it holds each detail's
+   groups equally likely, as tool 94 does, so tool 99's
+   warning still applies and your own group can be smaller
+   than either figure; the range is exact about correlation
+   and still never a guarantee. A minimum above the crowd
+   is refused up front, exactly as in tool 95: it is not a
+   plan but an impossibility. Refused (null), never
+   repaired: a crowd or minimum that is not a whole number
+   or is zero, a minimum above the crowd, an empty or
+   absent details list, more than ANONBOUNDS_MAX_DETAILS
+   details, and a group count under 1 or above
+   ANONBOUNDS_MAX_GROUPS. This bounds correlation only —
+   it looks nobody up, identifies nobody, connects no
+   wallet and reads no chain data; the crowd size is a
+   number you type, not a live pool count, and how details
+   correlate in the world is a fact about the world, not
+   something this page can know. */
+var ANONBOUNDS_MAX_DETAILS = 12;
+var ANONBOUNDS_MAX_GROUPS = 1000000;
+function anonymityBoundsPlan(crowdStr, minStr, detailsStr) {
+  var c = (crowdStr == null ? "" : String(crowdStr)).trim();
+  if (!/^\d+$/.test(c)) return null;
+  var crowd = BigInt(c);
+  if (crowd === 0n) return null;
+  var m = (minStr == null ? "" : String(minStr)).trim();
+  if (!/^\d+$/.test(m)) return null;
+  var minimum = BigInt(m);
+  if (minimum === 0n || minimum > crowd) return null;
+  var d = (detailsStr == null ? "" : String(detailsStr)).trim();
+  if (!d) return null;
+  var raw = d.split(",");
+  if (raw.length < 1 || raw.length > ANONBOUNDS_MAX_DETAILS) return null;
+  var details = [];
+  var combinations = 1n;
+  var largest = 1n;
+  for (var i = 0; i < raw.length; i++) {
+    var t = raw[i].trim();
+    if (!/^\d+$/.test(t)) return null;
+    var g = BigInt(t);
+    if (g < 1n || g > BigInt(ANONBOUNDS_MAX_GROUPS)) return null;
+    details.push(g.toString());
+    combinations *= g;
+    if (g > largest) largest = g;
+  }
+  var independentSet = crowd / combinations;
+  var correlatedSet = crowd / largest;
+  function bitsOf(x) {
+    return x >= 1n ? (x.toString(2).length - 1).toString() : null;
+  }
+  var verdict = independentSet >= minimum ? "safe-anyway"
+    : correlatedSet >= minimum ? "depends"
+    : "unsafe-anyway";
+  return {
+    crowd: crowd.toString(),
+    minimum: minimum.toString(),
+    details: details,
+    combinations: combinations.toString(),
+    largestGroup: largest.toString(),
+    independentSet: independentSet.toString(),
+    correlatedSet: correlatedSet.toString(),
+    independentBits: bitsOf(independentSet),
+    correlatedBits: bitsOf(correlatedSet),
+    verdict: verdict
+  };
+}
 
 /* ---------- 4. What does this dApp see? ---------- */
 /* level: "low" = usually needed to connect, "caution" = ask why and limit
@@ -17526,6 +17626,7 @@ if (typeof module !== "undefined" && module.exports) {
                      anonymityShedPlan, ANONSHED_MAX_DETAILS, ANONSHED_MAX_GROUPS,
                      anonymityCombinePlan, ANONCOMBINE_MAX_DETAILS, ANONCOMBINE_MAX_GROUPS,
                      anonymityShareEstimate, ANONSHARE_MAX_SHARES, ANONSHARE_MAX_PART,
+                     anonymityBoundsPlan, ANONBOUNDS_MAX_DETAILS, ANONBOUNDS_MAX_GROUPS,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
@@ -18439,6 +18540,27 @@ if (typeof document !== "undefined") {
       text += "The verdict is " + verdictPhrase + ". ";
       text += "Unlike tools 94 to 98, this prices your group, not the average one: a common value leaves a larger group than a total group count suggests, and a rare value a smaller one. ";
       text += "This is still a best case, never a guarantee: it assumes every detail is independent of the others, and correlated shares — a language and a region held by much the same people — overstate the group, and a share is only as honest as the count behind it. This estimates shares only: nobody was looked up or identified, no wallet connected, and no chain data was read — the crowd size and every share are numbers you typed, not live pool counts or looked-up statistics.";
+      host.textContent = text;
+    });
+
+    /* --- what if your details travel together? --- */
+    document.getElementById("anonbounds-plan").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var p = anonymityBoundsPlan(document.getElementById("anonbounds-crowd").value,
+                            document.getElementById("anonbounds-minset").value,
+                            document.getElementById("anonbounds-details").value);
+      var host = document.getElementById("anonbounds-result");
+      if (p === null) {
+        host.textContent = "Enter the size of your crowd (a whole number, at least 1), the smallest group you refuse to drop below (a whole number, at least 1 and at most the crowd) and the group counts of the known details, comma-separated — whole numbers, at least 1, at most 1000000 each, up to 12 details. A minimum above the crowd is not a plan but an impossibility. Anything else is refused, not guessed at.";
+        return;
+      }
+      var verdictPhrase = p.verdict === "safe-anyway" ? "above your line however your details correlate — even with the details fully independent, the expected group stays at or above your minimum"
+        : p.verdict === "depends" ? "above your line only if your details travel together — under independence the expected group falls below your minimum, so this protection depends on a correlation this page cannot measure"
+        : "below your line however your details correlate — even if every smaller detail's groups sat entirely inside the largest detail's groups, the expected group still falls below your minimum";
+      var text = "Correlation bounds — a crowd of " + p.crowd + " people, your minimum " + p.minimum + ", and details splitting the crowd into " + p.details.join(", ") + " groups: if the details are independent they make " + p.combinations + (p.combinations === "1" ? " combination" : " combinations") + " and the expected group is " + p.independentSet + " people; if they travel together completely, only the largest detail's " + p.largestGroup + " groups split you and the expected group is " + p.correlatedSet + " people. ";
+      text += "The true group lies between those two figures — correlation can move it inside that range, never outside it. ";
+      text += "The verdict is " + verdictPhrase + ". ";
+      text += "These bounds price correlation only, on tool 94's equal-likelihood assumption inside each detail: skew — priced by tool 99 — can still make your own group smaller than either figure. This bounds correlation only: nobody was looked up or identified, no wallet connected, and no chain data was read — the crowd size is the number you typed, not a live pool count, and how your details actually correlate is a fact about the world, not something this page can know or change.";
       host.textContent = text;
     });
 

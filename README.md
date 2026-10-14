@@ -75,9 +75,9 @@ renewable resource that pays for shielded transactions.
 
 ## Tools on the hub (local only, no wallet needed)
 
-The hub carries 99 tools; a **find-a-tool search** at the top of the tools
+The hub carries 100 tools; a **find-a-tool search** at the top of the tools
 section narrows the list as you type — every word must match a tool's title
-or first line, and clearing the search restores all 99.
+or first line, and clearing the search restores all 100.
 
 - **Paste-and-protect redactor** — finds and masks email addresses, Cardano
   addresses and US phone numbers in text you paste. Runs entirely in your
@@ -2796,6 +2796,33 @@ or first line, and clearing the search restores all 99.
   chain data is read, and the
   crowd size and every share are
   numbers you type, not a live
+  pool count.
+
+- **What if your details travel
+  together? — an anonymity
+  correlation bounds planner** —
+  the correlation question the
+  six tools above only warn
+  about: they assume the known
+  details are independent. This
+  planner prices both ends in
+  exact BigInt — independent,
+  the full product of group
+  counts (tool 94's answer), and
+  travelling together completely,
+  every smaller detail's groups
+  nested inside the largest
+  detail's, so only the largest
+  splits you — and judges your
+  minimum against both: safe at
+  both ends, safe only at the
+  correlated end, or safe at
+  neither. It bounds correlation; it does
+  not identify — nobody
+  is looked up, no wallet
+  connects, no chain data is
+  read, and the crowd size is a
+  number you type, not a live
   pool count.
 
 ## Guides
