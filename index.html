@@ -226,7 +226,7 @@
 
   <section id="tools" aria-labelledby="tools-h">
     <h2 id="tools-h">Privacy tools — right here, nothing leaves your browser</h2>
-    <p>Ninety-eight tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
+    <p>Ninety-nine tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
     <div class="filter-row" role="group" aria-label="Find a tool">
       <label for="tool-q">Find a tool</label>
       <input id="tool-q" type="search" placeholder="e.g. vote, sign, DUST, share a secret…" autocomplete="off">
@@ -2829,7 +2829,18 @@
         <button type="submit" class="btn primary">Plan the combination, locally</button>
         <p id="anoncombine-result" role="status" aria-live="polite"></p>
       </form>
-      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 98 tools.</p>
+      <form class="tool" id="anonshare-plan">
+        <h3>99 · How common are your values? — an anonymity share estimator</h3>
+        <p>Tools 94 to 98 all divide the crowd by how many groups each detail splits it into — which prices the average group, on the assumption that every group is equally likely, and every one of those tools warns that real crowds are skewed. This estimator relaxes that one assumption: instead of a total group count, enter for each known detail the share of the crowd that holds your value of it — a wallet used by 37 in 1,000 people is 37/1000, a language by 1 in 8 is 1/8, a very common value by 90 in 100 is 90/100 — and it multiplies the crowd by every share exactly in BigInt and rounds down, because rounding up would flatter the protection. That prices your group, not the average one: a common value leaves a larger group than a group count for the same detail suggests, and a rare value a smaller one. When every share is 1 in however many groups, the answer is tool 94's answer to the person — the two models agree exactly where they overlap. It estimates; it does not identify: nobody is looked up, no wallet connects, and no chain data is read — the crowd size and every share are numbers you type, not live pool counts or looked-up statistics.</p>
+        <p>This is still a best case, never a guarantee: it assumes every detail is independent of the others, and correlated shares — a language and a region held by much the same people twice over — overstate the group, so the real group can still be smaller than this estimate. A share is only as honest as the count behind it: a share you guessed flatters exactly like a group count you guessed, which is why the shares worth entering are ones you can point at — a wallet's published usage, a census language figure — not ones that feel right. An expected group under 2 means you are expected to be alone in it, and 0 means the shares together pick out less than one person: your values together are rarer than the crowd can hide.</p>
+        <label for="anonshare-crowd">Size of the crowd you are hiding in, in people (a whole number, at least 1 — e.g. 100000)</label>
+        <input id="anonshare-crowd" inputmode="numeric" placeholder="e.g. 100000" autocomplete="off">
+        <label for="anonshare-shares">Share of the crowd holding your value of each known detail, comma-separated fractions — how many out of how many people (each part a whole number, the first at least 1 and never more than the second, each part at most 1000000, up to 12 shares — e.g. 37/1000, 1/8)</label>
+        <input id="anonshare-shares" inputmode="numeric" placeholder="e.g. 37/1000, 1/8" autocomplete="off">
+        <button type="submit" class="btn primary">Price my group, locally</button>
+        <p id="anonshare-result" role="status" aria-live="polite"></p>
+      </form>
+      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 99 tools.</p>
     </div>
   </section>
 
@@ -2863,6 +2874,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=98"></script>
+<script src="app.js?v=99"></script>
 </body>
 </html>

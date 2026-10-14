@@ -2213,6 +2213,108 @@ function anonymityCombinePlan(crowdStr, minSetStr, firstStr, secondStr, sharedSt
   };
 }
 
+/* Tool 99 — how common are your values? An anonymity share
+   estimator. Tools 94 to 98 all divide the crowd by how many
+   groups each detail splits it into — which prices the
+   AVERAGE group, on the stated assumption that every group
+   is equally likely. Every one of those tools flags the same
+   gap in its own honesty text: real crowds are skewed. This
+   estimator relaxes that one assumption: instead of a total
+   group count, each known detail is entered as the share of
+   the crowd that holds YOUR value of it — a wallet used by
+   37 in 1,000 people is 37/1000, a language 1 in 8 is 1/8,
+   a very common value 90 in 100 is 90/100. The expected size
+   of the group sharing your exact combination is the crowd
+   multiplied by every share's numerator and divided by every
+   share's denominator, exactly in BigInt, rounded DOWN —
+   rounding up would flatter the protection. That prices YOUR
+   group, not the average one: a common value leaves a larger
+   group than tool 94's group count for the same detail would
+   suggest, and a rare value a smaller one, which is exactly
+   the skew the earlier tools could only warn about. The
+   effective combinations ride along as the denominators'
+   product divided by the numerators' product, rounded DOWN,
+   so when every share is 1 in g the figure is exactly tool
+   94's combinations and this estimator returns tool 94's
+   expected group to the person — the cross-check that pins
+   the two models together. The verdict bands are tool 94's:
+   at least 1,000 is a crowd, 100 a small crowd, 10 a handful,
+   2 a few, and under 2 you are expected to be alone — an
+   expected group of 0 means the shares together pick out
+   less than one person. Bit counts ride along as exact
+   floors of log2 from binary length, as in tool 94. What
+   this does NOT relax: it still assumes every detail is
+   independent of the others — correlated shares (a language
+   and a region held by the same people twice over) still
+   overstate the group, so the answer stays a BEST CASE,
+   never a guarantee, and a share is only as honest as the
+   count behind it: a share you guessed flatters exactly like
+   a group count you guessed. A shares list is required —
+   the list is the whole question, as in tool 94 — and an
+   empty or absent list is refused, not read as no details.
+   Refused (null), never repaired: a crowd that is not a
+   whole number or is zero, more than ANONSHARE_MAX_SHARES
+   shares, a share that is not exactly one fraction a/b of
+   whole numbers, a numerator under 1 or above
+   ANONSHARE_MAX_PART, a denominator under 1 or above
+   ANONSHARE_MAX_PART, and a numerator above its denominator
+   (a share of a crowd cannot exceed the whole crowd). This
+   estimates shares only — it looks nobody up, identifies
+   nobody, connects no wallet and reads no chain data; the
+   crowd size and every share are numbers you type, not live
+   pool counts or looked-up statistics. */
+var ANONSHARE_MAX_SHARES = 12;
+var ANONSHARE_MAX_PART = 1000000;
+function anonymityShareEstimate(crowdStr, sharesStr) {
+  var c = (crowdStr == null ? "" : String(crowdStr)).trim();
+  if (!/^\d+$/.test(c)) return null;
+  var crowd = BigInt(c);
+  if (crowd === 0n) return null;
+  var d = (sharesStr == null ? "" : String(sharesStr)).trim();
+  if (!d) return null;
+  var raw = d.split(",");
+  if (raw.length < 1 || raw.length > ANONSHARE_MAX_SHARES) return null;
+  var shares = [];
+  var numProd = 1n;
+  var denProd = 1n;
+  for (var i = 0; i < raw.length; i++) {
+    var parts = raw[i].trim().split("/");
+    if (parts.length !== 2) return null;
+    var aStr = parts[0].trim();
+    var bStr = parts[1].trim();
+    if (!/^\d+$/.test(aStr) || !/^\d+$/.test(bStr)) return null;
+    var a = BigInt(aStr);
+    var b = BigInt(bStr);
+    if (a < 1n || a > BigInt(ANONSHARE_MAX_PART)) return null;
+    if (b < 1n || b > BigInt(ANONSHARE_MAX_PART)) return null;
+    if (a > b) return null;
+    shares.push(a.toString() + "/" + b.toString());
+    numProd *= a;
+    denProd *= b;
+  }
+  var expectedSet = (crowd * numProd) / denProd;
+  var combinations = denProd / numProd;
+  function bitsOf(x) {
+    return x >= 1n ? (x.toString(2).length - 1).toString() : null;
+  }
+  var verdict = expectedSet >= 1000n ? "crowd"
+    : expectedSet >= 100n ? "small-crowd"
+    : expectedSet >= 10n ? "handful"
+    : expectedSet >= 2n ? "few"
+    : "alone";
+  return {
+    crowd: crowd.toString(),
+    shares: shares,
+    shareNumerator: numProd.toString(),
+    shareDenominator: denProd.toString(),
+    combinations: combinations.toString(),
+    expectedSet: expectedSet.toString(),
+    detailBits: bitsOf(combinations),
+    setBits: bitsOf(expectedSet),
+    verdict: verdict
+  };
+}
+
 /* ---------- 4. What does this dApp see? ---------- */
 /* level: "low" = usually needed to connect, "caution" = ask why and limit
    it before granting, "high" = do not grant blindly for a routine visit. */
@@ -17423,6 +17525,7 @@ if (typeof module !== "undefined" && module.exports) {
                      anonymityCrowdNeeded, ANONCROWD_MAX_DETAILS, ANONCROWD_MAX_GROUPS,
                      anonymityShedPlan, ANONSHED_MAX_DETAILS, ANONSHED_MAX_GROUPS,
                      anonymityCombinePlan, ANONCOMBINE_MAX_DETAILS, ANONCOMBINE_MAX_GROUPS,
+                     anonymityShareEstimate, ANONSHARE_MAX_SHARES, ANONSHARE_MAX_PART,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
@@ -18314,6 +18417,28 @@ if (typeof document !== "undefined") {
       }
       text += "The verdict is " + verdictPhrase + ". ";
       text += "This is a best case, never a guarantee: it assumes every detail is independent and every group equally likely, and real crowds are skewed, so each real group can only be smaller — and details the two observers hold that are secretly the same fact told two ways are a correlation this page cannot see. This plans combinations only: nobody was looked up or identified, no wallet connected, and no chain data was read — the crowd size is the number you typed, not a live pool count, and whether two observers ever compare notes is a fact about the world, not something this page can know or prevent.";
+      host.textContent = text;
+    });
+
+    /* --- how common are your values? --- */
+    document.getElementById("anonshare-plan").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var p = anonymityShareEstimate(document.getElementById("anonshare-crowd").value,
+                            document.getElementById("anonshare-shares").value);
+      var host = document.getElementById("anonshare-result");
+      if (p === null) {
+        host.textContent = "Enter the size of your crowd (a whole number, at least 1) and, for each known detail, the share of the crowd that holds your value of it as one fraction — how many out of how many people, like 37/1000 or 1/8 — whole numbers, the first at least 1 and never more than the second, each part at most 1000000, up to 12 shares. Anything else is refused, not guessed at.";
+        return;
+      }
+      var verdictPhrase = p.verdict === "crowd" ? "a crowd — at least a thousand people are expected to share your exact combination"
+        : p.verdict === "small-crowd" ? "a small crowd — at least a hundred people are expected to share your exact combination"
+        : p.verdict === "handful" ? "a handful — at least ten people are expected to share your exact combination"
+        : p.verdict === "few" ? "a few — at least two people are expected to share your exact combination"
+        : "alone — fewer than two people are expected to share your exact combination, so the shares together single you out even if each one looked harmless alone";
+      var text = "Share estimate — a crowd of " + p.crowd + " people, and the shares of the crowd holding your values (" + p.shares.join(", ") + ") multiply to " + p.shareNumerator + "/" + p.shareDenominator + ", an effective " + p.combinations + (p.combinations === "1" ? " combination" : " combinations") + ": the expected group sharing your exact combination is " + p.expectedSet + " people. ";
+      text += "The verdict is " + verdictPhrase + ". ";
+      text += "Unlike tools 94 to 98, this prices your group, not the average one: a common value leaves a larger group than a total group count suggests, and a rare value a smaller one. ";
+      text += "This is still a best case, never a guarantee: it assumes every detail is independent of the others, and correlated shares — a language and a region held by much the same people — overstate the group, and a share is only as honest as the count behind it. This estimates shares only: nobody was looked up or identified, no wallet connected, and no chain data was read — the crowd size and every share are numbers you typed, not live pool counts or looked-up statistics.";
       host.textContent = text;
     });
 

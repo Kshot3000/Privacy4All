@@ -75,9 +75,9 @@ renewable resource that pays for shielded transactions.
 
 ## Tools on the hub (local only, no wallet needed)
 
-The hub carries 98 tools; a **find-a-tool search** at the top of the tools
+The hub carries 99 tools; a **find-a-tool search** at the top of the tools
 section narrows the list as you type — every word must match a tool's title
-or first line, and clearing the search restores all 98.
+or first line, and clearing the search restores all 99.
 
 - **Paste-and-protect redactor** — finds and masks email addresses, Cardano
   addresses and US phone numbers in text you paste. Runs entirely in your
@@ -2763,6 +2763,40 @@ or first line, and clearing the search restores all 98.
   chain data is read, and the
   crowd size is a number you
   type, not a live pool count.
+
+- **How common are your
+  values? — an anonymity
+  share estimator** — the
+  skewed-crowd question the five
+  tools above only warn about:
+  they divide by total group
+  counts, which prices the
+  average group on the
+  equal-likelihood assumption.
+  This estimator takes, for each
+  known detail, the share of the
+  crowd holding your value of it
+  as a fraction (37/1000, 1/8,
+  90/100) and multiplies the
+  crowd by every share exactly
+  in BigInt, rounded down,
+  pricing your group instead:
+  common values leave more cover
+  than a group count suggests,
+  rare values less. Where every
+  share is 1 in g it returns the
+  estimator above's answer
+  exactly. Honestly labelled a
+  best case, never a guarantee:
+  independence is still assumed,
+  so correlated shares overstate
+  the group. It estimates; it does
+  not identify — nobody is looked
+  up, no wallet connects, no
+  chain data is read, and the
+  crowd size and every share are
+  numbers you type, not a live
+  pool count.
 
 ## Guides
 
