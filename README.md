@@ -18,7 +18,7 @@ dark instead of being auto-darkened or left light. The head also carries
 JSON-LD structured data — a `WebSite` node for the hub, authored by a
 `Person` node for Kyle Cox whose `sameAs` links are his X and GitHub
 profiles — so search engines can attribute the hub to its builder, and
-`sitemap.xml` lists the hub plus all five guides so crawlers are pointed at
+`sitemap.xml` lists the hub plus all six guides so crawlers are pointed at
 every public page the site serves, not just the front door.
 
 > Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) —
@@ -2887,6 +2887,19 @@ or first line, and clearing the search restores all 101.
   once, sealed fields for configuration, an authorisation check on
   every exported circuit, and the disclosures reviewed together, not
   one by one. A checklist, not an audit, and not a guarantee.
+- [Operating a Midnight dApp after launch](guides/operating-midnight.md) —
+  a maintainer's checklist built on the official proof-server and
+  version-mismatch guidance: the stack as one matched set with a
+  written version inventory checked against the compatibility matrix
+  (exact pins, `npm ci`, the proof server image tagged from the
+  matrix, never `latest`), upgrades treated as migrations (back up
+  first, recompile clean after a compiler change, verify on a test
+  network before users), the proving path guarded (local by default,
+  because a proof server run by someone else sees the witness
+  values; hosted proving disclosed in the UI), users' local private
+  state migrated, never stranded, and the public ledger re-read on a
+  schedule as one publication. A checklist, not a runbook, and not
+  a guarantee.
 
 ## How the hourly builder loop works
 
