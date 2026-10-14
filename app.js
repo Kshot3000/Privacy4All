@@ -2094,6 +2094,125 @@ function anonymityShedPlan(crowdStr, minSetStr, detailsStr) {
   };
 }
 
+/* Tool 98 — what if they compare notes? An anonymity
+   combination planner. Tools 94 to 97 all face ONE observer:
+   they measure, budget, size and repair against a single set
+   of known details. Real cover faces more than one observer,
+   and two observers who each stay above your minimum alone
+   can break it together — an intersection of two knowledge
+   sets, neither sufficient on its own. This planner takes
+   three lists: the details only the first observer knows, the
+   details only the second knows, and the details BOTH know.
+   A shared detail is counted ONCE in the combined product,
+   never twice: both observers knowing your region does not
+   split the crowd by the region twice, and double-counting
+   it would understate the combined group — the one direction
+   of error this family never allows itself, since every other
+   rounding here falls toward the worse answer. The three
+   expected groups are the crowd divided by each product,
+   rounded DOWN exactly in BigInt, as in tool 94: the first
+   observer's group (their own details times the shared ones),
+   the second's, and the combined group if the two ever pool
+   what they know. The verdict names the outcome: safe (even
+   combined, the group holds your minimum), collusion (each
+   observer alone leaves you at or above the minimum, but
+   comparing notes drops you below it — the danger was never
+   either observer, it is the combination), broken-first or
+   broken-second (that observer alone already drops you below
+   your minimum, before any combining), or broken-both.
+   Cross-checkable: tool 94 run on the first list plus the
+   shared list returns this function's first group, run on
+   all three lists together it returns the combined group,
+   and the combined group never exceeds either single group.
+   Empty lists are legitimate — an observer who knows nothing
+   yet, or no shared details — and an absent list is read the
+   same way, as in tools 95 to 97. Refused (null), never
+   guessed at: a crowd or minimum that is not a whole number,
+   a crowd of zero, a minimum under 1 or above the crowd (a
+   group bigger than the crowd can never exist — not a plan
+   but an impossibility, as in tools 95 to 97), a detail of
+   zero groups or above ANONCOMBINE_MAX_GROUPS in any list,
+   more than ANONCOMBINE_MAX_DETAILS details in any one list,
+   and malformed lists. This inherits tools 94 to 97's honesty
+   in full: the numbers are a BEST CASE under independence
+   and equal likelihood — real crowds are skewed, so each
+   real group can only be smaller, and details the two
+   observers hold that are secretly the same fact told two
+   ways are a correlation this page cannot see. This plans
+   combinations only — it looks nobody up, identifies nobody,
+   connects no wallet and reads no chain data; the crowd size
+   is a number you type, not a live pool count, and whether
+   two observers ever compare notes is a fact about the world,
+   not something this page can know or prevent. */
+var ANONCOMBINE_MAX_DETAILS = 12;
+var ANONCOMBINE_MAX_GROUPS = 1000000;
+function anonymityCombinePlan(crowdStr, minSetStr, firstStr, secondStr, sharedStr) {
+  function parseWhole(x) {
+    var t = (x == null ? "" : String(x)).trim();
+    if (!/^\d+$/.test(t)) return null;
+    return BigInt(t);
+  }
+  function parseList(x) {
+    var d = (x == null ? "" : String(x)).trim();
+    if (!d) return [];
+    var raw = d.split(",");
+    if (raw.length < 1 || raw.length > ANONCOMBINE_MAX_DETAILS) return null;
+    var out = [];
+    for (var i = 0; i < raw.length; i++) {
+      var t = raw[i].trim();
+      if (!/^\d+$/.test(t)) return null;
+      var g = BigInt(t);
+      if (g < 1n || g > BigInt(ANONCOMBINE_MAX_GROUPS)) return null;
+      out.push(g.toString());
+    }
+    return out;
+  }
+  var crowd = parseWhole(crowdStr);
+  if (crowd === null || crowd === 0n) return null;
+  var minSet = parseWhole(minSetStr);
+  if (minSet === null || minSet < 1n || minSet > crowd) return null;
+  var first = parseList(firstStr);
+  var second = parseList(secondStr);
+  var shared = parseList(sharedStr);
+  if (first === null || second === null || shared === null) return null;
+  function prod(list) {
+    var p = 1n;
+    for (var j = 0; j < list.length; j++) p *= BigInt(list[j]);
+    return p;
+  }
+  var combinationsFirst = prod(first) * prod(shared);
+  var combinationsSecond = prod(second) * prod(shared);
+  var combinationsBoth = prod(first) * prod(second) * prod(shared);
+  var setFirst = crowd / combinationsFirst;
+  var setSecond = crowd / combinationsSecond;
+  var setBoth = crowd / combinationsBoth;
+  function bitsOf(x) {
+    return x >= 1n ? (x.toString(2).length - 1).toString() : null;
+  }
+  var verdict = setFirst < minSet && setSecond < minSet ? "broken-both"
+    : setFirst < minSet ? "broken-first"
+    : setSecond < minSet ? "broken-second"
+    : setBoth < minSet ? "collusion"
+    : "safe";
+  return {
+    crowd: crowd.toString(),
+    minSet: minSet.toString(),
+    detailsFirst: first,
+    detailsSecond: second,
+    detailsShared: shared,
+    combinationsFirst: combinationsFirst.toString(),
+    combinationsSecond: combinationsSecond.toString(),
+    combinationsBoth: combinationsBoth.toString(),
+    setFirst: setFirst.toString(),
+    setSecond: setSecond.toString(),
+    setBoth: setBoth.toString(),
+    bitsFirst: bitsOf(setFirst),
+    bitsSecond: bitsOf(setSecond),
+    bitsBoth: bitsOf(setBoth),
+    verdict: verdict
+  };
+}
+
 /* ---------- 4. What does this dApp see? ---------- */
 /* level: "low" = usually needed to connect, "caution" = ask why and limit
    it before granting, "high" = do not grant blindly for a routine visit. */
@@ -17303,6 +17422,7 @@ if (typeof module !== "undefined" && module.exports) {
                      anonymityBudget, ANONBUDGET_MAX_DETAILS, ANONBUDGET_MAX_GROUPS,
                      anonymityCrowdNeeded, ANONCROWD_MAX_DETAILS, ANONCROWD_MAX_GROUPS,
                      anonymityShedPlan, ANONSHED_MAX_DETAILS, ANONSHED_MAX_GROUPS,
+                     anonymityCombinePlan, ANONCOMBINE_MAX_DETAILS, ANONCOMBINE_MAX_GROUPS,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
@@ -18164,6 +18284,36 @@ if (typeof document !== "undefined") {
         text += "A detail with 1 group splits nothing — everyone shares it — so it is never on the withholding list: giving it up would buy no cover. ";
       }
       text += "This is a best case, never a guarantee: it assumes every detail is independent and every group equally likely, and real crowds are skewed, so the real group a withholding restores can only be smaller. This plans withholdings only: nobody was looked up or identified, no wallet connected, and no chain data was read — the crowd size is the number you typed, not a live pool count, and withholding a detail is your act in the app that asked for it, not something this page does.";
+      host.textContent = text;
+    });
+
+    /* --- what if they compare notes? --- */
+    document.getElementById("anoncombine-plan").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var p = anonymityCombinePlan(document.getElementById("anoncombine-crowd").value,
+                            document.getElementById("anoncombine-minset").value,
+                            document.getElementById("anoncombine-first").value,
+                            document.getElementById("anoncombine-second").value,
+                            document.getElementById("anoncombine-shared").value);
+      var host = document.getElementById("anoncombine-result");
+      if (p === null) {
+        host.textContent = "Enter the size of your crowd and the smallest group you refuse to drop below (whole numbers, the minimum at least 1 and at most the crowd itself), plus three comma-separated lists — the group count for each detail only the first observer knows, only the second knows, and both know — whole numbers of at least 1, at most 1000000 each, up to 12 details in any one list, or leave any list empty. Anything else is refused, not guessed at.";
+        return;
+      }
+      var verdictPhrase = p.verdict === "safe" ? "safe — even if the two observers compare notes and pool everything they know, the expected group still holds your minimum"
+        : p.verdict === "collusion" ? "collusion — each observer alone leaves you at or above your minimum, but if they compare notes the combined group drops below it: the danger was never either observer, it is the combination"
+        : p.verdict === "broken-first" ? "broken-first — the first observer alone already drops the expected group below your minimum, before any notes are compared"
+        : p.verdict === "broken-second" ? "broken-second — the second observer alone already drops the expected group below your minimum, before any notes are compared"
+        : "broken-both — each observer alone already drops the expected group below your minimum";
+      var text = "Combination plan — a crowd of " + p.crowd + " people and a minimum group of " + p.minSet + ": ";
+      text += "the first observer's details make " + p.combinationsFirst + (p.combinationsFirst === "1" ? " combination" : " combinations") + ", leaving an expected group of " + p.setFirst + "; ";
+      text += "the second observer's make " + p.combinationsSecond + ", leaving " + p.setSecond + "; ";
+      text += "if they compare notes, the pooled details make " + p.combinationsBoth + ", leaving " + p.setBoth + ". ";
+      if (p.detailsShared.length > 0) {
+        text += "The details both observers know (" + p.detailsShared.join(", ") + ") are counted once in that pooled figure, never twice — both observers knowing the same detail does not split the crowd by it twice. ";
+      }
+      text += "The verdict is " + verdictPhrase + ". ";
+      text += "This is a best case, never a guarantee: it assumes every detail is independent and every group equally likely, and real crowds are skewed, so each real group can only be smaller — and details the two observers hold that are secretly the same fact told two ways are a correlation this page cannot see. This plans combinations only: nobody was looked up or identified, no wallet connected, and no chain data was read — the crowd size is the number you typed, not a live pool count, and whether two observers ever compare notes is a fact about the world, not something this page can know or prevent.";
       host.textContent = text;
     });
 

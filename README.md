@@ -75,9 +75,9 @@ renewable resource that pays for shielded transactions.
 
 ## Tools on the hub (local only, no wallet needed)
 
-The hub carries 97 tools; a **find-a-tool search** at the top of the tools
+The hub carries 98 tools; a **find-a-tool search** at the top of the tools
 section narrows the list as you type — every word must match a tool's title
-or first line, and clearing the search restores all 97.
+or first line, and clearing the search restores all 98.
 
 - **Paste-and-protect redactor** — finds and masks email addresses, Cardano
   addresses and US phone numbers in text you paste. Runs entirely in your
@@ -2725,6 +2725,39 @@ or first line, and clearing the search restores all 97.
   so the real group a withholding
   restores can only be smaller.
   It plans withholdings; it does
+  not identify — nobody is looked
+  up, no wallet connects, no
+  chain data is read, and the
+  crowd size is a number you
+  type, not a live pool count.
+
+- **What if they compare
+  notes? — an anonymity
+  combination planner** — the
+  two-observer question the four
+  tools above never ask: they all
+  face one observer, but two
+  observers who each leave you
+  above your minimum alone can
+  break it together if they pool
+  what they know. It takes three
+  lists — details only the first
+  observer knows, only the
+  second knows, and both know —
+  and works out each observer's
+  expected group and the combined
+  group exactly in BigInt,
+  counting a shared detail once
+  in the pooled figure, never
+  twice. The verdict names it:
+  safe, collusion (the combination
+  is what breaks you), or broken
+  by one or both observers alone.
+  Honestly labelled a best case,
+  never a guarantee, on the same
+  independence and
+  equal-likelihood assumptions.
+  It plans combinations; it does
   not identify — nobody is looked
   up, no wallet connects, no
   chain data is read, and the

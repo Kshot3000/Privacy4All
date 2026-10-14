@@ -226,7 +226,7 @@
 
   <section id="tools" aria-labelledby="tools-h">
     <h2 id="tools-h">Privacy tools — right here, nothing leaves your browser</h2>
-    <p>Ninety-seven tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
+    <p>Ninety-eight tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
     <div class="filter-row" role="group" aria-label="Find a tool">
       <label for="tool-q">Find a tool</label>
       <input id="tool-q" type="search" placeholder="e.g. vote, sign, DUST, share a secret…" autocomplete="off">
@@ -2812,7 +2812,24 @@
         <button type="submit" class="btn primary">Plan what to withhold, locally</button>
         <p id="anonshed-result" role="status" aria-live="polite"></p>
       </form>
-      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 97 tools.</p>
+      <form class="tool" id="anoncombine-plan">
+        <h3>98 · What if they compare notes? — an anonymity combination planner</h3>
+        <p>Tools 94 to 97 all face one observer: they measure, budget, size and repair against a single set of known details. Real cover faces more than one observer, and two observers who each leave you above your minimum on their own can break it together, if they ever compare notes — an intersection of two knowledge sets, neither sufficient alone. Enter your crowd, your minimum, and three lists: the details only the first observer knows, the details only the second knows, and the details both know, and it works out the expected group each observer leaves on their own and the group left if the two pool everything. A detail both observers know is counted once in that pooled figure, never twice: both observers knowing your region does not split the crowd by the region twice, and counting it twice would understate the combined group — the one direction of error this family never allows itself. It plans combinations; it does not identify: nobody is looked up, no wallet connects, and no chain data is read — the crowd size is a number you type, not a live pool count, and whether two observers ever compare notes is a fact about the world, not something this page can know or prevent.</p>
+        <p>This is a best case, never a guarantee: like tools 94 to 97 it assumes every detail is independent of the others and every group is equally likely, and real crowds are skewed, so each real group can only be smaller — and details the two observers hold that are secretly the same fact told two ways are a correlation this page cannot see. Leave any list empty where it fits: an observer who knows nothing yet, or no detail the two share. A minimum above the crowd itself is refused rather than planned around: a group bigger than the crowd can never exist, so that is not a plan but an impossibility.</p>
+        <label for="anoncombine-crowd">Size of the crowd you are hiding in, in people (a whole number, at least 1 — e.g. 10000)</label>
+        <input id="anoncombine-crowd" inputmode="numeric" placeholder="e.g. 10000" autocomplete="off">
+        <label for="anoncombine-minset">Smallest group you refuse to drop below, in people (a whole number, at least 1 and at most the crowd — e.g. 100)</label>
+        <input id="anoncombine-minset" inputmode="numeric" placeholder="e.g. 100" autocomplete="off">
+        <label for="anoncombine-first">Groups each detail only the first observer knows splits the crowd into, comma-separated (whole numbers, at least 1, at most 1000000 each, up to 12 details — e.g. 20 — or leave empty)</label>
+        <input id="anoncombine-first" inputmode="numeric" placeholder="e.g. 20" autocomplete="off">
+        <label for="anoncombine-second">Groups each detail only the second observer knows splits the crowd into, comma-separated (whole numbers, at least 1, at most 1000000 each, up to 12 details — e.g. 20 — or leave empty)</label>
+        <input id="anoncombine-second" inputmode="numeric" placeholder="e.g. 20" autocomplete="off">
+        <label for="anoncombine-shared">Groups each detail both observers know splits the crowd into, comma-separated (whole numbers, at least 1, at most 1000000 each, up to 12 details — or leave empty if they share nothing)</label>
+        <input id="anoncombine-shared" inputmode="numeric" placeholder="e.g. 4" autocomplete="off">
+        <button type="submit" class="btn primary">Plan the combination, locally</button>
+        <p id="anoncombine-result" role="status" aria-live="polite"></p>
+      </form>
+      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 98 tools.</p>
     </div>
   </section>
 
@@ -2846,6 +2863,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=97"></script>
+<script src="app.js?v=98"></script>
 </body>
 </html>
