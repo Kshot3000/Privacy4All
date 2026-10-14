@@ -9,6 +9,7 @@ const guide = fs.readFileSync(path.join(root, "guides", "getting-started-midnigh
 const compactGuide = fs.readFileSync(path.join(root, "guides", "compact-starter.md"), "utf8");
 const feeGuide = fs.readFileSync(path.join(root, "guides", "fee-design-midnight.md"), "utf8");
 const fundingGuide = fs.readFileSync(path.join(root, "guides", "funding-readiness-midnight.md"), "utf8");
+const privacyGuide = fs.readFileSync(path.join(root, "guides", "privacy-review-compact.md"), "utf8");
 const sitemap = fs.readFileSync(path.join(root, "sitemap.xml"), "utf8");
 const css = fs.readFileSync(path.join(root, "styles.css"), "utf8");
 const app = require(path.join(root, "app.js"));
@@ -21,7 +22,7 @@ function check(name, cond) {
 }
 
 /* attribution on every user-facing surface */
-for (const [label, doc] of [["index.html", html], ["README", readme], ["guide", guide], ["compact guide", compactGuide], ["fee guide", feeGuide], ["funding guide", fundingGuide]]) {
+for (const [label, doc] of [["index.html", html], ["README", readme], ["guide", guide], ["compact guide", compactGuide], ["fee guide", feeGuide], ["funding guide", fundingGuide], ["privacy review guide", privacyGuide]]) {
   check("ADA donation address in " + label, doc.includes(ADA));
   check("@kshot9000 in " + label, doc.includes("@kshot9000"));
   check("Midnight team GitHub tag in " + label, doc.includes("@midnightntwrk"));
@@ -46,8 +47,8 @@ check("social card meta present: og:image with real dimensions and a large-image
 check("og-image.png in the repo is a real PNG at exactly the declared 1200x630", (() => { const png = fs.readFileSync(path.join(root, "og-image.png")); return png.length > 8 && png.readUInt32BE(0) === 0x89504e47 && png.readUInt32BE(16) === 1200 && png.readUInt32BE(20) === 630; })());
 check("canonical URL declared and identical to the og:url", html.includes('<link rel="canonical" href="https://kshot3000.github.io/Privacy4All/">') && html.includes('<meta property="og:url" content="https://kshot3000.github.io/Privacy4All/">'));
 check("structured data: the JSON-LD block parses and names the site, its canonical URL and its author", (() => { const m = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/); if (!m) return false; let data; try { data = JSON.parse(m[1]); } catch (e) { return false; } if (!data || data["@context"] !== "https://schema.org" || !Array.isArray(data["@graph"])) return false; const site = data["@graph"].find(n => n["@type"] === "WebSite"); const person = data["@graph"].find(n => n["@type"] === "Person"); return !!site && site.url === "https://kshot3000.github.io/Privacy4All/" && site.name === "Privacy4All" && !!person && person.name === "Kyle Cox" && Array.isArray(person.sameAs) && person.sameAs.includes("https://x.com/kshot9000") && person.sameAs.includes("https://github.com/Kshot3000"); })());
-check("sitemap lists the hub and all four guides, in that order, and nothing else", (() => { const locs = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map(x => x[1]); return JSON.stringify(locs) === JSON.stringify(["https://kshot3000.github.io/Privacy4All/", "https://kshot3000.github.io/Privacy4All/guides/getting-started-midnight.md", "https://kshot3000.github.io/Privacy4All/guides/compact-starter.md", "https://kshot3000.github.io/Privacy4All/guides/fee-design-midnight.md", "https://kshot3000.github.io/Privacy4All/guides/funding-readiness-midnight.md"]); })());
-check("README documents the structured data and the complete sitemap", readme.includes("JSON-LD structured data") && readme.includes("lists the hub plus all four guides"));
+check("sitemap lists the hub and all five guides, in that order, and nothing else", (() => { const locs = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map(x => x[1]); return JSON.stringify(locs) === JSON.stringify(["https://kshot3000.github.io/Privacy4All/", "https://kshot3000.github.io/Privacy4All/guides/getting-started-midnight.md", "https://kshot3000.github.io/Privacy4All/guides/compact-starter.md", "https://kshot3000.github.io/Privacy4All/guides/fee-design-midnight.md", "https://kshot3000.github.io/Privacy4All/guides/funding-readiness-midnight.md", "https://kshot3000.github.io/Privacy4All/guides/privacy-review-compact.md"]); })());
+check("README documents the structured data and the complete sitemap", readme.includes("JSON-LD structured data") && readme.includes("lists the hub plus all five guides"));
 check("mobile browser chrome tints to the page background: theme-color matches the --bg token exactly", html.includes('<meta name="theme-color" content="#07040f">') && css.includes("--bg:#07040f"));
 check("dark color-scheme declared in both the head meta and the stylesheet, so controls render dark", html.includes('<meta name="color-scheme" content="dark">') && css.includes("color-scheme:dark"));
 check("README documents the canonical, theme-color and color-scheme declarations", readme.includes("canonical URL") && readme.includes("theme-color") && readme.includes("color-scheme"));
@@ -96,6 +97,16 @@ check("funding guide requires verifiable claims and no borrowed credibility", fu
 check("funding guide is honest about scope: no programme deadline or amount named, verify current terms officially, submits nothing", fundingGuide.includes("I name no deadline or amount here on purpose") && fundingGuide.includes("verify the current call") && fundingGuide.includes("this") && fundingGuide.includes("guide submits nothing"));
 check("funding guide flags signing, identity, tax and legal steps as the applicant's own", fundingGuide.includes("signing an") && fundingGuide.includes("identity and tax checks") && fundingGuide.includes("stay") && fundingGuide.includes("The signing, identity, tax, and legal steps are flagged as the"));
 check("funding guide covers the routes without inventing a programme: hackathons, grants, accelerators, community rounds", fundingGuide.includes("Hackathons") && fundingGuide.includes("Grants and builder funds") && fundingGuide.includes("Accelerators and fellowships") && fundingGuide.includes("Community funding rounds"));
+
+/* Privacy review guide (guides/privacy-review-compact.md) */
+check("privacy review guide linked from the hub guides list and the README", html.includes('href="guides/privacy-review-compact.md"') && readme.includes("(guides/privacy-review-compact.md)"));
+check("privacy review guide starts at disclose(): private by default, an annotation not a transformation, placed at the point of use", privacyGuide.includes("private by default") && privacyGuide.includes("an annotation, not a transformation") && privacyGuide.includes("at the point of use"));
+check("privacy review guide pins the hash warning: a hash is not a hiding place, and stored long-term hiding uses persistentCommit", privacyGuide.includes("A hash is not a hiding place") && privacyGuide.includes("no disclosure") && privacyGuide.includes("persistentCommit"));
+check("privacy review guide pins single-use commitment randomness: never reuse commitment randomness across commitments", privacyGuide.includes("never reuse commitment randomness across commitments"));
+check("privacy review guide treats witnesses as unverified claims, and ownPublicKey() never stands alone as caller verification", privacyGuide.includes("Witnesses are claims, not proof") && privacyGuide.includes("ownPublicKey()") && privacyGuide.includes("Never accept it on its own as caller verification"));
+check("privacy review guide covers domain separation, nullifiers, sealed fields and per-circuit access control", privacyGuide.includes("Separate your domains") && privacyGuide.includes("needs a nullifier") && privacyGuide.includes("Seal what must never change") && privacyGuide.includes("Access control is the developer's job"));
+check("privacy review guide is honest about scope: a checklist, not an audit, grounded in and linking the official security guidance", privacyGuide.includes("not an audit and") && privacyGuide.includes("not affiliated with the Midnight Foundation or IOG") && privacyGuide.includes("https://docs.midnight.network/compact/smart-contract-security"));
+check("privacy review guide requires confirmed leaks to be disclosed to the maintainers first, and untested suspicions never claimed publicly", privacyGuide.includes("disclosed to the contract's") && privacyGuide.includes("never a public claim"));
 
 /* flagship links */
 for (const url of ["https://kshot3000.github.io/Night-Messenger-/", "https://kshot3000.github.io/PlutusShield/",

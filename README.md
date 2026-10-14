@@ -18,7 +18,7 @@ dark instead of being auto-darkened or left light. The head also carries
 JSON-LD structured data — a `WebSite` node for the hub, authored by a
 `Person` node for Kyle Cox whose `sameAs` links are his X and GitHub
 profiles — so search engines can attribute the hub to its builder, and
-`sitemap.xml` lists the hub plus all four guides so crawlers are pointed at
+`sitemap.xml` lists the hub plus all five guides so crawlers are pointed at
 every public page the site serves, not just the front door.
 
 > Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) —
@@ -2876,6 +2876,17 @@ or first line, and clearing the search restores all 101.
   pre-submission checklist. Preparation only: it names no deadline or
   amount for any programme, submits nothing, and flags signing,
   identity, tax and legal steps as the applicant's own.
+- [Reviewing a Compact contract for privacy leaks](guides/privacy-review-compact.md) —
+  a reviewer's checklist built on the official smart-contract security
+  guidance: start at every `disclose()` and justify it (an annotation,
+  not a transformation, placed at the point of use), a hash is not a
+  hiding place for enumerable values, commitment randomness is
+  single-use, witnesses are claims the circuit must verify
+  (`ownPublicKey()` never stands alone as caller verification), one
+  domain separator per purpose, a nullifier for everything spendable
+  once, sealed fields for configuration, an authorisation check on
+  every exported circuit, and the disclosures reviewed together, not
+  one by one. A checklist, not an audit, and not a guarantee.
 
 ## How the hourly builder loop works
 
