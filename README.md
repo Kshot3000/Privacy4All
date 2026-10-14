@@ -75,9 +75,9 @@ renewable resource that pays for shielded transactions.
 
 ## Tools on the hub (local only, no wallet needed)
 
-The hub carries 100 tools; a **find-a-tool search** at the top of the tools
+The hub carries 101 tools; a **find-a-tool search** at the top of the tools
 section narrows the list as you type — every word must match a tool's title
-or first line, and clearing the search restores all 100.
+or first line, and clearing the search restores all 101.
 
 - **Paste-and-protect redactor** — finds and masks email addresses, Cardano
   addresses and US phone numbers in text you paste. Runs entirely in your
@@ -2824,6 +2824,31 @@ or first line, and clearing the search restores all 100.
   read, and the crowd size is a
   number you type, not a live
   pool count.
+
+- **How many times can you share
+  before your crowd runs out?
+  — an anonymity repetition
+  planner** — the repetition
+  question the seven tools above
+  never ask: they price one
+  disclosure, but an observer who
+  keeps fresh rounds of the same
+  details can intersect them, so
+  each round splits the group the
+  rounds before left standing.
+  This planner raises one round's
+  combinations (tool 94's product)
+  to the number of rounds in exact
+  BigInt, returns the most rounds
+  a crowd can pay for above a
+  minimum, and judges the rounds
+  you plan against it. It plans repetition; it does
+  not identify — nobody
+  is looked up, no wallet
+  connects, no chain data is
+  read, and the crowd size and
+  the round count are numbers
+  you type, not live pool counts.
 
 ## Guides
 

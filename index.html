@@ -226,7 +226,7 @@
 
   <section id="tools" aria-labelledby="tools-h">
     <h2 id="tools-h">Privacy tools — right here, nothing leaves your browser</h2>
-    <p>One hundred tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
+    <p>One hundred and one tools and counting. Search by what you want to do — every word you type must match — and the list narrows as you type; clearing the search brings every tool back. The search reads only each tool's title and first line, runs entirely in your browser, and hides nothing permanently: a tool that is filtered out is still on this page, just not shown.</p>
     <div class="filter-row" role="group" aria-label="Find a tool">
       <label for="tool-q">Find a tool</label>
       <input id="tool-q" type="search" placeholder="e.g. vote, sign, DUST, share a secret…" autocomplete="off">
@@ -2853,7 +2853,22 @@
         <button type="submit" class="btn primary">Bound my group, locally</button>
         <p id="anonbounds-result" role="status" aria-live="polite"></p>
       </form>
-      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 100 tools.</p>
+      <form class="tool" id="anonrepeat-plan">
+        <h3>101 · How many times can you share before your crowd runs out? — an anonymity repetition planner</h3>
+        <p>Tools 94 to 100 all price a disclosure once — but privacy rarely fails in one round. It fails by repetition: a fresh balance proof every week, a location pattern every day, each round revealing new values of the same kind of detail, and an observer who keeps the rounds can intersect them, so every round splits the group the rounds before it left standing. Enter the crowd, the smallest group you refuse to drop below, the group counts of the details one round reveals, and how many rounds you plan to share, and this planner multiplies it out in exact BigInt: one round makes the product of its details' group counts — tool 94's combinations — and after each further round the combinations multiply again, so the expected group is the crowd divided by that product raised to the number of rounds, rounded down. It returns the group after one round, the most rounds your crowd can pay for before the group drops below your minimum, the group at that many rounds and at one round more, and the group after the rounds you actually plan.</p>
+        <p>This prices fresh values each round — the intersection case. Repeating the exact same values adds nothing an observer did not already learn the first time, and rounds whose details correlate across time — the same commute, the same hours — narrow less than the product says, while skew, priced by tool 99, can still make a real group smaller than any figure here; an observer who links your rounds to a name has left this model entirely. A round whose details split nothing narrows nothing however often it repeats. It plans repetition; it does not identify: nobody is looked up, no wallet connects, and no chain data is read — the crowd size and the round count are numbers you type, not live pool counts, and whether anyone keeps your rounds is a fact about the world, not something this page can know or prevent.</p>
+        <label for="anonrepeat-crowd">Size of the crowd you are hiding in, in people (a whole number, at least 1 — e.g. 100000)</label>
+        <input id="anonrepeat-crowd" inputmode="numeric" placeholder="e.g. 100000" autocomplete="off">
+        <label for="anonrepeat-minset">Smallest group you refuse to drop below, in people (a whole number, at least 1 and at most the crowd — e.g. 100)</label>
+        <input id="anonrepeat-minset" inputmode="numeric" placeholder="e.g. 100" autocomplete="off">
+        <label for="anonrepeat-details">Groups each detail one round reveals splits the crowd into, comma-separated (whole numbers, at least 1, at most 1000000 each, up to 12 details — e.g. 10, 10)</label>
+        <input id="anonrepeat-details" inputmode="numeric" placeholder="e.g. 10, 10" autocomplete="off">
+        <label for="anonrepeat-planned">How many rounds you plan to share (a whole number, at least 1 and at most 1000000 — e.g. 2)</label>
+        <input id="anonrepeat-planned" inputmode="numeric" placeholder="e.g. 2" autocomplete="off">
+        <button type="submit" class="btn primary">Plan my rounds, locally</button>
+        <p id="anonrepeat-result" role="status" aria-live="polite"></p>
+      </form>
+      <p id="tool-no-results" hidden>No tools match that search yet — try fewer words, or clear the search to see all 101 tools.</p>
     </div>
   </section>
 
@@ -2887,6 +2902,6 @@
   <p>Privacy4All · Open source by Kyle Cox (@kshot9000) · Tagging the Midnight team: @midnightntwrk (GitHub) · @MidnightNtwrk (X) · Not affiliated with the Midnight Foundation or IOG — an independent builder project.</p>
   <p>ADA donations: addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</p>
 </footer>
-<script src="app.js?v=100"></script>
+<script src="app.js?v=101"></script>
 </body>
 </html>

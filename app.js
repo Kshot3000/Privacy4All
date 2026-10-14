@@ -2415,6 +2415,118 @@ function anonymityBoundsPlan(crowdStr, minStr, detailsStr) {
   };
 }
 
+/* ---------- 101. How many times can you share before your crowd
+   runs out? — anonymity repetition planner ----------
+   Tools 94–100 all price a disclosure once. This planner
+   prices repetition: the same kind of round shared again
+   and again — a fresh balance proof every week, a location
+   pattern every day — where each round's details are new
+   values (a new week, a new day), so an observer who keeps
+   the rounds can intersect them, and every round splits
+   the group the previous rounds left standing. One round
+   makes perRoundCombinations = the product of its details'
+   group counts, exactly tool 94's combinations; after r
+   rounds the combinations multiply to perRound^r and the
+   expected group is the crowd divided by that, floored, in
+   exact BigInt. The planner returns the group after one
+   round (tool 94's answer — the cross-check that pins it
+   to the family), the most rounds whose group still holds
+   at or above the visitor's minimum (the largest r with
+   perRound^r <= crowd / minimum, floored), the group at
+   that many rounds and at one round more, and the group
+   after the number of rounds the visitor actually plans.
+   The verdict is three-way: unbounded (a round whose
+   details split nothing — every group count 1 — narrows
+   nothing however often it repeats in this model), within
+   (the planned rounds fit inside the most rounds), or
+   exceeds (they do not — the planned repetition itself,
+   not any single round, is what singles the visitor out).
+   The honest limits are the point: this prices FRESH
+   values each round. Repeating the exact same values adds
+   nothing an observer did not already learn the first
+   time, while rounds whose details correlate across time —
+   the same commute, the same hours — narrow less than the
+   product says, and skew (tool 99) can still make a real
+   group smaller than any figure here; an observer who
+   links rounds to a name has left this model entirely.
+   Refused (null), never repaired: a crowd or minimum that
+   is not a whole number or is zero, a minimum above the
+   crowd, a planned-rounds count that is not a whole number,
+   is zero, or is above ANONREPEAT_MAX_PLANNED, an empty or
+   absent details list, more than ANONREPEAT_MAX_DETAILS
+   details, and a group count under 1 or above
+   ANONREPEAT_MAX_GROUPS. This plans repetition only — it
+   looks nobody up, identifies nobody, connects no wallet
+   and reads no chain data; the crowd size and the round
+   count are numbers you type, not live pool counts, and
+   whether anyone keeps your rounds is a fact about the
+   world, not something this page can know. */
+var ANONREPEAT_MAX_DETAILS = 12;
+var ANONREPEAT_MAX_GROUPS = 1000000;
+var ANONREPEAT_MAX_PLANNED = 1000000;
+function anonymityRepeatPlan(crowdStr, minStr, detailsStr, plannedStr) {
+  var c = (crowdStr == null ? "" : String(crowdStr)).trim();
+  if (!/^\d+$/.test(c)) return null;
+  var crowd = BigInt(c);
+  if (crowd === 0n) return null;
+  var m = (minStr == null ? "" : String(minStr)).trim();
+  if (!/^\d+$/.test(m)) return null;
+  var minimum = BigInt(m);
+  if (minimum === 0n || minimum > crowd) return null;
+  var p = (plannedStr == null ? "" : String(plannedStr)).trim();
+  if (!/^\d+$/.test(p)) return null;
+  var planned = BigInt(p);
+  if (planned === 0n || planned > BigInt(ANONREPEAT_MAX_PLANNED)) return null;
+  var d = (detailsStr == null ? "" : String(detailsStr)).trim();
+  if (!d) return null;
+  var raw = d.split(",");
+  if (raw.length < 1 || raw.length > ANONREPEAT_MAX_DETAILS) return null;
+  var details = [];
+  var perRound = 1n;
+  for (var i = 0; i < raw.length; i++) {
+    var t = raw[i].trim();
+    if (!/^\d+$/.test(t)) return null;
+    var g = BigInt(t);
+    if (g < 1n || g > BigInt(ANONREPEAT_MAX_GROUPS)) return null;
+    details.push(g.toString());
+    perRound *= g;
+  }
+  var limit = crowd / minimum;
+  var unbounded = perRound === 1n;
+  var maxRounds = null;
+  var cumMax = 1n;
+  var setAfterNext = null;
+  if (!unbounded) {
+    var r = 0n;
+    var cum = 1n;
+    while (cum * perRound <= limit) { cum *= perRound; r++; }
+    maxRounds = r;
+    cumMax = cum;
+    setAfterNext = (crowd / (cum * perRound)).toString();
+  }
+  var pow = 1n;
+  var exceededCrowd = false;
+  for (var j = 0n; j < planned; j++) {
+    pow *= perRound;
+    if (pow > crowd) { exceededCrowd = true; break; }
+  }
+  var verdict = unbounded ? "unbounded" : planned <= maxRounds ? "within" : "exceeds";
+  return {
+    crowd: crowd.toString(),
+    minimum: minimum.toString(),
+    details: details,
+    perRoundCombinations: perRound.toString(),
+    plannedRounds: planned.toString(),
+    maxRounds: maxRounds === null ? null : maxRounds.toString(),
+    setAfterOne: (crowd / perRound).toString(),
+    setAtMax: (crowd / cumMax).toString(),
+    setAfterNext: setAfterNext,
+    setAfterPlanned: exceededCrowd ? "0" : (crowd / pow).toString(),
+    bitsPerRound: (perRound.toString(2).length - 1).toString(),
+    verdict: verdict
+  };
+}
+
 /* ---------- 4. What does this dApp see? ---------- */
 /* level: "low" = usually needed to connect, "caution" = ask why and limit
    it before granting, "high" = do not grant blindly for a routine visit. */
@@ -17627,6 +17739,7 @@ if (typeof module !== "undefined" && module.exports) {
                      anonymityCombinePlan, ANONCOMBINE_MAX_DETAILS, ANONCOMBINE_MAX_GROUPS,
                      anonymityShareEstimate, ANONSHARE_MAX_SHARES, ANONSHARE_MAX_PART,
                      anonymityBoundsPlan, ANONBOUNDS_MAX_DETAILS, ANONBOUNDS_MAX_GROUPS,
+                     anonymityRepeatPlan, ANONREPEAT_MAX_DETAILS, ANONREPEAT_MAX_GROUPS, ANONREPEAT_MAX_PLANNED,
                      simulateDustLifecycle,
                      COMMIT_PREFIX, commitmentMessage, sha256Hex, makeCommitment, verifyCommitment,
                      getObserverView, OBSERVER_CATALOG,
@@ -18561,6 +18674,29 @@ if (typeof document !== "undefined") {
       text += "The true group lies between those two figures — correlation can move it inside that range, never outside it. ";
       text += "The verdict is " + verdictPhrase + ". ";
       text += "These bounds price correlation only, on tool 94's equal-likelihood assumption inside each detail: skew — priced by tool 99 — can still make your own group smaller than either figure. This bounds correlation only: nobody was looked up or identified, no wallet connected, and no chain data was read — the crowd size is the number you typed, not a live pool count, and how your details actually correlate is a fact about the world, not something this page can know or change.";
+      host.textContent = text;
+    });
+
+    /* --- how many times can you share before your crowd runs out? --- */
+    document.getElementById("anonrepeat-plan").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var p = anonymityRepeatPlan(document.getElementById("anonrepeat-crowd").value,
+                            document.getElementById("anonrepeat-minset").value,
+                            document.getElementById("anonrepeat-details").value,
+                            document.getElementById("anonrepeat-planned").value);
+      var host = document.getElementById("anonrepeat-result");
+      if (p === null) {
+        host.textContent = "Enter the size of your crowd (a whole number, at least 1), the smallest group you refuse to drop below (a whole number, at least 1 and at most the crowd), the group counts of the details one round reveals, comma-separated — whole numbers, at least 1, at most 1000000 each, up to 12 details — and how many rounds you plan to share (a whole number, at least 1 and at most 1000000). A minimum above the crowd is not a plan but an impossibility. Anything else is refused, not guessed at.";
+        return;
+      }
+      var text = "Repetition plan — a crowd of " + p.crowd + " people, your minimum " + p.minimum + ", and each round revealing details splitting the crowd into " + p.details.join(", ") + " groups — " + p.perRoundCombinations + (p.perRoundCombinations === "1" ? " combination" : " combinations") + " per round, about " + p.bitsPerRound + (p.bitsPerRound === "1" ? " bit" : " bits") + " of narrowing per round: after one round the expected group is " + p.setAfterOne + " people. ";
+      if (p.verdict === "unbounded") {
+        text += "A round like this splits nothing — every detail has one group — so in this model it narrows nothing however often it repeats: after your planned " + p.plannedRounds + (p.plannedRounds === "1" ? " round" : " rounds") + " the expected group is still " + p.setAfterPlanned + " people, and there is no round count at which repetition alone runs your crowd out. ";
+      } else {
+        text += "Your crowd holds at or above your minimum for at most " + p.maxRounds + (p.maxRounds === "1" ? " round" : " rounds") + " — at that many rounds the expected group is " + p.setAtMax + " people, and one round more leaves " + p.setAfterNext + ". ";
+        text += "After your planned " + p.plannedRounds + (p.plannedRounds === "1" ? " round" : " rounds") + " the expected group is " + p.setAfterPlanned + " people, so the verdict is " + (p.verdict === "within" ? "within — the planned rounds fit inside the rounds your crowd can pay for" : "exceeds — the planned repetition itself, not any single round, is what drops you below your minimum") + ". ";
+      }
+      text += "This prices fresh values each round, the intersection case: repeating the exact same values adds nothing an observer did not learn the first time, rounds whose details correlate across time narrow less than the product says, and skew — priced by tool 99 — can still make a real group smaller than any figure here. This plans repetition only: nobody was looked up or identified, no wallet connected, and no chain data was read — the crowd size and the round count are numbers you typed, not live pool counts, and whether anyone keeps your rounds is a fact about the world, not something this page can know or prevent.";
       host.textContent = text;
     });
 
